@@ -19,19 +19,29 @@ namespace UVWizard.Core.Packing
         /// </summary>
         public const float MinScale = 1f / 1024;
 
-        /// <param name="weights">
-        /// One per chart, multiplying the scale the search tries, so a chart can resist shrinking.
-        /// Every weight is 1 when null. No chart is scaled past 1, since upscaling adds no detail.
+        /// <param name="priorities">
+        /// One per chart, positive and finite, multiplying the scale the search tries, so a chart
+        /// can resist shrinking. Every priority is 1 when null. No chart is scaled past 1, since
+        /// upscaling adds no detail.
         /// </param>
-        public static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? weights = null)
+        public static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? priorities = null)
         {
+            if (priorities != null)
+            {
+                if (priorities.Count != charts.Count)
+                    throw new ArgumentException($"{priorities.Count} priorities for {charts.Count} charts.", nameof(priorities));
+                foreach (var priority in priorities)
+                    if (!(priority > 0 && priority < float.PositiveInfinity))
+                        throw new ArgumentException($"A priority of {priority} isn't positive and finite.", nameof(priorities));
+            }
+
             var attempts = 0;
             var scales = new float[charts.Count];
             PackResult Attempt(float scale)
             {
                 attempts++;
                 for (var i = 0; i < charts.Count; i++)
-                    scales[i] = Math.Min(1, scale * (weights?[i] ?? 1));
+                    scales[i] = Math.Min(1, scale * (priorities?[i] ?? 1));
                 return ExactPacker.Pack(charts, scales, settings);
             }
 
@@ -78,12 +88,13 @@ namespace UVWizard.Core.Packing
         public bool Fits => Packing.Fits;
 
         /// <summary>
-        /// True when the charts fit at full detail, so a smaller atlas might hold them too.
+        /// True when the charts fit at scale 1, so a smaller atlas might hold them too. A chart
+        /// whose priority is below 1 is still packed below full detail.
         /// </summary>
         public bool FitsAtFullDetail => Fits && Scale == 1;
 
         /// <summary>
-        /// The detail kept: atlas pixels per source texel, before each chart's weight. 0 when nothing fit.
+        /// The detail kept: atlas pixels per source texel, before each chart's priority. 0 when nothing fit.
         /// </summary>
         public float Scale { get; }
 

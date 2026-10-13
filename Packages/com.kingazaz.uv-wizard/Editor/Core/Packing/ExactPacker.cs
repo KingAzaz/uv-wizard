@@ -29,6 +29,8 @@ namespace UVWizard.Core.Packing
         /// </summary>
         public static PackResult Pack(IReadOnlyList<ChartShape> charts, IReadOnlyList<float> scales, PackSettings settings)
         {
+            if (scales.Count != charts.Count)
+                throw new ArgumentException($"{scales.Count} scales for {charts.Count} charts.", nameof(scales));
             var block = settings.BlockSize;
             var gridSize = settings.AtlasSize / block;
             var gridWords = (gridSize + 63) / 64;

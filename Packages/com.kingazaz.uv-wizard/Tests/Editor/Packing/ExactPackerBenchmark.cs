@@ -12,9 +12,10 @@ using Debug = UnityEngine.Debug;
 namespace UVWizard.Core.Tests.Packing
 {
     /// <summary>
-    /// Timings for ADR 0002's packer, comparable with the prototype's (2048 atlas, 4 px blocks, 8 px
-    /// between charts, geometric bisection on scale to 1%), through <see cref="ScaleSearch"/>. These
-    /// are menu commands rather than tests, so test runs stay fast; results go to the console. Time with the editor focused and compare
+    /// Timings for ADR 0002's packer through <see cref="ScaleSearch"/>, on the prototype's settings
+    /// (2048 atlas, 4 px blocks, 8 px between charts, bisection on scale to 1%). The search starts at
+    /// scale 1 rather than the prototype's summed-area guess, so attempt counts differ. These are
+    /// menu commands rather than tests, so test runs stay fast; results go to the console. Time with the editor focused and compare
     /// variants back to back: an unfocused editor ran the same search about 30% slower.
     /// </summary>
     internal static class ExactPackerBenchmark
@@ -47,7 +48,8 @@ namespace UVWizard.Core.Tests.Packing
         {
             var clock = Stopwatch.StartNew();
             var result = ScaleSearch.Search(charts, Settings);
-            Debug.Log($"[UV Wizard bench] {name}: {charts.Count} charts, scale {result.Scale:0.000} ({result.Scale * result.Scale:P0} texels), " +
+            var outcome = !result.Fits ? "doesn't fit at any scale" : result.FitsAtFullDetail ? "fits at full detail" : "fits";
+            Debug.Log($"[UV Wizard bench] {name}: {charts.Count} charts {outcome}, scale {result.Scale:0.000} ({result.Scale * result.Scale:P0} texels), " +
                       $"{result.Attempts} attempts, {clock.Elapsed.TotalMilliseconds:0} ms total");
         }
 

@@ -57,13 +57,13 @@ namespace UVWizard.Core.Tests.Packing
         }
 
         [Test]
-        public void AWeightMultipliesItsChartsScale()
+        public void APriorityMultipliesItsChartsScale()
         {
             var charts = Enumerable.Repeat(Rectangle(20, 20), 12).ToArray();
-            var weights = Enumerable.Repeat(1f, 12).ToArray();
-            weights[3] = 0.5f;
+            var priorities = Enumerable.Repeat(1f, 12).ToArray();
+            priorities[3] = 0.5f;
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 2), weights);
+            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 2), priorities);
 
             Assert.That(result.Fits, Is.True);
             Assert.That(result.Packing.Placements[3].Scale, Is.EqualTo(result.Scale * 0.5f));
@@ -74,7 +74,7 @@ namespace UVWizard.Core.Tests.Packing
         [Test]
         public void NoChartIsScaledPastFullDetail()
         {
-            // A weight of 3 never upscales its chart, even when the search's scale is above 1/3.
+            // A priority of 3 never upscales its chart, even when the search's scale is above 1/3.
             var charts = new[] { Rectangle(10, 10), Rectangle(10, 10) };
 
             var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 0), new[] { 3f, 1f });
@@ -92,7 +92,38 @@ namespace UVWizard.Core.Tests.Packing
             var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 0));
 
             Assert.That(result.Fits, Is.False);
-            Assert.That(result.Packing.Fits, Is.False);
+            Assert.That(result.Scale, Is.EqualTo(0));
+            Assert.That(result.FailedScale, Is.LessThan(ScaleSearch.MinScale * 2));
+        }
+
+        [Test]
+        public void NoChartsFitAtFullDetail()
+        {
+            var result = ScaleSearch.Search(new ChartShape[0], new PackSettings(atlasSize: 64, padding: 0));
+
+            Assert.That(result.FitsAtFullDetail, Is.True);
+            Assert.That(result.Packing.Placements, Is.Empty);
+        }
+
+        [TestCase(0f)]
+        [TestCase(-1f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void APriorityMustBePositiveAndFinite(float priority)
+        {
+            var charts = new[] { Rectangle(10, 10), Rectangle(10, 10) };
+
+            Assert.Throws<System.ArgumentException>(() =>
+                ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 0), new[] { 1f, priority }));
+        }
+
+        [Test]
+        public void EveryChartNeedsAPriority()
+        {
+            var charts = new[] { Rectangle(10, 10), Rectangle(10, 10) };
+
+            Assert.Throws<System.ArgumentException>(() =>
+                ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 0), new[] { 1f }));
         }
 
         [Test]
