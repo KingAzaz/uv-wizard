@@ -23,7 +23,7 @@ Both stand down while another session in this repo is running or the checkout is
 ## Dev environment
 
 - **Dev Unity project:** `%LOCALAPPDATA%\VRChatCreatorCompanion\VRChatProjects\uv-wizard` (Unity 2022.3.22f1, VRChat SDK 3.10.5, AAO 1.9.20, NDMF 1.14.8). It is not a git repo. Its `Packages/manifest.json` links this package with `"com.kingazaz.uv-wizard": "file:C:/Users/Azaz/AI/uv-wizard/Packages/com.kingazaz.uv-wizard"`, so Unity compiles whatever branch this checkout is on. Its test avatars (Rexouium, Furyon Raccoon) are paid assets: never copy them into this repo.
-- **Tests:** the dev project's `Packages/manifest.json` lists `"testables": ["com.kingazaz.uv-wizard"]`. Without it, Unity doesn't compile a `file:`-linked package's test assemblies. Run them from the Test Runner, or through MCP `run_tests` (EditMode, assembly `UVWizard.Core.Editor.Tests`).
+- **Tests:** the dev project's `Packages/manifest.json` lists `"testables": ["com.kingazaz.uv-wizard"]`. Without it, Unity doesn't compile a `file:`-linked package's test assemblies. Run them from the Test Runner, or through MCP `run_tests` (EditMode, assemblies `UVWizard.Core.Editor.Tests` and `UVWizard.Core.Editor.Tests.VRChat`; the second needs the VRChat SDK, so CI compiles it out).
   - **Benchmarks** are menu commands under **Tools → UV Wizard → Benchmarks** (MCP `execute_menu_item`). They log to the console.
   - A run longer than a few seconds can drop the MCP call, which then retries it. Read the results from the console.
 - **CI** (`.github/workflows/test.yml`) runs the EditMode tests in this repo's own Unity project, which has no VRChat SDK, NDMF or AAO.
