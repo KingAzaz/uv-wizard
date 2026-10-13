@@ -1,0 +1,18 @@
+{
+    "name": "UVWizard.Prototype.Packer",
+    "rootNamespace": "UVWizard.Prototype.Packer",
+    "references": [
+        "Unity.Burst"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
