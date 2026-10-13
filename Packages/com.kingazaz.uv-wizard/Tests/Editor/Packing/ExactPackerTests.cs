@@ -252,6 +252,40 @@ namespace UVWizard.Core.Tests.Packing
             Assert.That(second.Placements, Is.EqualTo(first.Placements));
         }
 
+        [TestCaseSource(nameof(RowScanCases))]
+        public void TheParallelRowScanPlacesChartsWhereTheSequentialScanDoes(object chartList, float scale, object packSettings)
+        {
+            // The packer's types are internal, so NUnit's public test method takes them as objects.
+            var charts = (IReadOnlyList<ChartShape>)chartList;
+            var settings = (PackSettings)packSettings;
+            var scales = Enumerable.Repeat(scale, charts.Count).ToArray();
+
+            var sequential = ExactPacker.Pack(charts, scales, settings, RowScan.Sequential);
+            var parallel = ExactPacker.Pack(charts, scales, settings, RowScan.Parallel);
+
+            Assert.That(parallel.Fits, Is.EqualTo(sequential.Fits));
+            Assert.That(parallel.Placements, Is.EqualTo(sequential.Placements));
+        }
+
+        static IEnumerable<TestCaseData> RowScanCases()
+        {
+            var small = new PackSettings(atlasSize: 64, padding: 0);
+            yield return new TestCaseData(new[] { Rectangle(64, 40), Rectangle(20, 60) }, 1f, small).SetName("Turned to fit");
+            yield return new TestCaseData(new[] { LShape(32, 16), Rectangle(16, 16) }, 1f, new PackSettings(atlasSize: 32, padding: 0)).SetName("Nested in a notch");
+            yield return new TestCaseData(new[] { Rectangle(16, 16), Rectangle(16, 16), Rectangle(16, 16), Rectangle(16, 16) }, 1f, small).SetName("Ties between the two turns");
+            yield return new TestCaseData(new[] { LShape(32, 16), Rectangle(16, 16), Rectangle(20, 8), Rectangle(8, 20) }, 1f, new PackSettings(atlasSize: 64, padding: 4)).SetName("Padded");
+            yield return new TestCaseData(new[] { Rectangle(64, 40), Rectangle(64, 40) }, 1f, small).SetName("Second chart does not fit");
+            // The first chart leaves a 20 px strip along the top or the right, which the second just fills.
+            yield return new TestCaseData(new[] { Rectangle(64, 44), Rectangle(60, 20) }, 1f, small).SetName("Upright in the top row");
+            yield return new TestCaseData(new[] { Rectangle(64, 44), Rectangle(20, 60) }, 1f, small).SetName("Turned in the top row");
+            yield return new TestCaseData(new[] { Rectangle(44, 64), Rectangle(20, 60) }, 1f, small).SetName("Upright in the last column");
+            yield return new TestCaseData(new[] { Rectangle(44, 64), Rectangle(60, 20) }, 1f, small).SetName("Turned in the last column");
+            var large = new PackSettings(atlasSize: 2048, padding: 8);
+            yield return new TestCaseData(ExactPackerBenchmark.Synthetic(1000, seed: 1), 0.36f, large).SetName("1000 synthetic charts that fit");
+            yield return new TestCaseData(ExactPackerBenchmark.Synthetic(1000, seed: 2), 0.37f, large).SetName("1000 synthetic charts near the limit");
+            yield return new TestCaseData(ExactPackerBenchmark.Synthetic(3000, seed: 1), 0.18f, large).SetName("3000 synthetic charts that fit");
+        }
+
         // The fewest empty pixels, along x, y or a diagonal, between pixels of two different charts.
         static int SmallestGapBetweenCharts(IReadOnlyList<ChartShape> charts, PackResult result)
         {
