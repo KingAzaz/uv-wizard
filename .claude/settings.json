@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "supermatt": {
+      "source": {
+        "source": "github",
+        "repo": "svyatov/supermatt"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "supermatt@supermatt": true
+  }
+}
