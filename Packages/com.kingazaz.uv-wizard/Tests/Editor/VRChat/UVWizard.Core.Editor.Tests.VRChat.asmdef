@@ -1,0 +1,32 @@
+{
+    "name": "UVWizard.Core.Editor.Tests.VRChat",
+    "rootNamespace": "UVWizard.Core.Tests",
+    "references": [
+        "UVWizard.Core.Editor",
+        "UVWizard.Core.Editor.Tests",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "UVWIZARD_VRCHAT_SDK"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.vrchat.base",
+            "expression": "",
+            "define": "UVWIZARD_VRCHAT_SDK"
+        }
+    ],
+    "noEngineReferences": false
+}
