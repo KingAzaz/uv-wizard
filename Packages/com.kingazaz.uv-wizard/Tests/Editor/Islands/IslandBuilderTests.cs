@@ -15,7 +15,7 @@ namespace UVWizard.Core.Tests.Islands
             var uv0 = new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) };
             var triangles = new[] { 0, 1, 2, 2, 1, 3 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.Triangles), Is.EqualTo(new[] { new[] { 0, 1 } }));
         }
@@ -33,7 +33,7 @@ namespace UVWizard.Core.Tests.Islands
             };
             var triangles = new[] { 0, 1, 2, 4, 5, 6, 2, 1, 3, 6, 5, 7 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.Triangles), Is.EqualTo(new[] { new[] { 0, 2 }, new[] { 1, 3 } }));
         }
@@ -50,7 +50,7 @@ namespace UVWizard.Core.Tests.Islands
             };
             var triangles = new[] { 0, 1, 2, 3, 4, 5 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.Triangles), Is.EqualTo(new[] { new[] { 0, 1 } }));
         }
@@ -67,7 +67,7 @@ namespace UVWizard.Core.Tests.Islands
             };
             var triangles = new[] { 0, 1, 2, 1, 3, 2, 4, 5, 6, 5, 7, 6 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.UvBounds),
                 Is.EqualTo(new[] { Rect.MinMaxRect(0.25f, 0.5f, 1, 1), Rect.MinMaxRect(-3, -1, -2, -0.5f) }));
@@ -81,7 +81,7 @@ namespace UVWizard.Core.Tests.Islands
             var uv0 = new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1), new Vector2(2, 0) };
             var triangles = new[] { 0, 1, 2, 1, 4, 3, 1, 3, 2 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.Triangles), Is.EqualTo(new[] { new[] { 0, 1, 2 } }));
         }
@@ -99,7 +99,7 @@ namespace UVWizard.Core.Tests.Islands
             };
             var triangles = new[] { 0, 1, 2, 2, 1, 3, 4, 5, 6, 6, 5, 7 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.Triangles), Is.EqualTo(new[] { new[] { 0, 1 }, new[] { 2, 3 } }));
         }
@@ -114,7 +114,7 @@ namespace UVWizard.Core.Tests.Islands
             };
             var triangles = new[] { 0, 1, 2, 2, 3, 4 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.Triangles), Is.EqualTo(new[] { new[] { 0 }, new[] { 1 } }));
         }
@@ -131,7 +131,7 @@ namespace UVWizard.Core.Tests.Islands
             };
             var triangles = new[] { 0, 1, 2, 2, 1, 3, 1, 0, 4, 5, 5, 5 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.Triangles), Is.EqualTo(new[] { new[] { 0, 1, 2 }, new[] { 3 } }));
         }
@@ -164,7 +164,7 @@ namespace UVWizard.Core.Tests.Islands
             }
 
             var clock = Stopwatch.StartNew();
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
             clock.Stop();
 
             Assert.That(islands, Has.Length.EqualTo(1));
@@ -183,9 +183,13 @@ namespace UVWizard.Core.Tests.Islands
             };
             var triangles = new[] { 0, 1, 2, 3, 4, 5 };
 
-            var islands = IslandBuilder.Build(uv0, triangles);
+            var islands = Build(uv0, triangles);
 
             Assert.That(islands.Select(i => i.Triangles), Is.EqualTo(new[] { new[] { 0, 1 } }));
         }
+
+        // Connectivity doesn't depend on wrapping; IslandTileShiftTests covers that.
+        static Island[] Build(Vector2[] uv0, int[] triangles) =>
+            IslandBuilder.Build(uv0, triangles, TextureWrapMode.Clamp, TextureWrapMode.Clamp);
     }
 }
