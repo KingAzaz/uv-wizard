@@ -1,7 +1,7 @@
 {
   "dependencies": {
-    "com.clnelson888.uv-wizard": {
-      "version": "file:com.clnelson888.uv-wizard",
+    "com.kingazaz.uv-wizard": {
+      "version": "file:com.kingazaz.uv-wizard",
       "depth": 0,
       "source": "embedded",
       "dependencies": {}
