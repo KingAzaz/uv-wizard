@@ -24,18 +24,19 @@ namespace UVWizard.Core.Materials
     /// <summary>What a source material contributes to one channel.</summary>
     internal sealed class ChannelSource : IEquatable<ChannelSource>
     {
-        public ChannelSource(Texture? texture, Color tint, Vector4 scaleOffset, int uvChannel)
+        public ChannelSource(Texture? texture, Color tint, Vector4 scaleOffset, int uvChannel, float strength = 1)
         {
             Texture = texture;
             Tint = tint;
             ScaleOffset = scaleOffset;
             UvChannel = uvChannel;
+            Strength = strength;
         }
 
         /// <summary>The texture sampled, or null where the shader samples its white default.</summary>
         public Texture? Texture { get; }
 
-        /// <summary>Multiplied into every texel.</summary>
+        /// <summary>Multiplied into every texel, as a material colour property holds it (not linearized).</summary>
         public Color Tint { get; }
 
         /// <summary>The texture scale (xy) and offset (zw), as in <c>_MainTex_ST</c>.</summary>
@@ -44,18 +45,22 @@ namespace UVWizard.Core.Materials
         /// <summary>The mesh UV channel the texture is sampled with: 0 for UV0.</summary>
         public int UvChannel { get; }
 
+        /// <summary>A normal map's strength (<c>_BumpScale</c>); 1 for the other channels.</summary>
+        public float Strength { get; }
+
         /// <summary>
-        /// True when both sample the same texture with the same tint and scale and offset, so they bake to the
-        /// same texels. The UV channel isn't compared: a material that samples any channel off UV0 is excluded,
-        /// so the materials whose keys matter all sample UV0.
+        /// True when both sample the same texture in the same way, so they bake to the same texels. The UV
+        /// channel isn't compared: a material that samples any channel off UV0 is excluded, so the materials
+        /// whose keys matter all sample UV0.
         /// </summary>
         public bool Equals(ChannelSource? other) =>
-            other != null && Texture == other.Texture && Tint.Equals(other.Tint) && ScaleOffset.Equals(other.ScaleOffset);
+            other != null && Texture == other.Texture && Tint.Equals(other.Tint) &&
+            ScaleOffset.Equals(other.ScaleOffset) && Strength.Equals(other.Strength);
 
         public override bool Equals(object? obj) => Equals(obj as ChannelSource);
 
         public override int GetHashCode() =>
-            HashCode.Combine(Texture != null ? Texture.GetInstanceID() : 0, Tint, ScaleOffset);
+            HashCode.Combine(Texture != null ? Texture.GetInstanceID() : 0, Tint, ScaleOffset, Strength);
     }
 
     /// <summary>What the bake needs from one source material.</summary>
@@ -90,11 +95,12 @@ namespace UVWizard.Core.Materials
 
         /// <summary>Why the material is flagged or excluded; null when it is merged.</summary>
         public string? Reason { get; }
-    }
-}
 
-namespace UVWizard.Core.Materials
-{
+        /// <summary>The same reading, excluded for the given reason.</summary>
+        public SourceMaterialReading Excluded(string reason) =>
+            new SourceMaterialReading(Albedo, Emission, Normal, MaterialVerdict.Excluded, reason);
+    }
+
     /// <summary>What decides the texels a source material bakes to: every channel's source.</summary>
     internal sealed class SourceKey : IEquatable<SourceKey>
     {

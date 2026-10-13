@@ -5,8 +5,8 @@ using UnityEngine;
 namespace UVWizard.Core.Materials
 {
     /// <summary>
-    /// Reads VRChat's mobile shaders. All three are opaque only, so their materials are always merged
-    /// unless a channel needs a UV other than UV0.
+    /// Reads VRChat's mobile shaders. All three are opaque only, so their materials are merged unless
+    /// something they sample needs a UV channel other than UV0.
     /// </summary>
     internal static class VRChatMobileReaders
     {
@@ -21,8 +21,12 @@ namespace UVWizard.Core.Materials
                     scaleOffset, 0)
                 : null;
             var normalMap = material.GetTexture("_BumpMap");
-            var normal = normalMap != null ? new ChannelSource(normalMap, Color.white, scaleOffset, 0) : null;
-            return new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null);
+            var normal = normalMap != null
+                ? new ChannelSource(normalMap, Color.white, scaleOffset, 0, material.GetFloat("_BumpScale"))
+                : null;
+            var reading = new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null);
+            var detail = MaterialProperties.DetailOffUv0(material, "_DETAIL", "_UVSec");
+            return detail == null ? reading : reading.Excluded(detail);
         }
 
         public static SourceMaterialReading ReadToonLit(Material material)
@@ -38,21 +42,30 @@ namespace UVWizard.Core.Materials
             var albedo = new ChannelSource(material.GetTexture("_MainTex"), material.GetColor("_Color"),
                 MaterialProperties.ScaleOffset(material, "_MainTex"), 0);
 
-            // Toon Standard always adds emission map x colour x strength, so black or zero emits nothing.
+            // Toon Standard always adds emission map x colour x strength, so black or zero emits nothing. The
+            // strength scales the linearized colour (VRChat projects are always in Linear colour space), so
+            // the tint is that product turned back into a colour.
             var emissionColour = material.GetColor("_EmissionColor");
             var emissionStrength = material.GetFloat("_EmissionStrength");
-            var emissionTint = new Color(emissionColour.r * emissionStrength, emissionColour.g * emissionStrength,
-                emissionColour.b * emissionStrength, emissionColour.a);
+            var linear = emissionColour.linear;
+            var emissionTint = new Color(linear.r * emissionStrength, linear.g * emissionStrength,
+                linear.b * emissionStrength, emissionColour.a).gamma;
+            var emissionMap = material.GetTexture("_EmissionMap");
+            // Without a map the shader samples its white default, which is the same from every UV channel.
+            var emissionUv = emissionMap != null ? material.GetInt("_EmissionUV") : 0;
             var emission = emissionTint.maxColorComponent > 0
-                ? new ChannelSource(material.GetTexture("_EmissionMap"), emissionTint,
-                    MaterialProperties.ScaleOffset(material, "_EmissionMap"), material.GetInt("_EmissionUV"))
+                ? new ChannelSource(emissionMap, emissionTint,
+                    MaterialProperties.ScaleOffset(material, "_EmissionMap"), emissionUv)
                 : null;
 
             var normalMap = material.GetTexture("_BumpMap");
             var normal = material.IsKeywordEnabled("USE_NORMAL_MAPS") && normalMap != null
-                ? new ChannelSource(normalMap, Color.white, MaterialProperties.ScaleOffset(material, "_BumpMap"), 0)
+                ? new ChannelSource(normalMap, Color.white, MaterialProperties.ScaleOffset(material, "_BumpMap"), 0,
+                    material.GetFloat("_BumpScale"))
                 : null;
-            return new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null);
+            var reading = new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null);
+            var detail = MaterialProperties.DetailOffUv0(material, "USE_DETAIL_MAPS", "_DetailUV");
+            return detail == null ? reading : reading.Excluded(detail);
         }
     }
 }

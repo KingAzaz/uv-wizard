@@ -37,8 +37,7 @@ namespace UVWizard.Core.Materials
                          { (Channel.Albedo, reading.Albedo), (Channel.Emission, reading.Emission),
                            (Channel.Normal, reading.Normal) })
                 if (source != null && source.UvChannel != 0)
-                    return new SourceMaterialReading(reading.Albedo, reading.Emission, reading.Normal,
-                        MaterialVerdict.Excluded,
+                    return reading.Excluded(
                         $"{channel} is sampled from UV{source.UvChannel}: the atlas remaps UV0 only.");
             return reading;
         }

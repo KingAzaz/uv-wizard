@@ -23,16 +23,23 @@ namespace UVWizard.Core.Materials
                 : null;
             var normalMap = material.GetTexture("_BumpMap");
             var normal = material.IsKeywordEnabled("_NORMALMAP") && normalMap != null
-                ? new ChannelSource(normalMap, Color.white, scaleOffset, 0)
+                ? new ChannelSource(normalMap, Color.white, scaleOffset, 0, material.GetFloat("_BumpScale"))
                 : null;
-            var reason = material.GetFloat("_Mode") switch
-            {
-                Cutout => "Cutout becomes opaque: Toon Standard has no alpha cutoff.",
-                >= Fade => "Transparent becomes opaque: Toon Standard has no transparency.",
-                _ => null,
-            };
-            return new SourceMaterialReading(albedo, emission, normal,
+
+            // The inspector keeps _Mode and the blend keywords in step, but a script can set the keywords
+            // alone, and the shader follows the keywords.
+            var mode = material.GetFloat("_Mode");
+            var reason =
+                mode == Cutout || material.IsKeywordEnabled("_ALPHATEST_ON")
+                    ? "Cutout becomes opaque: Toon Standard has no alpha cutoff."
+                    : mode >= Fade || material.IsKeywordEnabled("_ALPHABLEND_ON") ||
+                      material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON")
+                        ? "Transparent becomes opaque: Toon Standard has no transparency."
+                        : null;
+            var reading = new SourceMaterialReading(albedo, emission, normal,
                 reason == null ? MaterialVerdict.Merged : MaterialVerdict.Flagged, reason);
+            var detail = MaterialProperties.DetailOffUv0(material, "_DETAIL_MULX2", "_UVSec");
+            return detail == null ? reading : reading.Excluded(detail);
         }
     }
 }

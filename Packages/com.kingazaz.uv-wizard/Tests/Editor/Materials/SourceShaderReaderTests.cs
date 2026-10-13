@@ -65,13 +65,14 @@ namespace UVWizard.Core.Tests.Materials
         }
 
         [Test]
-        public void StandardNormalIsTheNormalMapUntintedOnUv0()
+        public void StandardNormalIsTheNormalMapUntintedOnUv0WithItsStrength()
         {
             var normalMap = Texture();
             var material = Material("Standard");
             material.SetTextureScale("_MainTex", new Vector2(3, 3));
             material.EnableKeyword("_NORMALMAP");
             material.SetTexture("_BumpMap", normalMap);
+            material.SetFloat("_BumpScale", 0.5f);
 
             var normal = SourceShaderReader.Read(material).Normal;
 
@@ -80,6 +81,7 @@ namespace UVWizard.Core.Tests.Materials
             AssertColour(Color.white, normal.Tint);
             Assert.That(normal.ScaleOffset, Is.EqualTo(new Vector4(3, 3, 0, 0)));
             Assert.That(normal.UvChannel, Is.EqualTo(0));
+            Assert.That(normal.Strength, Is.EqualTo(0.5f));
         }
 
         [Test]
@@ -102,10 +104,10 @@ namespace UVWizard.Core.Tests.Materials
             Assert.That(SourceShaderReader.Read(material).Normal, Is.Null);
         }
 
-        [TestCase(StandardCutout)]
-        [TestCase(StandardFade)]
-        [TestCase(StandardTransparent)]
-        public void AStandardMaterialThatIsNotOpaqueIsFlaggedBecauseItBecomesOpaque(float mode)
+        [TestCase(StandardCutout, "cutout")]
+        [TestCase(StandardFade, "transparent")]
+        [TestCase(StandardTransparent, "transparent")]
+        public void AStandardMaterialThatIsNotOpaqueIsFlaggedBecauseItBecomesOpaque(float mode, string named)
         {
             var material = Material("Standard");
             material.SetFloat("_Mode", mode);
@@ -113,7 +115,46 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Is.Not.Null.And.Not.Empty);
+            Assert.That(reading.Reason, Does.Contain(named).IgnoreCase);
+        }
+
+        // A script can set the blend keywords without the inspector's _Mode, and the shader follows the keywords.
+        [TestCase("_ALPHATEST_ON", "cutout")]
+        [TestCase("_ALPHABLEND_ON", "transparent")]
+        [TestCase("_ALPHAPREMULTIPLY_ON", "transparent")]
+        public void AStandardMaterialWithAnAlphaKeywordIsFlaggedWhateverItsMode(string keyword, string named)
+        {
+            var material = Material("Standard");
+            material.SetFloat("_Mode", StandardOpaque);
+            material.EnableKeyword(keyword);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.Contain(named).IgnoreCase);
+        }
+
+        [Test]
+        public void AStandardMaterialWithDetailMapsOnUv1IsExcluded()
+        {
+            var material = Material("Standard");
+            material.EnableKeyword("_DETAIL_MULX2");
+            material.SetFloat("_UVSec", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
+            Assert.That(reading.Reason, Does.Contain("UV1"));
+        }
+
+        [Test]
+        public void AStandardMaterialWithDetailMapsOffIsMergedWhateverItsSecondaryUvSet()
+        {
+            var material = Material("Standard");
+            material.DisableKeyword("_DETAIL_MULX2");
+            material.SetFloat("_UVSec", 1);
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }
 
         [Test]
@@ -155,9 +196,11 @@ namespace UVWizard.Core.Tests.Materials
         [TestCase("albedo scale")]
         [TestCase("emission")]
         [TestCase("normal map")]
+        [TestCase("normal strength")]
         public void ADifferenceInAnyChannelGivesADifferentSourceKey(string difference)
         {
             var albedo = Texture();
+            var normalMap = Texture();
 
             Material Make(bool differ)
             {
@@ -174,6 +217,13 @@ namespace UVWizard.Core.Tests.Materials
                 {
                     material.EnableKeyword("_NORMALMAP");
                     material.SetTexture("_BumpMap", Texture());
+                }
+
+                if (difference == "normal strength")
+                {
+                    material.EnableKeyword("_NORMALMAP");
+                    material.SetTexture("_BumpMap", normalMap);
+                    material.SetFloat("_BumpScale", differ ? 0.5f : 1f);
                 }
 
                 return material;

@@ -20,14 +20,18 @@ namespace UVWizard.Core.Tests.Materials
         }
 
         // Colours round-trip through the project's colour space, which can move them by a rounding error.
-        protected static void AssertColour(Color expected, Color actual, string? what = null) =>
-            Assert.That((Vector4)actual, Is.EqualTo((Vector4)expected).Using(Vector4Comparer), what);
-
-        static readonly IEqualityComparer<Vector4> Vector4Comparer = new ApproximateVector4();
+        protected static void AssertColour(Color expected, Color actual, string? what = null,
+            float tolerance = 1e-4f) =>
+            Assert.That((Vector4)actual, Is.EqualTo((Vector4)expected).Using(new ApproximateVector4(tolerance)),
+                what);
 
         sealed class ApproximateVector4 : IEqualityComparer<Vector4>
         {
-            public bool Equals(Vector4 a, Vector4 b) => (a - b).magnitude < 1e-4f;
+            readonly float tolerance;
+
+            public ApproximateVector4(float tolerance) => this.tolerance = tolerance;
+
+            public bool Equals(Vector4 a, Vector4 b) => (a - b).magnitude < tolerance;
             public int GetHashCode(Vector4 v) => 0;
         }
 
