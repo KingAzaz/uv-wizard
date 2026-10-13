@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UVWizard.Core.Islands;
 using UVWizard.Core.Packing;
@@ -27,19 +28,37 @@ namespace UVWizard.Core.Tests.Packing
             Report($"synthetic x{count}", Synthetic(count, seed: 1));
         }
 
-        // Avatars listed in UVWIZARD_BENCH_AVATARS, separated by ';': prefab paths, or names of objects
-        // in the open scene. The dev avatars are paid assets, so their names aren't written here.
+        // Avatars listed in UVWIZARD_BENCH_AVATARS, separated by ';': prefab paths, or
+        // "<scene path>|<root object name>" for avatars that only exist in a scene. The test runner
+        // opens a scene of its own, so such scenes are opened here, additively. The dev avatars are
+        // paid assets, so their names aren't written in the repo.
         [Test]
         public void Avatars()
         {
             var entries = Environment.GetEnvironmentVariable("UVWIZARD_BENCH_AVATARS");
-            if (string.IsNullOrEmpty(entries)) Assert.Ignore("Set UVWIZARD_BENCH_AVATARS to avatar prefab paths or scene object names.");
+            if (string.IsNullOrEmpty(entries)) Assert.Ignore("Set UVWIZARD_BENCH_AVATARS to avatar prefab paths or scene|root entries.");
             foreach (var entry in entries.Split(';'))
             {
-                var avatar = AssetDatabase.LoadAssetAtPath<GameObject>(entry)
-                    ?? UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects().FirstOrDefault(root => root.name == entry);
-                Assert.That(avatar, Is.Not.Null, entry);
-                Report(avatar.name, ChartsOf(avatar));
+                var bar = entry.IndexOf('|');
+                if (bar < 0)
+                {
+                    var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(entry);
+                    Assert.That(prefab, Is.Not.Null, entry);
+                    Report(prefab.name, ChartsOf(prefab));
+                    continue;
+                }
+
+                var scene = EditorSceneManager.OpenScene(entry.Substring(0, bar), OpenSceneMode.Additive);
+                try
+                {
+                    var root = scene.GetRootGameObjects().FirstOrDefault(r => r.name == entry.Substring(bar + 1));
+                    Assert.That(root, Is.Not.Null, entry);
+                    Report(root.name, ChartsOf(root));
+                }
+                finally
+                {
+                    EditorSceneManager.CloseScene(scene, true);
+                }
             }
         }
 
