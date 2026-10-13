@@ -51,6 +51,24 @@ namespace UVWizard.Core.Tests.Packing
             var outcome = !result.Fits ? "doesn't fit at any scale" : result.FitsAtFullDetail ? "fits at full detail" : "fits";
             Debug.Log($"[UV Wizard bench] {name}: {charts.Count} charts {outcome}, scale {result.Scale:0.000} ({result.Scale * result.Scale:P0} texels), " +
                       $"{result.Attempts} attempts, {clock.Elapsed.TotalMilliseconds:0} ms total");
+            if (result.Fits) CompareRowScans(name, charts, result.Scale);
+        }
+
+        // Packs once with each row scan at the scale the search found, and checks they agree.
+        static void CompareRowScans(string name, List<ChartShape> charts, float scale)
+        {
+            var scales = Enumerable.Repeat(scale, charts.Count).ToArray();
+            var clock = Stopwatch.StartNew();
+            var sequential = ExactPacker.Pack(charts, scales, Settings, RowScan.Sequential);
+            var sequentialMs = clock.Elapsed.TotalMilliseconds;
+            clock.Restart();
+            var parallel = ExactPacker.Pack(charts, scales, Settings, RowScan.Parallel);
+            var parallelMs = clock.Elapsed.TotalMilliseconds;
+            var same = parallel.Fits == sequential.Fits && parallel.Placements.SequenceEqual(sequential.Placements);
+            var message = $"[UV Wizard bench] {name}: one pack at that scale took {sequentialMs:0} ms sequential, {parallelMs:0} ms parallel; " +
+                          (same ? "placements identical" : "PLACEMENTS DIFFER");
+            if (same) Debug.Log(message);
+            else Debug.LogError(message);
         }
 
         // Every material slot of every renderer becomes a source surface, keyed by its material.

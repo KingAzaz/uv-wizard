@@ -153,9 +153,8 @@ namespace UVWizard.Core.Packing
             {
                 if (remaining > free) break;
                 var chart = Order[o];
-                var info = Infos[chart];
-                var upright = new Mask(info.BitStart, info.RowWords, info.Width, info.Height);
-                var turned = new Mask(info.TurnedBitStart, info.TurnedRowWords, info.Height, info.Width);
+                var upright = PackingGrid.Upright(Infos[chart]);
+                var turned = PackingGrid.Turned(Infos[chart]);
                 var fitsUpright = TryPlace(upright, GridSize, out var uprightAt);
                 var fitsTurned = TryPlace(turned, fitsUpright ? uprightAt.y : GridSize, out var turnedAt);
                 if (!fitsUpright && !fitsTurned) break;
@@ -163,7 +162,7 @@ namespace UVWizard.Core.Packing
                 var turn = fitsTurned && (!fitsUpright || turnedAt.y < uprightAt.y
                     || (turnedAt.y == uprightAt.y && turnedAt.x < uprightAt.x));
                 var position = turn ? turnedAt : uprightAt;
-                Blit(turn ? turned : upright, position);
+                PackingGrid.Blit(Grid, GridWords, Bits, turn ? turned : upright, position);
                 Positions[chart] = position;
                 Turned[chart] = turn;
                 placed++;
@@ -173,7 +172,126 @@ namespace UVWizard.Core.Packing
             Placed[0] = placed;
         }
 
-        readonly struct Mask
+        // The lowest row, then leftmost column, at which the mask fits, searching rows up to and
+        // including maxRow.
+        bool TryPlace(PackingGrid.Mask mask, int maxRow, out int2 position)
+        {
+            position = default;
+            if (mask.Width > GridSize || mask.Height > GridSize) return false;
+            for (var y = 0; y <= math.min(GridSize - mask.Height, maxRow); y++)
+            for (var x = 0; x <= GridSize - mask.Width; x++)
+                if (PackingGrid.Fits(Grid, GridWords, Bits, mask, x, y))
+                {
+                    position = new int2(x, y);
+                    return true;
+                }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The same bottom-left first fit as <see cref="PackChartsJob"/>, for one chart, with the grid's
+    /// rows split across worker threads: each row finds its leftmost fit, and
+    /// <see cref="PlaceChartJob"/> then takes the lowest row that has one.
+    /// </summary>
+    /// <remarks>
+    /// Rows above the lowest fit found so far are skipped. Threads share that bound without locks:
+    /// one may read a stale value or overwrite a lower one, which only costs a row scanned for
+    /// nothing, because <see cref="RowFits"/> alone decides the placement and the bound is always a
+    /// row that does fit.
+    /// </remarks>
+    [BurstCompile(CompileSynchronously = true, DisableSafetyChecks = true)]
+    internal struct ScanRowsJob : IJobParallelFor
+    {
+        public int GridSize, GridWords;
+        public int Step;   // which chart in Order this job scans for
+        [ReadOnly] public NativeArray<ulong> Grid;
+        [ReadOnly] public NativeArray<ulong> Bits;
+        [ReadOnly] public NativeArray<MaskInfo> Infos;
+        [ReadOnly] public NativeArray<int> Order;
+        [NativeDisableParallelForRestriction] public NativeArray<long> State;
+        public NativeArray<int> RowFits;   // per row: the leftmost fit's column * 2, plus 1 if turned; -1 for none
+
+        public void Execute(int y)
+        {
+            RowFits[y] = -1;
+            if (State[PackingGrid.Stopped] != 0 || y > State[PackingGrid.LowestFit]) return;
+            var info = Infos[Order[Step]];
+            var upright = PackingGrid.Upright(info);
+            var turned = PackingGrid.Turned(info);
+            var uprightFits = upright.Width <= GridSize && y <= GridSize - upright.Height;
+            var turnedFits = turned.Width <= GridSize && y <= GridSize - turned.Height;
+
+            // Unturned first at each column, so a tie stays unturned.
+            for (var x = 0; x < GridSize; x++)
+            {
+                int fit;
+                if (uprightFits && x <= GridSize - upright.Width && PackingGrid.Fits(Grid, GridWords, Bits, upright, x, y)) fit = 2 * x;
+                else if (turnedFits && x <= GridSize - turned.Width && PackingGrid.Fits(Grid, GridWords, Bits, turned, x, y)) fit = 2 * x + 1;
+                else continue;
+                RowFits[y] = fit;
+                if (y < State[PackingGrid.LowestFit]) State[PackingGrid.LowestFit] = y;
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Places one chart at the lowest row <see cref="ScanRowsJob"/> found, or stops the packing when
+    /// it fits nowhere or the charts still to place need more cells than are free.
+    /// </summary>
+    [BurstCompile(CompileSynchronously = true, DisableSafetyChecks = true)]
+    internal struct PlaceChartJob : IJob
+    {
+        public int GridWords;
+        public int Step;   // which chart in Order this job places
+        public NativeArray<ulong> Grid;
+        [ReadOnly] public NativeArray<ulong> Bits;
+        [ReadOnly] public NativeArray<int> Covered;
+        [ReadOnly] public NativeArray<MaskInfo> Infos;
+        [ReadOnly] public NativeArray<int> Order;
+        [ReadOnly] public NativeArray<int> RowFits;
+        public NativeArray<long> State;
+        public NativeArray<int2> Positions;
+        public NativeArray<bool> Turned;
+
+        public void Execute()
+        {
+            if (State[PackingGrid.Stopped] != 0) return;
+            var y = 0;
+            while (y < RowFits.Length && RowFits[y] < 0) y++;
+            if (y == RowFits.Length)
+            {
+                State[PackingGrid.Stopped] = 1;
+                return;
+            }
+
+            var chart = Order[Step];
+            var turn = (RowFits[y] & 1) != 0;
+            var position = new int2(RowFits[y] >> 1, y);
+            PackingGrid.Blit(Grid, GridWords, Bits, turn ? PackingGrid.Turned(Infos[chart]) : PackingGrid.Upright(Infos[chart]), position);
+            Positions[chart] = position;
+            Turned[chart] = turn;
+            State[PackingGrid.Placed]++;
+            State[PackingGrid.Free] -= Covered[chart];
+            State[PackingGrid.Remaining] -= Covered[chart];
+            if (State[PackingGrid.Remaining] > State[PackingGrid.Free]) State[PackingGrid.Stopped] = 1;
+            State[PackingGrid.LowestFit] = long.MaxValue;
+        }
+    }
+
+    /// <summary>The packing grid's bit operations, and the state the parallel scan's jobs share.</summary>
+    internal static class PackingGrid
+    {
+        // Indices into the parallel scan's State.
+        public const int Stopped = 0;     // nonzero once a chart fits nowhere or the rest can't fit
+        public const int LowestFit = 1;   // the lowest row known to fit the current chart
+        public const int Placed = 2;      // charts placed so far
+        public const int Free = 3;        // cells still free
+        public const int Remaining = 4;   // cells the charts still to place cover
+        public const int StateLength = 5;
+
+        public readonly struct Mask
         {
             public Mask(int bitStart, int rowWords, int width, int height)
             {
@@ -186,55 +304,43 @@ namespace UVWizard.Core.Packing
             public readonly int BitStart, RowWords, Width, Height;
         }
 
-        // The lowest row, then leftmost column, at which the mask fits, searching rows up to and
-        // including maxRow.
-        bool TryPlace(Mask mask, int maxRow, out int2 position)
-        {
-            position = default;
-            if (mask.Width > GridSize || mask.Height > GridSize) return false;
-            for (var y = 0; y <= math.min(GridSize - mask.Height, maxRow); y++)
-            for (var x = 0; x <= GridSize - mask.Width; x++)
-                if (Fits(mask, x, y))
-                {
-                    position = new int2(x, y);
-                    return true;
-                }
-            return false;
-        }
+        public static Mask Upright(MaskInfo info) => new Mask(info.BitStart, info.RowWords, info.Width, info.Height);
 
-        bool Fits(Mask info, int x, int y)
+        public static Mask Turned(MaskInfo info) => new Mask(info.TurnedBitStart, info.TurnedRowWords, info.Height, info.Width);
+
+        public static bool Fits(NativeArray<ulong> grid, int gridWords, NativeArray<ulong> bits, Mask mask, int x, int y)
         {
             int first = x >> 6, shift = x & 63;
-            for (var row = 0; row < info.Height; row++)
+            for (var row = 0; row < mask.Height; row++)
             {
-                var gridRow = (y + row) * GridWords;
-                var maskRow = info.BitStart + row * info.RowWords;
-                for (var k = 0; k < info.RowWords; k++)
+                var gridRow = (y + row) * gridWords;
+                var maskRow = mask.BitStart + row * mask.RowWords;
+                for (var k = 0; k < mask.RowWords; k++)
                 {
-                    var m = Bits[maskRow + k];
+                    var m = bits[maskRow + k];
                     if (m == 0) continue;
                     var w = first + k;
-                    if ((Grid[gridRow + w] & (m << shift)) != 0) return false;
-                    if (shift != 0 && w + 1 < GridWords && (Grid[gridRow + w + 1] & (m >> (64 - shift))) != 0) return false;
+                    if ((grid[gridRow + w] & (m << shift)) != 0) return false;
+                    if (shift != 0 && w + 1 < gridWords && (grid[gridRow + w + 1] & (m >> (64 - shift))) != 0) return false;
                 }
             }
             return true;
         }
 
-        void Blit(Mask info, int2 position)
+        public static void Blit(NativeArray<ulong> grid, int gridWords, NativeArray<ulong> bits, Mask mask, int2 position)
         {
             int first = position.x >> 6, shift = position.x & 63;
-            for (var row = 0; row < info.Height; row++)
+            for (var row = 0; row < mask.Height; row++)
             {
-                var gridRow = (position.y + row) * GridWords;
-                var maskRow = info.BitStart + row * info.RowWords;
-                for (var k = 0; k < info.RowWords; k++)
+                var gridRow = (position.y + row) * gridWords;
+                var maskRow = mask.BitStart + row * mask.RowWords;
+                for (var k = 0; k < mask.RowWords; k++)
                 {
-                    var m = Bits[maskRow + k];
+                    var m = bits[maskRow + k];
                     if (m == 0) continue;
                     var w = first + k;
-                    Grid[gridRow + w] |= m << shift;
-                    if (shift != 0 && w + 1 < GridWords) Grid[gridRow + w + 1] |= m >> (64 - shift);
+                    grid[gridRow + w] |= m << shift;
+                    if (shift != 0 && w + 1 < gridWords) grid[gridRow + w + 1] |= m >> (64 - shift);
                 }
             }
         }
