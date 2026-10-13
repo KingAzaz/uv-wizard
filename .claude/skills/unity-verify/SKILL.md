@@ -18,7 +18,7 @@ The cloud project-owner routine cannot run Unity, so this is the local check. It
 1. Record the current branch (`git branch --show-current`). Run `git status --porcelain`. If anything is listed, stop and report it: never stash or discard the user's work.
 2. Never switch to a `prototype/*` branch. `git fetch origin`, then `git switch <headRefName>` and `git reset --hard origin/<headRefName>` only if that local branch has no unpushed commits (`git log origin/<headRefName>..<headRefName>` is empty; otherwise stop and report). For `main`, use `git switch --detach origin/main`. Say which branch Unity now compiles.
 3. Call `refresh_unity`, wait for the compile, then `read_console` for errors. Compile errors fail the target. Report them and skip the tests.
-4. `run_tests` with mode EditMode, assembly `UVWizard.Core.Editor.Tests`. Poll `get_test_job` until it finishes.
+4. `run_tests` with mode EditMode and every test assembly: `UVWizard.Core.Editor.Tests`, plus the SDK-gated ones that CI compiles out (`UVWizard.Core.Editor.Tests.VRChat`). Poll `get_test_job` until it finishes.
 5. Post the result:
    - For a PR, use `gh pr comment <n>`. Start with `> *Local Unity check (unity-verify).*`, then: commit SHA, Unity version, pass/fail counts, each failing test with its message, and any console errors. Remove the `needs-unity` label (`gh pr edit <n> --remove-label needs-unity`). On failure, add `unity-failed` (create it with `gh label create unity-failed --force` if missing).
    - For `main`, comment only on failure: open an issue titled `main fails in Unity: <short cause>` with labels `bug` and `needs-triage`.
