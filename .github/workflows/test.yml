@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: read
-  checks: write
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -29,6 +28,10 @@ jobs:
           key: Library-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
           restore-keys: Library-
 
+      # An empty githubToken (it defaults to the workflow's token) stops the action posting a
+      # second check whose conclusion is always neutral, which reads as "skipped" next to this
+      # job. The job still fails when a test fails, since the runner exits non-zero, and the
+      # next step puts the results in the job summary.
       - uses: game-ci/unity-test-runner@v4
         id: tests
         env:
@@ -38,8 +41,34 @@ jobs:
         with:
           unityVersion: 2022.3.22f1
           testMode: editmode
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          checkName: EditMode test results
+          githubToken: ''
+
+      - name: Summarize results
+        if: always()
+        shell: python
+        env:
+          RESULTS: ${{ steps.tests.outputs.artifactsPath }}/editmode-results.xml
+        run: |
+          import os
+          import xml.etree.ElementTree as ET
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              path = os.environ["RESULTS"]
+              if not os.path.isfile(path):
+                  out.write("### EditMode tests: no results\n\nThe test run produced no results file. See the job log.\n")
+                  raise SystemExit(0)
+              run = ET.parse(path).getroot()
+              a = run.attrib
+              out.write(
+                  f"### EditMode tests: {a.get('passed', '?')}/{a.get('total', '?')} passed, "
+                  f"{a.get('failed', '?')} failed, {a.get('skipped', '?')} skipped "
+                  f"({float(a.get('duration', 0)):.1f} s)\n\n"
+              )
+              for case in run.iter("test-case"):
+                  if case.get("result") != "Failed":
+                      continue
+                  message = (case.findtext("failure/message") or "").strip().splitlines()
+                  out.write(f"- ❌ `{case.get('fullname')}`: {message[0] if message else ''}\n")
 
       - uses: actions/upload-artifact@v4
         if: always()

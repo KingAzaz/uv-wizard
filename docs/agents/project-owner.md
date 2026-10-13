@@ -38,7 +38,7 @@ Only from the repo owner, **KingAzaz**: issue and PR bodies they wrote, their co
 
 - Never push to `main` and never force-push it. All changes go through PRs.
 - Never touch `prototype/*` branches. They never merge (AGENTS.md).
-- Merge only when **all** of these hold:
+- Agent PRs merge themselves. The slice run turns on GitHub auto-merge, and the required **Merge gate** check holds a PR while it has a `needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human` label. Merge a PR yourself only when it has no auto-merge and **all** of these hold:
   - every required check is green;
   - the PR has no `needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human` label;
   - KingAzaz has no unresolved "changes requested" review on it;
@@ -54,7 +54,8 @@ Read `AGENTS.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`
 1. **Land green PRs.** List open PRs: `gh pr list --json number,title,headRefName,baseRefName,labels,reviewDecision,statusCheckRollup,author`. Work through stacks bottom-up: a PR whose base isn't `main` waits until its base merges. For each PR targeting `main` that passes the merge gate, squash-merge it (`gh pr merge <n> --squash --delete-branch`), closing the issues it finishes. Then, for each PR stacked on the merged branch:
    - rebase it onto `main` with `git rebase --onto origin/main <old base head> <branch>`, in your worktree;
    - `git push --force-with-lease`;
-   - `gh pr edit <n> --base main` (GitHub may already have retargeted it).
+   - `gh pr edit <n> --base main` (GitHub may already have retargeted it);
+   - on an `owner-agent` PR, `gh pr merge <n> --auto --squash`.
 
    A PR targeting `main` with no `EditMode tests` check (opened before the workflow existed, or just retargeted) has never run CI. Trigger it with `gh pr close <n> && gh pr reopen <n>`, then check again next run.
 
@@ -64,6 +65,8 @@ Read `AGENTS.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`
    - real shaders and materials;
    - AAO interop;
    - anything that touches an avatar.
+
+   Auto-merge can land a PR before you review it. Review PRs merged since your last run too, and file each blocking finding on a merged PR as a `ready-for-agent` issue that names the PR. On an open PR whose only hold is a label about to clear, such as `needs-unity`, add `do-not-merge` for a blocking finding and say in your comment that you added it. Remove it yourself once a later commit addresses the finding.
 3. **Unity checks.** If the repo isn't busy, follow `.claude/skills/unity-verify/SKILL.md` with no argument. It runs each `needs-unity` PR in the editor, comments the result, and clears the label or swaps it for `unity-failed`. Then return to step 1 once for anything it just cleared.
 4. **Triage.** Read `triage`'s SKILL.md. Unlabeled issues: triage them fully, deciding on KingAzaz's behalf ("I am away" mode) for engineering questions only, and record each decision in the brief. Product questions go to `needs-triage` with your recommendation. `needs-triage` issues: comment your recommendation only, once per issue unless something changed.
 5. **Plan.** Keep the frontier stocked. If fewer than 2 `ready-for-agent` issues are actionable, top them up from:
