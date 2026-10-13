@@ -1,7 +1,11 @@
 {
     "name": "UVWizard.Core.Editor",
     "rootNamespace": "UVWizard.Core",
-    "references": [],
+    "references": [
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Mathematics"
+    ],
     "includePlatforms": [
         "Editor"
     ],
