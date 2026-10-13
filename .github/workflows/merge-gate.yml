@@ -1,0 +1,28 @@
+name: Merge gate
+
+# A required check on main. It fails while a PR carries a label that holds its merge, so GitHub
+# auto-merge waits until tests pass and those labels are gone. It runs again whenever labels change.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+
+permissions: {}
+
+jobs:
+  gate:
+    name: Merge gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for labels that hold the merge
+        shell: python
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          import json, os, sys
+
+          holding = {"needs-unity", "unity-failed", "do-not-merge", "ready-for-human"}
+          held = sorted(holding & set(json.loads(os.environ["LABELS"])))
+          if held:
+              print(f"::error::Waiting for these labels to go: {', '.join(held)}")
+              sys.exit(1)
+          print("No label holds this merge.")
