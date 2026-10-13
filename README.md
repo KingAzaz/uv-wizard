@@ -206,12 +206,12 @@ To install UVWizard into your Unity project using the VRChat Creator Companion (
    - **Add Community Repository**:
      - You can refer to the official VRChat documentation for detailed instructions: [Adding Community Repositories](https://vcc.docs.vrchat.com/guides/community-repositories/)
      - **Option 1**: Click this link to automatically add the repository:
-       - [Add UVWizard to VCC](https://clnelson888.github.io/uv-wizard/)
+       - [Add UVWizard to VCC](https://kingazaz.github.io/uv-wizard/)
      - **Option 2**: Manually add the repository:
        - Click the **"Add Repository"** button.
        - In the input field that appears, enter the URL of the UVWizard repository:
          ```
-         https://clnelson888.github.io/uv-wizard/index.json
+         https://kingazaz.github.io/uv-wizard/index.json
          ```
        - Click **"Add"**.
 
@@ -279,7 +279,7 @@ Contributions are welcome! Here's how you can help:
 
 ### **Reporting Issues**
 
-- Use the [Issues](https://github.com/clnelson888/uv-wizard/issues) tab to report bugs or suggest enhancements.
+- Use the [Issues](https://github.com/KingAzaz/uv-wizard/issues) tab to report bugs or suggest enhancements.
 - Provide detailed information, including steps to reproduce the issue and any relevant screenshots.
 
 ### **Submitting Pull Requests**

@@ -1,13 +1,14 @@
 {
-  "name": "com.clnelson888.uv-wizard",
+  "name": "com.kingazaz.uv-wizard",
   "displayName": "UV Wizard",
   "version": "0.1.1",
   "unity": "2022.3",
   "description": "Enhances UV packing by adjusting textures to match optimized UV island layouts.",
+  "license": "MIT",
   "vrchatVersion": "2022.3",
   "author": {
-    "name": "clnelson888",
+    "name": "KingAzaz",
     "email": "clnelson888@gmail.com",
-    "url": "https://github.com/clnelson888"
+    "url": "https://github.com/KingAzaz"
   }
 }
