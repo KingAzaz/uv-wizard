@@ -15,3 +15,11 @@ The throwaway prototype on branch `prototype/exact-shape-packer` (`Packages/com.
 - **Fast enough for real avatars:** those avatars have 165–255 charts, far fewer than the research assumed. A full scale search takes about 1.2 s.
 - **Not yet fast at thousands of charts:** about 11.6 s at 3,000. Production needs Burst rasterization, parallel row scanning, cached bake results (NDMF re-runs on play mode), and the shelf fallback above a chart-count or time budget.
 - **Don't size from summed UV triangle area.** Overlapping UVs double-count it (Rexouium). Search for the largest scale that actually fits.
+
+## Evidence (production, 2026-10-13)
+
+Issue #11 split each chart's bottom-left scan across rows in parallel Burst jobs, keeping the sequential scan's placements (a test compares both). On the dev machine, with the prototype's settings:
+
+- **1,000 synthetic charts:** a full scale search takes 0.5 s, down from 2.7 s with the sequential scan.
+- **3,000 synthetic charts:** 1.6 s, down from 9.2 s, which meets the 3 s target. The target is now to stay under 2 s at 3,000 charts.
+- **Real avatars:** one pack takes about 25 ms, down from about 57 ms, with identical placements.

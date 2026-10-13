@@ -275,6 +275,8 @@ namespace UVWizard.Core.Tests.Packing
             yield return new TestCaseData(new[] { Rectangle(16, 16), Rectangle(16, 16), Rectangle(16, 16), Rectangle(16, 16) }, 1f, small).SetName("Ties between the two turns");
             yield return new TestCaseData(new[] { LShape(32, 16), Rectangle(16, 16), Rectangle(20, 8), Rectangle(8, 20) }, 1f, new PackSettings(atlasSize: 64, padding: 4)).SetName("Padded");
             yield return new TestCaseData(new[] { Rectangle(64, 40), Rectangle(64, 40) }, 1f, small).SetName("Second chart does not fit");
+            // Two squares cover less than the atlas's cells, but the second fits nowhere by shape.
+            yield return new TestCaseData(new[] { Rectangle(40, 40), Rectangle(40, 40) }, 1f, small).SetName("Second chart fits by area but not by shape");
             // The first chart leaves a 20 px strip along the top or the right, which the second just fills.
             yield return new TestCaseData(new[] { Rectangle(64, 44), Rectangle(60, 20) }, 1f, small).SetName("Upright in the top row");
             yield return new TestCaseData(new[] { Rectangle(64, 44), Rectangle(20, 60) }, 1f, small).SetName("Turned in the top row");

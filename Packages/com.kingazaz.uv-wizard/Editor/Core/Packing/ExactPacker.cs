@@ -145,8 +145,11 @@ namespace UVWizard.Core.Packing
         // Rows each worker thread takes at a time in a chart's row scan.
         const int RowsPerBatch = 4;
 
-        // Schedules every chart's row scan and placement up front, each after the one before, and
-        // returns how many charts were placed.
+        // Charts whose jobs are scheduled together before checking whether the packing stopped.
+        const int ChartsPerChunk = 64;
+
+        // Schedules each chart's row scan and placement, each after the one before, and returns how
+        // many charts were placed.
         static int PackInParallel(int gridSize, int gridWords, NativeArray<ulong> grid, NativeArray<ulong> bits,
             NativeArray<int> covered, NativeArray<MaskInfo> infos, NativeArray<int> order,
             NativeArray<int2> positions, NativeArray<bool> turned)
@@ -163,22 +166,26 @@ namespace UVWizard.Core.Packing
                 state[PackingGrid.Free] = free;
                 state[PackingGrid.Remaining] = remaining;
                 state[PackingGrid.LowestFit] = long.MaxValue;
-                var handle = default(JobHandle);
-                for (var step = 0; step < order.Length; step++)
+                // In chunks, so a failing attempt stops scheduling soon after a chart fits nowhere.
+                for (var first = 0; first < order.Length && state[PackingGrid.Stopped] == 0; first += ChartsPerChunk)
                 {
-                    handle = new ScanRowsJob
+                    var handle = default(JobHandle);
+                    for (var step = first; step < Math.Min(first + ChartsPerChunk, order.Length); step++)
                     {
-                        GridSize = gridSize, GridWords = gridWords, Step = step, Grid = grid, Bits = bits,
-                        Infos = infos, Order = order, State = state, RowFits = rowFits,
-                    }.Schedule(gridSize, RowsPerBatch, handle);
-                    handle = new PlaceChartJob
-                    {
-                        GridWords = gridWords, Step = step, Grid = grid, Bits = bits, Covered = covered,
-                        Infos = infos, Order = order, RowFits = rowFits, State = state,
-                        Positions = positions, Turned = turned,
-                    }.Schedule(handle);
+                        handle = new ScanRowsJob
+                        {
+                            GridSize = gridSize, GridWords = gridWords, Step = step, Grid = grid, Bits = bits,
+                            Infos = infos, Order = order, State = state, RowFits = rowFits,
+                        }.Schedule(gridSize, RowsPerBatch, handle);
+                        handle = new PlaceChartJob
+                        {
+                            GridWords = gridWords, Step = step, Grid = grid, Bits = bits, Covered = covered,
+                            Infos = infos, Order = order, RowFits = rowFits, State = state,
+                            Positions = positions, Turned = turned,
+                        }.Schedule(handle);
+                    }
+                    handle.Complete();
                 }
-                handle.Complete();
                 return (int)state[PackingGrid.Placed];
             }
             finally
