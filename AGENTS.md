@@ -14,7 +14,11 @@ Single-context. See `docs/agents/domain.md`.
 
 ### Project owner
 
-A local scheduled task ("UV Wizard owner") works through the v1 plan unattended. Its playbook is `docs/agents/project-owner.md`. It merges only on green CI and never with `needs-unity` set; clear that label by running `/unity-verify` locally.
+Two local scheduled tasks develop UV Wizard unattended, and each starts the other:
+- **"UV Wizard owner"** merges, reviews, triages, runs Unity checks, plans new work, and starts slice runs. Its playbook is `docs/agents/project-owner.md`. It merges only on green CI and never with `needs-unity` set.
+- **"UV Wizard next slice"** fixes agent PRs and builds the next frontier ticket. It runs `.claude/skills/next-slice/SKILL.md` unattended, and you can run the same skill yourself with `/next-slice`.
+
+Both stand down while another session in this repo is running or the checkout is dirty. Agent PRs carry the `owner-agent` label. Disable either task to pause the loop.
 
 ## Dev environment
 
