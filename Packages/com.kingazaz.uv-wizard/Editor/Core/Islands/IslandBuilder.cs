@@ -13,11 +13,17 @@ namespace UVWizard.Core.Islands
         // split vertices while staying far below a texel of any real texture.
         const double WeldGrid = 1 << 20;
 
+        // The most tiles an island may span on one axis. Beyond it, the atlas would have to hold
+        // the repeated texture several times over, and detail drops sharply.
+        const int RepeatLimit = 2;
+
         /// <summary>
         /// Returns the islands of one source surface: the UV0 coordinates of its mesh and the
-        /// triangles of one material slot, three vertex indices per triangle.
+        /// triangles of one material slot, three vertex indices per triangle. The wrap modes are
+        /// the source textures' on each axis, and decide how far islands may shift between tiles.
         /// </summary>
-        public static Island[] Build(ReadOnlySpan<Vector2> uv0, ReadOnlySpan<int> triangles)
+        public static Island[] Build(ReadOnlySpan<Vector2> uv0, ReadOnlySpan<int> triangles,
+            TextureWrapMode wrapU, TextureWrapMode wrapV)
         {
             var triangleCount = triangles.Length / 3;
             var parent = new int[triangleCount];
@@ -71,7 +77,13 @@ namespace UVWizard.Core.Islands
 
             var result = new Island[islands.Count];
             for (var i = 0; i < islands.Count; i++)
-                result[i] = new Island(islands[i].ToArray(), UvBounds(uv0, triangles, islands[i]));
+            {
+                var bounds = UvBounds(uv0, triangles, islands[i]);
+                var tileShift = new Vector2Int(TileShift(bounds.xMin, wrapU), TileShift(bounds.yMin, wrapV));
+                var exceedsRepeatLimit = TilesSpanned(bounds.xMin, bounds.xMax) > RepeatLimit
+                    || TilesSpanned(bounds.yMin, bounds.yMax) > RepeatLimit;
+                result[i] = new Island(islands[i].ToArray(), bounds, tileShift, exceedsRepeatLimit);
+            }
             return result;
         }
 
@@ -89,6 +101,30 @@ namespace UVWizard.Core.Islands
                 }
             }
             return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        }
+
+        // Whole tiles that move an island starting at min, on one axis, into its home tile. Repeat
+        // samples every tile alike. Mirror flips every other tile, so it shifts by even tiles only.
+        static int TileShift(float min, TextureWrapMode wrap)
+        {
+            var tile = (int)Math.Floor(Snap(min));
+            switch (wrap)
+            {
+                case TextureWrapMode.Repeat: return -tile;
+                case TextureWrapMode.Mirror: return -2 * Mathf.FloorToInt(tile / 2f);
+                default: return 0;
+            }
+        }
+
+        static int TilesSpanned(float min, float max)
+        {
+            return (int)(Math.Ceiling(Snap(max)) - Math.Floor(Snap(min)));
+        }
+
+        // A UV coordinate on the weld grid, so float noise at a tile edge counts as the edge.
+        static double Snap(float uv)
+        {
+            return Math.Round(uv * WeldGrid) / WeldGrid;
         }
 
         static (long, long) Quantize(Vector2 uv)
