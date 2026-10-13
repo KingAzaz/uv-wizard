@@ -18,10 +18,20 @@ namespace UVWizard.Core.Packing
         /// </summary>
         public static PackResult Pack(IReadOnlyList<ChartShape> charts, float scale, PackSettings settings)
         {
+            var scales = new float[charts.Count];
+            Array.Fill(scales, scale);
+            return Pack(charts, scales, settings);
+        }
+
+        /// <summary>
+        /// Places every chart at its own scale (atlas pixels per source texel), or reports that
+        /// they don't all fit.
+        /// </summary>
+        public static PackResult Pack(IReadOnlyList<ChartShape> charts, IReadOnlyList<float> scales, PackSettings settings)
+        {
             var block = settings.BlockSize;
             var gridSize = settings.AtlasSize / block;
             var gridWords = (gridSize + 63) / 64;
-            var cellsPerTexel = scale / block;
             // Two neighbouring charts each keep half the padding, rounded up to whole cells.
             var padCells = (settings.Padding + 2 * block - 1) / (2 * block);
 
@@ -40,8 +50,10 @@ namespace UVWizard.Core.Packing
                     min = Vector2.Min(min, corner);
                     max = Vector2.Max(max, corner);
                 }
+                var cellsPerTexel = scales[i] / block;
                 var info = new MaskInfo
                 {
+                    CellsPerTexel = cellsPerTexel,
                     CornerStart = cornerStart - charts[i].Corners.Count,
                     CornerCount = charts[i].Corners.Count,
                     Min = min,
@@ -71,7 +83,7 @@ namespace UVWizard.Core.Packing
             {
                 new RasterizeChartsJob
                 {
-                    Corners = corners, Infos = infos, CellsPerTexel = cellsPerTexel, PadCells = padCells,
+                    Corners = corners, Infos = infos, PadCells = padCells,
                     Cells = cells, Scratch = scratch, Bits = bits, Covered = covered,
                 }.Schedule(charts.Count, 1).Complete();
 
@@ -90,7 +102,7 @@ namespace UVWizard.Core.Packing
                 if (placed[0] < charts.Count) return new PackResult(false, Array.Empty<Placement>());
                 var placements = new Placement[charts.Count];
                 for (var i = 0; i < charts.Count; i++)
-                    placements[i] = PlacementOf(infos[i], positions[i], turned[i], scale, block, padCells);
+                    placements[i] = PlacementOf(infos[i], positions[i], turned[i], scales[i], block, padCells);
                 return new PackResult(true, placements);
             }
             finally

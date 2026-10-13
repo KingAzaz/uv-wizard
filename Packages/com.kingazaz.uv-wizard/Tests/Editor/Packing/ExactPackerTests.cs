@@ -275,7 +275,7 @@ namespace UVWizard.Core.Tests.Packing
 
         // Atlas pixels whose centres lie strictly inside two charts' placed triangles: an
         // independent check of the packer, which works on its own block grid.
-        static IEnumerable<Vector2Int> PixelsCoveredByMoreThanOneChart(IReadOnlyList<ChartShape> charts, PackResult result)
+        internal static IEnumerable<Vector2Int> PixelsCoveredByMoreThanOneChart(IReadOnlyList<ChartShape> charts, PackResult result)
         {
             var owner = new Dictionary<Vector2Int, int>();
             var shared = new HashSet<Vector2Int>();
@@ -314,7 +314,7 @@ namespace UVWizard.Core.Tests.Packing
         static float Cross(Vector2 u, Vector2 v) => u.x * v.y - u.y * v.x;
 
         // A w x h texel rectangle with its lower-left corner at the origin, as two triangles.
-        static ChartShape Rectangle(float w, float h) => Polygon(new Vector2(0, 0), new Vector2(w, 0), new Vector2(w, h), new Vector2(0, h));
+        internal static ChartShape Rectangle(float w, float h) => Polygon(new Vector2(0, 0), new Vector2(w, 0), new Vector2(w, h), new Vector2(0, h));
 
         // A convex polygon as a triangle fan around its first corner.
         static ChartShape Polygon(params Vector2[] outline)
@@ -325,10 +325,10 @@ namespace UVWizard.Core.Tests.Packing
             return new ChartShape(corners.ToArray());
         }
 
-        static IEnumerable<Vector2> AtlasCorners(IReadOnlyList<ChartShape> charts, PackResult result) =>
+        internal static IEnumerable<Vector2> AtlasCorners(IReadOnlyList<ChartShape> charts, PackResult result) =>
             charts.SelectMany((chart, i) => chart.Corners.Select(corner => result.Placements[i].ToAtlas(corner)));
 
-        static System.Predicate<Vector2> InsideAtlas(int size) =>
+        internal static System.Predicate<Vector2> InsideAtlas(int size) =>
             p => p.x >= 0 && p.y >= 0 && p.x <= size && p.y <= size;
     }
 }

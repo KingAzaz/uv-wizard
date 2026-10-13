@@ -13,8 +13,8 @@ namespace UVWizard.Core.Tests.Packing
 {
     /// <summary>
     /// Timings for ADR 0002's packer, comparable with the prototype's (2048 atlas, 4 px blocks, 8 px
-    /// between charts, geometric bisection on scale to 1%). These are menu commands rather than tests,
-    /// so test runs stay fast; results go to the console. Time with the editor focused and compare
+    /// between charts, geometric bisection on scale to 1%), through <see cref="ScaleSearch"/>. These
+    /// are menu commands rather than tests, so test runs stay fast; results go to the console. Time with the editor focused and compare
     /// variants back to back: an unfocused editor ran the same search about 30% slower.
     /// </summary>
     internal static class ExactPackerBenchmark
@@ -46,43 +46,9 @@ namespace UVWizard.Core.Tests.Packing
         static void Report(string name, List<ChartShape> charts)
         {
             var clock = Stopwatch.StartNew();
-            var attempts = 0;
-            double slowest = 0;
-            bool Fits(float scale)
-            {
-                attempts++;
-                var attempt = Stopwatch.StartNew();
-                var fits = ExactPacker.Pack(charts, scale, Settings).Fits;
-                slowest = Math.Max(slowest, attempt.Elapsed.TotalMilliseconds);
-                return fits;
-            }
-
-            // The prototype's search: start from the summed-area bound, then bisect to 1%.
-            var area = charts.Sum(Area);
-            var hi = (float)Math.Sqrt((double)Settings.AtlasSize * Settings.AtlasSize / area);
-            var lo = hi * 0.25f;
-            while (!Fits(lo)) { hi = lo; lo *= 0.5f; }
-            while (Fits(hi)) { lo = hi; hi *= 1.5f; }
-            while (hi / lo > 1.01f)
-            {
-                var mid = (float)Math.Sqrt((double)lo * hi);
-                if (Fits(mid)) lo = mid; else hi = mid;
-            }
-
-            Debug.Log($"[UV Wizard bench] {name}: {charts.Count} charts, scale {lo:0.000} ({lo * lo:P0} texels), " +
-                      $"{attempts} attempts, {clock.Elapsed.TotalMilliseconds:0} ms total, slowest attempt {slowest:0} ms");
-        }
-
-        static double Area(ChartShape chart)
-        {
-            double area = 0;
-            for (var k = 0; k < chart.Corners.Count; k += 3)
-            {
-                var u = chart.Corners[k + 1] - chart.Corners[k];
-                var v = chart.Corners[k + 2] - chart.Corners[k];
-                area += Math.Abs(u.x * v.y - u.y * v.x) / 2;
-            }
-            return area;
+            var result = ScaleSearch.Search(charts, Settings);
+            Debug.Log($"[UV Wizard bench] {name}: {charts.Count} charts, scale {result.Scale:0.000} ({result.Scale * result.Scale:P0} texels), " +
+                      $"{result.Attempts} attempts, {clock.Elapsed.TotalMilliseconds:0} ms total");
         }
 
         // Every material slot of every renderer becomes a source surface, keyed by its material.

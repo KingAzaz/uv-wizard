@@ -12,6 +12,7 @@ namespace UVWizard.Core.Packing
     {
         public int CornerStart, CornerCount;   // into the corners buffer, three per triangle
         public float2 Min;                     // the chart's lower-left corner, in source texels
+        public float CellsPerTexel;            // the chart's scale over the block size
         public int Width, Height;              // in cells
         public int CellStart;                  // into the cells buffer, Width * Height bytes
         public int RowWords;                   // 64-bit words per row in the bits buffer
@@ -29,7 +30,6 @@ namespace UVWizard.Core.Packing
     {
         [ReadOnly] public NativeArray<float2> Corners;
         [ReadOnly] public NativeArray<MaskInfo> Infos;
-        public float CellsPerTexel;
         public int PadCells;   // the mask's border, and how far the chart's cells are dilated into it
 
         [NativeDisableParallelForRestriction] public NativeArray<byte> Cells;
@@ -42,9 +42,9 @@ namespace UVWizard.Core.Packing
             var info = Infos[chart];
             for (var k = info.CornerStart; k < info.CornerStart + info.CornerCount; k += 3)
             {
-                var a = (Corners[k] - info.Min) * CellsPerTexel + PadCells;
-                var b = (Corners[k + 1] - info.Min) * CellsPerTexel + PadCells;
-                var c = (Corners[k + 2] - info.Min) * CellsPerTexel + PadCells;
+                var a = (Corners[k] - info.Min) * info.CellsPerTexel + PadCells;
+                var b = (Corners[k + 1] - info.Min) * info.CellsPerTexel + PadCells;
+                var c = (Corners[k + 2] - info.Min) * info.CellsPerTexel + PadCells;
                 var lo = math.clamp((int2)math.floor(math.min(a, math.min(b, c))), 0, new int2(info.Width - 1, info.Height - 1));
                 var hi = math.clamp((int2)math.floor(math.max(a, math.max(b, c))), 0, new int2(info.Width - 1, info.Height - 1));
                 for (var y = lo.y; y <= hi.y; y++)
