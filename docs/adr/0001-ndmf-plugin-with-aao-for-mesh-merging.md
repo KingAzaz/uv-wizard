@@ -11,3 +11,5 @@ UV Wizard runs as an NDMF plugin in the Optimizing phase, after Modular Avatar a
 
 - The "1 skinned mesh" half of every preset depends on AAO's behaviour. An AAO change can break the headline result, so our tests must cover AAO's output too.
 - We use AAO's interop API (UV evacuation, `MeshRemovalProvider`) so AAO's UV-based removals stay correct and triangles AAO will delete get no atlas space.
+- AAO merges skinned meshes automatically only through its Trace and Optimize component. On mobile builds, UV Wizard adds one with default settings when the avatar lacks it, which AAO documents as supported. A setting that is on by default turns this off. The creator then also gets Trace and Optimize's other default optimizations.
+- Even with Trace and Optimize, AAO won't merge meshes on different toggles, static meshes, or meshes with different bounds or root bones. The report must say which ones kept the avatar above one skinned mesh.
