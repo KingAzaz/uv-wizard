@@ -15,6 +15,9 @@ namespace UVWizard.Core.Meshes
     /// </summary>
     internal static class Uv0Rewriter
     {
+        static readonly VertexAttributeFormat[] WritableUvFormats =
+            { VertexAttributeFormat.Float32, VertexAttributeFormat.Float16, VertexAttributeFormat.UNorm16 };
+
         /// <summary>
         /// Returns a copy of the mesh whose merged triangles sample the atlas. A vertex whose
         /// triangles want different UV0s, because they sit in different charts or some belong to an
@@ -23,8 +26,14 @@ namespace UVWizard.Core.Meshes
         /// </summary>
         /// <param name="atlasUvs">
         /// One entry per submesh. Null keeps the submesh's UV0, for an excluded material. Otherwise
-        /// one atlas UV per triangle corner, in the order of the submesh's indices.
+        /// one atlas UV per triangle corner, in the order of the submesh's indices. A vertex splits
+        /// wherever its corners' UVs differ at all, so the corners of a vertex in one chart must
+        /// get bit-identical atlas UVs.
         /// </param>
+        /// <remarks>
+        /// UV0 keeps its format: Float32, Float16 or UNorm16. Float16 holds atlas UVs to within
+        /// 2^-11, a texel of a 2048 atlas.
+        /// </remarks>
         public static RewrittenMesh Rewrite(Mesh source, IReadOnlyList<Vector2[]?> atlasUvs)
         {
             // The editor's MeshUtility variant reads meshes whose Read/Write is off.
@@ -46,6 +55,10 @@ namespace UVWizard.Core.Meshes
                     throw new ArgumentException($"Submesh {s} isn't made of triangles, so it can't be merged.", nameof(atlasUvs));
                 if (uvs.Length != indices[s].Length)
                     throw new ArgumentException($"Submesh {s} has {indices[s].Length} corners but {uvs.Length} atlas UVs.", nameof(atlasUvs));
+                var format = data.GetVertexAttributeFormat(VertexAttribute.TexCoord0);
+                if (Array.IndexOf(WritableUvFormats, format) < 0 || data.GetVertexAttributeDimension(VertexAttribute.TexCoord0) < 2)
+                    throw new NotSupportedException(
+                        $"UV0 stored as {format} x{data.GetVertexAttributeDimension(VertexAttribute.TexCoord0)} can't hold atlas UVs.");
             }
 
             var copies = new VertexCopies(data.vertexCount);
@@ -66,7 +79,8 @@ namespace UVWizard.Core.Meshes
             {
                 // Nothing splits, so a native copy keeps every attribute and blend shape, and only
                 // UV0 changes. Rebuilding blend shapes frame by frame slows down with each frame
-                // added: about 5 s for a 65k-vertex body with 695 frames, against 0.2 s for this.
+                // added: a 65k-vertex body with 695 frames takes about 5 s, more as copies are
+                // added, against 0.1 s for this.
                 mesh = UnityEngine.Object.Instantiate(source);
                 mesh.name = source.name;
                 if (data.HasVertexAttribute(VertexAttribute.TexCoord0))
@@ -80,12 +94,23 @@ namespace UVWizard.Core.Meshes
             {
                 mesh = new Mesh { name = source.name };
                 CopyVertexStreams(data, mesh, sourceOf, uv0Of);
-                CopyBoneWeights(source, mesh, sourceOf);
+                CopyBoneWeights(data, source, mesh, sourceOf);
                 CopyBlendShapes(source, mesh, sourceOf);
             }
             var (submeshOf, merged) = WriteSubmeshes(data, mesh, atlasUvs, corners);
             mesh.bounds = source.bounds;
+            // Mip streaming picks the atlas's mip level from UV0's texel density. Unity's
+            // recalculation logs an error on a mesh with line or point submeshes, so those keep the
+            // source's metric.
+            if (merged != null && AllTriangles(mesh)) mesh.RecalculateUVDistributionMetric(0);
             return new RewrittenMesh(mesh, submeshOf, merged);
+        }
+
+        static bool AllTriangles(Mesh mesh)
+        {
+            for (var s = 0; s < mesh.subMeshCount; s++)
+                if (mesh.GetTopology(s) != MeshTopology.Triangles) return false;
+            return true;
         }
 
         // Every vertex stream, byte for byte, into a new mesh with the source's layout.
@@ -136,17 +161,28 @@ namespace UVWizard.Core.Meshes
                     BitConverter.TryWriteBytes(at, Mathf.FloatToHalf(uv.x));
                     BitConverter.TryWriteBytes(at.Slice(2), Mathf.FloatToHalf(uv.y));
                     break;
+                case VertexAttributeFormat.UNorm16:
+                    BitConverter.TryWriteBytes(at, (ushort)Mathf.RoundToInt(Mathf.Clamp01(uv.x) * ushort.MaxValue));
+                    BitConverter.TryWriteBytes(at.Slice(2), (ushort)Mathf.RoundToInt(Mathf.Clamp01(uv.y) * ushort.MaxValue));
+                    break;
                 default:
                     throw new NotSupportedException($"UV0 stored as {format} can't hold atlas UVs.");
             }
         }
 
         // Through the bone-weight API rather than the vertex streams, which hold at most four bones per vertex.
-        static void CopyBoneWeights(Mesh source, Mesh mesh, int[] sourceOf)
+        static void CopyBoneWeights(Mesh.MeshData data, Mesh source, Mesh mesh, int[] sourceOf)
         {
-            var bonesPerVertex = source.GetBonesPerVertex();
-            if (bonesPerVertex.Length == 0) return;
-            var weights = source.GetAllBoneWeights();
+            mesh.bindposes = source.bindposes;
+            using var bonesPerVertex = source.GetBonesPerVertex();
+            if (bonesPerVertex.Length == 0)
+            {
+                // Rather than a mesh that silently stops skinning.
+                if (data.HasVertexAttribute(VertexAttribute.BlendIndices))
+                    throw new InvalidOperationException($"Couldn't read the bone weights of {source.name}.");
+                return;
+            }
+            using var weights = source.GetAllBoneWeights();
             var start = new int[bonesPerVertex.Length];
             for (var v = 1; v < start.Length; v++) start[v] = start[v - 1] + bonesPerVertex[v - 1];
 
@@ -154,14 +190,13 @@ namespace UVWizard.Core.Meshes
             var copiedWeights = new List<BoneWeight1>();
             for (var v = 0; v < sourceOf.Length; v++)
             {
-                var s = sourceOf[v];
-                copiedPerVertex[v] = bonesPerVertex[s];
-                for (var b = 0; b < bonesPerVertex[s]; b++) copiedWeights.Add(weights[start[s] + b]);
+                var from = sourceOf[v];
+                copiedPerVertex[v] = bonesPerVertex[from];
+                for (var b = 0; b < bonesPerVertex[from]; b++) copiedWeights.Add(weights[start[from] + b]);
             }
             using var perVertexArray = new NativeArray<byte>(copiedPerVertex, Allocator.Temp);
             using var weightArray = new NativeArray<BoneWeight1>(copiedWeights.ToArray(), Allocator.Temp);
             mesh.SetBoneWeights(perVertexArray, weightArray);
-            mesh.bindposes = source.bindposes;
         }
 
         static void CopyBlendShapes(Mesh source, Mesh mesh, int[] sourceOf)
@@ -205,12 +240,12 @@ namespace UVWizard.Core.Meshes
         }
 
         // Excluded submeshes keep their order; the merged ones become one, where the first of them was.
-        static (int[] SubmeshOf, int Merged) WriteSubmeshes(Mesh.MeshData data, Mesh mesh,
+        static (int[] SubmeshOf, int? Merged) WriteSubmeshes(Mesh.MeshData data, Mesh mesh,
             IReadOnlyList<Vector2[]?> atlasUvs, int[][] corners)
         {
             var submeshOf = new int[data.subMeshCount];
             var written = new List<(List<int> Indices, MeshTopology Topology)>();
-            var merged = -1;
+            int? merged = null;
             for (var s = 0; s < data.subMeshCount; s++)
             {
                 if (atlasUvs[s] == null)
@@ -219,13 +254,13 @@ namespace UVWizard.Core.Meshes
                     written.Add((new List<int>(corners[s]), data.GetSubMesh(s).topology));
                     continue;
                 }
-                if (merged < 0)
+                if (merged == null)
                 {
                     merged = written.Count;
                     written.Add((new List<int>(), MeshTopology.Triangles));
                 }
-                submeshOf[s] = merged;
-                written[merged].Indices.AddRange(corners[s]);
+                submeshOf[s] = merged.Value;
+                written[merged.Value].Indices.AddRange(corners[s]);
             }
 
             var all = new List<int>();
@@ -301,7 +336,7 @@ namespace UVWizard.Core.Meshes
     /// <summary>A mesh rewritten to sample the atlas, and where its source submeshes went.</summary>
     internal sealed class RewrittenMesh
     {
-        public RewrittenMesh(Mesh mesh, int[] submeshOf, int mergedSubmesh)
+        public RewrittenMesh(Mesh mesh, int[] submeshOf, int? mergedSubmesh)
         {
             Mesh = mesh;
             SubmeshOf = submeshOf;
@@ -313,7 +348,7 @@ namespace UVWizard.Core.Meshes
         /// <summary>For each source submesh, the rewritten mesh's submesh that holds its triangles.</summary>
         public IReadOnlyList<int> SubmeshOf { get; }
 
-        /// <summary>The submesh that takes the merged material, or -1 when nothing on the mesh was merged.</summary>
-        public int MergedSubmesh { get; }
+        /// <summary>The submesh that takes the merged material, or null when nothing on the mesh was merged.</summary>
+        public int? MergedSubmesh { get; }
     }
 }

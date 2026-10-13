@@ -18,81 +18,70 @@ namespace UVWizard.Core.Tests.Meshes
         static readonly Vector2[] TwoCharts = { A0, A1, A2, B2, B1, B3 };
         static readonly Vector2[] OneChart = { A0, A1, A2, A2, A1, new Vector2(0.3f, 0.3f) };
 
+        readonly List<Object> created = new List<Object>();
+
+        [TearDown]
+        public void DestroyMeshes()
+        {
+            foreach (var o in created) Object.DestroyImmediate(o);
+            created.Clear();
+        }
+
         [Test]
         public void AVertexSharedByTwoChartsSplitsIntoCopiesThatDifferOnlyInUv0()
         {
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
-            var atlasUv = new[] { A0, A1, A2, B2, B1, B3 };
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { atlasUv });
+            var result = Rewrite(source, TwoCharts);
 
             Assert.That(result.Mesh.vertexCount, Is.EqualTo(6));
-            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(atlasUv));
-            for (var v = 0; v < result.Mesh.vertexCount; v++)
-            {
-                var s = SourceVertexOf(source, result.Mesh, v);
-                Assert.That(result.Mesh.normals[v], Is.EqualTo(source.normals[s]));
-                Assert.That(result.Mesh.tangents[v], Is.EqualTo(source.tangents[s]));
-                Assert.That(result.Mesh.colors[v], Is.EqualTo(source.colors[s]));
-                Assert.That(Uvs(result.Mesh, 1)[v], Is.EqualTo(Uvs(source, 1)[s]));
-                Assert.That(Uvs(result.Mesh, 2)[v], Is.EqualTo(Uvs(source, 2)[s]));
-            }
+            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(TwoCharts));
+            Assert.That(Corners(result.Mesh, 0, result.Mesh.vertices), Is.EqualTo(Corners(source, 0, source.vertices)));
+            Assert.That(Corners(result.Mesh, 0, result.Mesh.normals), Is.EqualTo(Corners(source, 0, source.normals)));
+            Assert.That(Corners(result.Mesh, 0, result.Mesh.tangents), Is.EqualTo(Corners(source, 0, source.tangents)));
+            Assert.That(Corners(result.Mesh, 0, result.Mesh.colors), Is.EqualTo(Corners(source, 0, source.colors)));
         }
 
         [Test]
         public void AVertexSharedOnlyWithinOneChartIsNotSplit()
         {
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
-            var atlasUv = new[] { A0, A1, A2, A2, A1, new Vector2(0.3f, 0.3f) };
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { atlasUv });
+            var result = Rewrite(source, OneChart);
 
             Assert.That(result.Mesh.vertexCount, Is.EqualTo(4));
-            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(atlasUv));
+            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(OneChart));
         }
 
         [TestCase(true)]
         [TestCase(false)]
         public void BlendShapeDeltasAndBoneWeightsSurviveOnTheCopies(bool split)
         {
+            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }));
+            var expected = SkinOfCorners(source);
+
+            var result = Rewrite(source, split ? TwoCharts : OneChart);
+
+            Assert.That(result.Mesh.vertexCount, Is.EqualTo(split ? 6 : 4));
+            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(split ? TwoCharts : OneChart));
+            Assert.That(result.Mesh.bindposes, Is.EqualTo(source.bindposes));
+            Assert.That(result.Mesh.blendShapeCount, Is.EqualTo(1));
+            Assert.That(result.Mesh.GetBlendShapeName(0), Is.EqualTo("smile"));
+            Assert.That(result.Mesh.GetBlendShapeFrameCount(0), Is.EqualTo(2));
+            Assert.That(result.Mesh.GetBlendShapeFrameWeight(0, 1), Is.EqualTo(100));
+            Assert.That(SkinOfCorners(result.Mesh), Is.EqualTo(expected));
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void BindposesSurviveWithoutBoneWeights(bool split)
+        {
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
-            // Vertex 1 has six bones, more than a vertex stream holds.
-            var bonesPerVertex = new byte[] { 1, 6, 2, 1 };
-            var weights = new List<BoneWeight1>();
-            for (var v = 0; v < 4; v++)
-            for (var b = 0; b < bonesPerVertex[v]; b++)
-                weights.Add(new BoneWeight1 { boneIndex = v + b, weight = 1f / bonesPerVertex[v] });
-            using (var perVertex = new NativeArray<byte>(bonesPerVertex, Allocator.Temp))
-            using (var all = new NativeArray<BoneWeight1>(weights.ToArray(), Allocator.Temp))
-                source.SetBoneWeights(perVertex, all);
-            source.bindposes = Enumerable.Range(0, 9).Select(i => Matrix4x4.Translate(Vector3.one * i)).ToArray();
-            source.AddBlendShapeFrame("smile", 50, Deltas(1), Deltas(2), Deltas(3));
-            source.AddBlendShapeFrame("smile", 100, Deltas(4), Deltas(5), Deltas(6));
+            source.bindposes = new[] { Matrix4x4.Translate(Vector3.up) };
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { split ? TwoCharts : OneChart });
+            var result = Rewrite(source, split ? TwoCharts : OneChart);
 
-            var mesh = result.Mesh;
-            Assert.That(mesh.vertexCount, Is.EqualTo(split ? 6 : 4));
-            Assert.That(CornerUvs(mesh, 0, 0), Is.EqualTo(split ? TwoCharts : OneChart));
-            Assert.That(mesh.bindposes, Is.EqualTo(source.bindposes));
-            Assert.That(mesh.blendShapeCount, Is.EqualTo(1));
-            Assert.That(mesh.GetBlendShapeName(0), Is.EqualTo("smile"));
-            Assert.That(mesh.GetBlendShapeFrameCount(0), Is.EqualTo(2));
-            Assert.That(mesh.GetBlendShapeFrameWeight(0, 1), Is.EqualTo(100));
-            for (var frame = 0; frame < 2; frame++)
-            {
-                var (sourceDv, sourceDn, sourceDt) = FrameDeltas(source, frame);
-                var (dv, dn, dt) = FrameDeltas(mesh, frame);
-                for (var v = 0; v < mesh.vertexCount; v++)
-                {
-                    var s = SourceVertexOf(source, mesh, v);
-                    Assert.That(dv[v], Is.EqualTo(sourceDv[s]));
-                    Assert.That(dn[v], Is.EqualTo(sourceDn[s]));
-                    Assert.That(dt[v], Is.EqualTo(sourceDt[s]));
-                }
-            }
-            for (var v = 0; v < mesh.vertexCount; v++)
-                Assert.That(BoneWeightsOf(mesh, v), Is.EqualTo(BoneWeightsOf(source, SourceVertexOf(source, mesh, v))));
+            Assert.That(result.Mesh.bindposes, Is.EqualTo(source.bindposes));
         }
 
         [Test]
@@ -100,11 +89,25 @@ namespace UVWizard.Core.Tests.Meshes
         {
             var source = Square(new[] { 0, 1, 2 }, new[] { 2, 1, 3 });
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { new[] { A0, A1, A2 }, null });
+            var result = Rewrite(source, new[] { A0, A1, A2 }, null);
 
             Assert.That(CornerUvs(result.Mesh, result.SubmeshOf[0], 0), Is.EqualTo(new[] { A0, A1, A2 }));
-            Assert.That(CornerUvs(result.Mesh, result.SubmeshOf[1], 0), Is.EqualTo(new[] { 2, 1, 3 }.Select(i => Uvs(source, 0)[i])));
+            Assert.That(CornerUvs(result.Mesh, result.SubmeshOf[1], 0), Is.EqualTo(CornerUvs(source, 1, 0)));
             Assert.That(result.Mesh.vertexCount, Is.EqualTo(6));
+        }
+
+        [Test]
+        public void AnExcludedSubmeshKeepsItsTopology()
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+            source.subMeshCount = 2;
+            source.SetIndices(new[] { 0, 3 }, MeshTopology.Lines, 1);
+
+            var result = Rewrite(source, OneChart, null);
+
+            Assert.That(result.Mesh.GetTopology(result.SubmeshOf[1]), Is.EqualTo(MeshTopology.Lines));
+            Assert.That(Corners(result.Mesh, result.SubmeshOf[1], result.Mesh.vertices), Is.EqualTo(Corners(source, 1, source.vertices)));
+            Assert.That(CornerUvs(result.Mesh, result.SubmeshOf[1], 0), Is.EqualTo(CornerUvs(source, 1, 0)));
         }
 
         [TestCase(true)]
@@ -113,7 +116,7 @@ namespace UVWizard.Core.Tests.Meshes
         {
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { split ? TwoCharts : OneChart });
+            var result = Rewrite(source, split ? TwoCharts : OneChart);
 
             for (var channel = 1; channel < 8; channel++)
                 Assert.That(CornerUvs(result.Mesh, 0, channel), Is.EqualTo(CornerUvs(source, 0, channel)), $"UV{channel}");
@@ -123,15 +126,17 @@ namespace UVWizard.Core.Tests.Meshes
         [TestCase(false)]
         public void AMeshWithReadWriteOffWorks(bool split)
         {
-            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
-            var sourceUv1 = CornerUvs(source, 0, 1);
+            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }));
+            var uv1 = CornerUvs(source, 0, 1);
+            var skin = SkinOfCorners(source);
             source.UploadMeshData(markNoLongerReadable: true);
             Assume.That(source.isReadable, Is.False);
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { split ? TwoCharts : OneChart });
+            var result = Rewrite(source, split ? TwoCharts : OneChart);
 
             Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(split ? TwoCharts : OneChart));
-            Assert.That(CornerUvs(result.Mesh, 0, 1), Is.EqualTo(sourceUv1));
+            Assert.That(CornerUvs(result.Mesh, 0, 1), Is.EqualTo(uv1));
+            Assert.That(SkinOfCorners(result.Mesh), Is.EqualTo(skin));
         }
 
         [Test]
@@ -140,13 +145,13 @@ namespace UVWizard.Core.Tests.Meshes
             // Merged, excluded, merged: the merged pair collapses into the first one's place.
             var source = Square(new[] { 0, 1, 2 }, new[] { 1, 3, 2 }, new[] { 2, 1, 3 });
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { new[] { A0, A1, A2 }, null, new[] { B2, B1, B3 } });
+            var result = Rewrite(source, new[] { A0, A1, A2 }, null, new[] { B2, B1, B3 });
 
             Assert.That(result.Mesh.subMeshCount, Is.EqualTo(2));
             Assert.That(result.SubmeshOf, Is.EqualTo(new[] { 0, 1, 0 }));
             Assert.That(result.MergedSubmesh, Is.EqualTo(0));
             Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(new[] { A0, A1, A2, B2, B1, B3 }));
-            Assert.That(CornerUvs(result.Mesh, 1, 0), Is.EqualTo(new[] { 1, 3, 2 }.Select(i => Uvs(source, 0)[i])));
+            Assert.That(CornerUvs(result.Mesh, 1, 0), Is.EqualTo(CornerUvs(source, 1, 0)));
         }
 
         [Test]
@@ -154,39 +159,91 @@ namespace UVWizard.Core.Tests.Meshes
         {
             var source = Square(new[] { 0, 1, 2 }, new[] { 2, 1, 3 });
 
-            var result = Uv0Rewriter.Rewrite(source, new Vector2[][] { null, null });
+            var result = Rewrite(source, null, null);
 
-            Assert.That(result.MergedSubmesh, Is.EqualTo(-1));
+            Assert.That(result.MergedSubmesh, Is.Null);
             Assert.That(result.SubmeshOf, Is.EqualTo(new[] { 0, 1 }));
             Assert.That(result.Mesh.vertexCount, Is.EqualTo(4));
+        }
+
+        [Test]
+        public void SplittingPastSixtyFiveThousandVerticesSwitchesToThirtyTwoBitIndices()
+        {
+            // 40,002 vertices, each used by one merged and one excluded triangle, so each splits in two.
+            var source = Keep(new Mesh { indexFormat = IndexFormat.UInt16 });
+            var positions = Enumerable.Range(0, 40002).Select(i => new Vector3(i / 3 + (i % 3 == 1 ? 1 : 0), i % 3 == 2 ? 1 : 0, 0)).ToArray();
+            source.SetVertices(positions);
+            source.SetUVs(0, positions.Select(p => new Vector2(p.x / 20000, p.y)).ToArray());
+            var triangles = Enumerable.Range(0, positions.Length).ToArray();
+            source.subMeshCount = 2;
+            source.SetTriangles(triangles, 0);
+            source.SetTriangles(triangles, 1);
+            var uv0 = Uvs(source, 0);
+            var atlasUv = triangles.Select(i => new Vector2(0.5f, 0.5f) + uv0[i] * 0.25f).ToArray();
+
+            var result = Rewrite(source, atlasUv, null);
+
+            Assert.That(result.Mesh.vertexCount, Is.EqualTo(80004));
+            Assert.That(result.Mesh.indexFormat, Is.EqualTo(IndexFormat.UInt32));
+            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(atlasUv));
+            Assert.That(CornerUvs(result.Mesh, 1, 0), Is.EqualTo(CornerUvs(source, 1, 0)));
         }
 
         [TestCase(true)]
         [TestCase(false)]
         public void AHalfPrecisionUv0IsWrittenInItsOwnFormat(bool split)
         {
-            // Written stream by stream: SetVertices and SetUVs would turn UV0 back into Float32.
-            var source = new Mesh();
-            source.SetVertexBufferParams(4,
-                new VertexAttributeDescriptor(VertexAttribute.Position, stream: 0),
-                new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 2, stream: 1));
-            source.SetVertexBufferData(new[] { new Vector3(0, 0), new Vector3(1, 0), new Vector3(0, 1), new Vector3(1, 1) }, 0, 0, 4, 0);
-            var half = new System.Func<float, ushort>(Mathf.FloatToHalf);
-            source.SetVertexBufferData(new[] { half(0), half(0), half(1), half(0), half(0), half(1), half(1), half(1) }, 0, 0, 8, 1);
-            source.SetIndexBufferParams(6, IndexFormat.UInt16);
-            source.SetIndexBufferData(new ushort[] { 0, 1, 2, 2, 1, 3 }, 0, 0, 6);
-            source.subMeshCount = 1;
-            source.SetSubMesh(0, new SubMeshDescriptor(0, 6));
-            Assume.That(source.GetVertexAttributeFormat(VertexAttribute.TexCoord0), Is.EqualTo(VertexAttributeFormat.Float16));
+            var source = WithUv0Format(VertexAttributeFormat.Float16, 2);
             // Quarters and eighths, which half precision holds exactly.
             var atlasUv = split
                 ? new[] { new Vector2(0, 0), new Vector2(0.25f, 0), new Vector2(0, 0.25f), new Vector2(0.5f, 0.75f), new Vector2(0.75f, 0.5f), new Vector2(0.75f, 0.75f) }
                 : new[] { new Vector2(0, 0), new Vector2(0.25f, 0), new Vector2(0, 0.25f), new Vector2(0, 0.25f), new Vector2(0.25f, 0), new Vector2(0.125f, 0.375f) };
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { atlasUv });
+            var result = Rewrite(source, atlasUv);
 
             Assert.That(result.Mesh.GetVertexAttributeFormat(VertexAttribute.TexCoord0), Is.EqualTo(VertexAttributeFormat.Float16));
             Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(atlasUv));
+        }
+
+        [Test]
+        public void ASixteenBitNormalizedUv0IsWrittenInItsOwnFormat()
+        {
+            var source = WithUv0Format(VertexAttributeFormat.UNorm16, 2);
+
+            var result = Rewrite(source, TwoCharts);
+
+            Assert.That(result.Mesh.GetVertexAttributeFormat(VertexAttribute.TexCoord0), Is.EqualTo(VertexAttributeFormat.UNorm16));
+            var written = CornerUvs(result.Mesh, 0, 0).ToArray();
+            for (var k = 0; k < TwoCharts.Length; k++)
+            {
+                Assert.That(written[k].x, Is.EqualTo(TwoCharts[k].x).Within(1f / 65535), $"corner {k}");
+                Assert.That(written[k].y, Is.EqualTo(TwoCharts[k].y).Within(1f / 65535), $"corner {k}");
+            }
+        }
+
+        [TestCase(VertexAttributeFormat.UNorm8, 4)]
+        [TestCase(VertexAttributeFormat.Float32, 1)]
+        public void AUv0ThatCantHoldAtlasUvsIsRejected(VertexAttributeFormat format, int dimension)
+        {
+            var source = WithUv0Format(format, dimension);
+
+            Assert.Throws<System.NotSupportedException>(() => Uv0Rewriter.Rewrite(source, new[] { TwoCharts }));
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void TheUvDistributionMetricFollowsTheAtlasUvs(bool split)
+        {
+            // Mip streaming picks the atlas's mip level from this metric, so it must describe the new UV0.
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+            source.RecalculateUVDistributionMetric(0);
+
+            var result = Rewrite(source, split ? TwoCharts : OneChart);
+
+            var recalculated = Keep(Object.Instantiate(result.Mesh));
+            recalculated.RecalculateUVDistributionMetric(0);
+            Assume.That(recalculated.GetUVDistributionMetric(0), Is.Not.EqualTo(source.GetUVDistributionMetric(0)).Within(1e-3f));
+            Assert.That(result.Mesh.GetUVDistributionMetric(0), Is.EqualTo(recalculated.GetUVDistributionMetric(0)).Within(1e-4f));
         }
 
         [TestCase(true)]
@@ -196,7 +253,7 @@ namespace UVWizard.Core.Tests.Meshes
             var source = Square(new[] { 0, 1, 2 }, new[] { 2, 1, 3 });
             var uv0 = Uvs(source, 0);
 
-            Uv0Rewriter.Rewrite(source, new[] { new[] { A0, A1, A2 }, split ? new[] { B2, B1, B3 } : new[] { A2, A1, new Vector2(0.3f, 0.3f) } });
+            Rewrite(source, new[] { A0, A1, A2 }, split ? new[] { B2, B1, B3 } : new[] { A2, A1, new Vector2(0.3f, 0.3f) });
 
             Assert.That(Uvs(source, 0), Is.EqualTo(uv0));
             Assert.That(source.subMeshCount, Is.EqualTo(2));
@@ -209,18 +266,18 @@ namespace UVWizard.Core.Tests.Meshes
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
             source.name = "Body";
 
-            Assert.That(Uv0Rewriter.Rewrite(source, new[] { OneChart }).Mesh.name, Is.EqualTo("Body"));
-            Assert.That(Uv0Rewriter.Rewrite(source, new[] { TwoCharts }).Mesh.name, Is.EqualTo("Body"));
+            Assert.That(Rewrite(source, OneChart).Mesh.name, Is.EqualTo("Body"));
+            Assert.That(Rewrite(source, TwoCharts).Mesh.name, Is.EqualTo("Body"));
         }
 
         [Test]
         public void AMeshWithoutUv0KeepsItsSubmeshesButCantBeMerged()
         {
-            var source = new Mesh();
+            var source = Keep(new Mesh());
             source.SetVertices(new[] { Vector3.zero, Vector3.right, Vector3.up });
             source.SetTriangles(new[] { 0, 1, 2 }, 0);
 
-            var result = Uv0Rewriter.Rewrite(source, new Vector2[][] { null });
+            var result = Rewrite(source, new Vector2[][] { null });
 
             Assert.That(result.Mesh.vertices, Is.EqualTo(source.vertices));
             Assert.That(result.Mesh.GetIndices(0), Is.EqualTo(new[] { 0, 1, 2 }));
@@ -233,14 +290,45 @@ namespace UVWizard.Core.Tests.Meshes
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
 
             Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { new[] { A0, A1, A2 } }));
+        }
+
+        [Test]
+        public void EverySubmeshNeedsAnEntry()
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+
             Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new Vector2[][] { null, null }));
+        }
+
+        [Test]
+        public void OnlyTrianglesCanBeMerged()
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+            source.subMeshCount = 2;
+            source.SetIndices(new[] { 0, 3 }, MeshTopology.Lines, 1);
+
+            Assert.Throws<System.ArgumentException>(() =>
+                Uv0Rewriter.Rewrite(source, new[] { OneChart, new[] { A0, A1 } }));
+        }
+
+        RewrittenMesh Rewrite(Mesh source, params Vector2[][] atlasUvs)
+        {
+            var result = Uv0Rewriter.Rewrite(source, atlasUvs);
+            Keep(result.Mesh);
+            return result;
+        }
+
+        T Keep<T>(T o) where T : Object
+        {
+            created.Add(o);
+            return o;
         }
 
         // A unit square of four vertices, 0 to 3 in reading order from the bottom left, with
         // distinct values in every attribute: normal, tangent, colour and UV0 to UV7.
-        static Mesh Square(params int[][] submeshes)
+        Mesh Square(params int[][] submeshes)
         {
-            var mesh = new Mesh();
+            var mesh = Keep(new Mesh());
             var positions = new[] { new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(0, 1, 0), new Vector3(1, 1, 0) };
             mesh.SetVertices(positions);
             mesh.SetNormals(positions.Select((p, i) => new Vector3(0, 0.1f * i, 1).normalized).ToArray());
@@ -253,9 +341,42 @@ namespace UVWizard.Core.Tests.Meshes
             return mesh;
         }
 
-        // The source vertex a rewritten vertex was copied from, found by its unique position.
-        static int SourceVertexOf(Mesh source, Mesh rewritten, int vertex) =>
-            System.Array.IndexOf(source.vertices, rewritten.vertices[vertex]);
+        // Bone weights (vertex 1 has six bones, more than a vertex stream holds), nine bindposes,
+        // and a blend shape with two frames whose deltas differ per vertex.
+        static Mesh Skinned(Mesh mesh)
+        {
+            var bonesPerVertex = new byte[] { 1, 6, 2, 1 };
+            var weights = new List<BoneWeight1>();
+            for (var v = 0; v < 4; v++)
+            for (var b = 0; b < bonesPerVertex[v]; b++)
+                weights.Add(new BoneWeight1 { boneIndex = v + b, weight = 1f / bonesPerVertex[v] });
+            using (var perVertex = new NativeArray<byte>(bonesPerVertex, Allocator.Temp))
+            using (var all = new NativeArray<BoneWeight1>(weights.ToArray(), Allocator.Temp))
+                mesh.SetBoneWeights(perVertex, all);
+            mesh.bindposes = Enumerable.Range(0, 9).Select(i => Matrix4x4.Translate(Vector3.one * i)).ToArray();
+            mesh.AddBlendShapeFrame("smile", 50, Deltas(1), Deltas(2), Deltas(3));
+            mesh.AddBlendShapeFrame("smile", 100, Deltas(4), Deltas(5), Deltas(6));
+            return mesh;
+        }
+
+        // A square whose UV0 is stored in the given format, written stream by stream: SetVertices
+        // and SetUVs would turn UV0 back into two Float32s.
+        Mesh WithUv0Format(VertexAttributeFormat format, int dimension)
+        {
+            var mesh = Keep(new Mesh());
+            mesh.SetVertexBufferParams(4,
+                new VertexAttributeDescriptor(VertexAttribute.Position, stream: 0),
+                new VertexAttributeDescriptor(VertexAttribute.TexCoord0, format, dimension, stream: 1));
+            mesh.SetVertexBufferData(new[] { new Vector3(0, 0), new Vector3(1, 0), new Vector3(0, 1), new Vector3(1, 1) }, 0, 0, 4, 0);
+            var stride = mesh.GetVertexBufferStride(1);
+            mesh.SetVertexBufferData(new byte[4 * stride], 0, 0, 4 * stride, 1);
+            mesh.SetIndexBufferParams(6, IndexFormat.UInt16);
+            mesh.SetIndexBufferData(new ushort[] { 0, 1, 2, 2, 1, 3 }, 0, 0, 6);
+            mesh.subMeshCount = 1;
+            mesh.SetSubMesh(0, new SubMeshDescriptor(0, 6));
+            Assume.That(mesh.GetVertexAttributeFormat(VertexAttribute.TexCoord0), Is.EqualTo(format));
+            return mesh;
+        }
 
         static Vector2[] Uvs(Mesh mesh, int channel)
         {
@@ -264,30 +385,35 @@ namespace UVWizard.Core.Tests.Meshes
             return uvs.ToArray();
         }
 
-        static IEnumerable<Vector2> CornerUvs(Mesh mesh, int submesh, int channel)
-        {
-            var uvs = Uvs(mesh, channel);
-            return mesh.GetIndices(submesh).Select(i => uvs[i]).ToArray();
-        }
+        static IEnumerable<T> Corners<T>(Mesh mesh, int submesh, T[] perVertex) =>
+            mesh.GetIndices(submesh).Select(i => perVertex[i]).ToArray();
+
+        static IEnumerable<Vector2> CornerUvs(Mesh mesh, int submesh, int channel) =>
+            Corners(mesh, submesh, Uvs(mesh, channel));
 
         static Vector3[] Deltas(int seed) =>
             Enumerable.Range(0, 4).Select(i => new Vector3(seed, i, seed * i)).ToArray();
 
-        static (Vector3[], Vector3[], Vector3[]) FrameDeltas(Mesh mesh, int frame)
+        // Each corner of submesh 0's bone weights and blend-shape deltas, as text to compare.
+        static string[] SkinOfCorners(Mesh mesh)
         {
-            var dv = new Vector3[mesh.vertexCount];
-            var dn = new Vector3[mesh.vertexCount];
-            var dt = new Vector3[mesh.vertexCount];
-            mesh.GetBlendShapeFrameVertices(0, frame, dv, dn, dt);
-            return (dv, dn, dt);
-        }
-
-        static BoneWeight1[] BoneWeightsOf(Mesh mesh, int vertex)
-        {
-            var perVertex = mesh.GetBonesPerVertex();
-            var start = 0;
-            for (var v = 0; v < vertex; v++) start += perVertex[v];
-            return mesh.GetAllBoneWeights().Skip(start).Take(perVertex[vertex]).ToArray();
+            using var perVertexArray = mesh.GetBonesPerVertex();
+            using var weightArray = mesh.GetAllBoneWeights();
+            var perVertex = perVertexArray.ToArray();
+            var weights = weightArray.ToArray();
+            var start = new int[perVertex.Length];
+            for (var v = 1; v < start.Length; v++) start[v] = start[v - 1] + perVertex[v - 1];
+            var frames = Enumerable.Range(0, mesh.GetBlendShapeFrameCount(0)).Select(frame =>
+            {
+                var dv = new Vector3[mesh.vertexCount];
+                var dn = new Vector3[mesh.vertexCount];
+                var dt = new Vector3[mesh.vertexCount];
+                mesh.GetBlendShapeFrameVertices(0, frame, dv, dn, dt);
+                return (dv, dn, dt);
+            }).ToArray();
+            return mesh.GetIndices(0).Select(v =>
+                string.Join(" ", weights.Skip(start[v]).Take(perVertex[v]).Select(w => $"{w.boneIndex}:{w.weight:R}")) + " | " +
+                string.Join(" ", frames.Select(f => $"{f.dv[v]:R} {f.dn[v]:R} {f.dt[v]:R}"))).ToArray();
         }
     }
 }
