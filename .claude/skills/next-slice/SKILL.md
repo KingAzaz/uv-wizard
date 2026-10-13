@@ -48,7 +48,7 @@ Before taking a new ticket, take the oldest open `owner-agent` PR that needs wor
 - a `> *Project-owner review` comment whose blocking findings no later commit addresses;
 - a KingAzaz comment or change request not yet answered.
 
-Check out its branch (step 4's switch rules), fix it test-first, run the tests in Unity, push, and reply on the PR with what changed. Start every comment you post with `> *Next slice.*`. Put `needs-unity` back if you cleared `unity-failed`.
+Check out its branch (step 4's switch rules), fix it test-first, run the tests in Unity, push, and reply on the PR with what changed. Start every comment you post with `> *Next slice.*`. If the PR had `unity-failed`, add `needs-unity` first, then remove `unity-failed` in a separate command. The PR then always carries a hold label, so it can't auto-merge before the Unity check runs again.
 - **Unattended:** one PR per run. A fix counts as the run's slice: go to **Finish**.
 - **Attended:** say what you fixed, then continue to step 3 unless KingAzaz says otherwise.
 
@@ -67,7 +67,7 @@ Done when its PR is open, its tests pass in Unity, and each acceptance criterion
    - Include `Closes #<n>`.
    - Label it `owner-agent`, plus `needs-unity` when CI can't cover the change.
    - If the branch is stacked, say in the body that it must be retargeted to `main` once its base merges.
-   - Turn on auto-merge: `gh pr merge <n> --auto --squash`. The required **Merge gate** check holds the PR while it has a `needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human` label, so GitHub merges it once tests pass and those labels are gone. Skip this on a stacked PR: its base branch isn't protected, so it would merge into the base at once. The owner turns it on after retargeting to `main`.
+   - Turn on auto-merge: `gh pr merge <n> --auto --squash`. The required **Merge gate** check holds the PR while it has a hold label (`needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human`) or a changes-requested review, so GitHub merges it once tests pass and nothing holds it. Skip this on a stacked PR: its base branch isn't protected, so it would merge into the base at once. The owner turns it on after retargeting to `main`.
    - Deferred criteria: list each in the body, and file it as a new issue (`needs-triage` if it's a product question, `ready-for-agent` if it's plain engineering) so the work doesn't get lost.
 
 Product decisions are KingAzaz's. Ask with a recommendation (unattended: see **Modes**). Engineering choices inside a ticket's stated scope are yours: record them in the PR body.

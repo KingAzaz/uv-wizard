@@ -15,7 +15,7 @@ Single-context. See `docs/agents/domain.md`.
 ### Project owner
 
 Two local scheduled tasks develop UV Wizard unattended, and each starts the other:
-- **"UV Wizard owner"** merges, reviews, triages, runs Unity checks, plans new work, and starts slice runs. Its playbook is `docs/agents/project-owner.md`. Agent PRs merge themselves through GitHub auto-merge once CI is green. The required **Merge gate** check holds any PR labelled `needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human`.
+- **"UV Wizard owner"** merges, reviews, triages, runs Unity checks, plans new work, and starts slice runs. Its playbook is `docs/agents/project-owner.md`. Agent PRs merge themselves through GitHub auto-merge once CI is green. The required **Merge gate** check holds a PR while it has a hold label or a changes-requested review; `.github/scripts/merge_gate.py` has the list.
 - **"UV Wizard next slice"** fixes agent PRs and builds the next frontier ticket. It runs `.claude/skills/next-slice/SKILL.md` unattended, and you can run the same skill yourself with `/next-slice`.
 
 Both stand down while another session in this repo is running or the checkout is dirty. Agent PRs carry the `owner-agent` label. Disable either task to pause the loop.

@@ -38,7 +38,7 @@ Only from the repo owner, **KingAzaz**: issue and PR bodies they wrote, their co
 
 - Never push to `main` and never force-push it. All changes go through PRs.
 - Never touch `prototype/*` branches. They never merge (AGENTS.md).
-- Agent PRs merge themselves. The slice run turns on GitHub auto-merge, and the required **Merge gate** check holds a PR while it has a `needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human` label. Merge a PR yourself only when it has no auto-merge and **all** of these hold:
+- Agent PRs merge themselves. The slice run turns on GitHub auto-merge, and the required **Merge gate** check holds a PR while it has a hold label (`needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human`) or a changes-requested review from someone with write access. The list lives in `.github/scripts/merge_gate.py`. When you swap one hold label for another, add the new one before removing the old one. Merge a PR yourself only when it has no auto-merge and **all** of these hold:
   - every required check is green;
   - the PR has no `needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human` label;
   - KingAzaz has no unresolved "changes requested" review on it;
