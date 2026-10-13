@@ -26,8 +26,7 @@ namespace UVWizard.Core.Islands
             TextureWrapMode wrapU, TextureWrapMode wrapV)
         {
             var triangleCount = triangles.Length / 3;
-            var parent = new int[triangleCount];
-            for (var t = 0; t < triangleCount; t++) parent[t] = t;
+            var unionFind = new UnionFind(triangleCount);
 
             // Corners at the same UV position are one UV vertex, even when the mesh splits them.
             var uvVertexAt = new Dictionary<(long, long), int>();
@@ -55,25 +54,13 @@ namespace UVWizard.Core.Islands
                     var a = uvVertex[t * 3 + corner];
                     var b = uvVertex[t * 3 + (corner + 1) % 3];
                     var edge = Math.Min(a, b) * uvVertexCount + Math.Max(a, b);
-                    if (edgeOwner.TryGetValue(edge, out var other)) Union(parent, t, other);
+                    if (edgeOwner.TryGetValue(edge, out var other)) unionFind.Union(t, other);
                     else edgeOwner.Add(edge, t);
                 }
             }
 
             // Islands come out in order of their first triangle.
-            var islandOfRoot = new Dictionary<int, List<int>>();
-            var islands = new List<List<int>>();
-            for (var t = 0; t < triangleCount; t++)
-            {
-                var root = Find(parent, t);
-                if (!islandOfRoot.TryGetValue(root, out var members))
-                {
-                    members = new List<int>();
-                    islandOfRoot.Add(root, members);
-                    islands.Add(members);
-                }
-                members.Add(t);
-            }
+            var islands = unionFind.Groups();
 
             var result = new Island[islands.Count];
             for (var i = 0; i < islands.Count; i++)
@@ -130,21 +117,6 @@ namespace UVWizard.Core.Islands
         static (long, long) Quantize(Vector2 uv)
         {
             return ((long)Math.Round(uv.x * WeldGrid), (long)Math.Round(uv.y * WeldGrid));
-        }
-
-        static int Find(int[] parent, int t)
-        {
-            while (parent[t] != t)
-            {
-                parent[t] = parent[parent[t]];
-                t = parent[t];
-            }
-            return t;
-        }
-
-        static void Union(int[] parent, int a, int b)
-        {
-            parent[Find(parent, a)] = Find(parent, b);
         }
     }
 }
