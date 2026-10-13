@@ -14,7 +14,7 @@ Single-context. See `docs/agents/domain.md`.
 
 ### Project owner
 
-A scheduled cloud routine works through the v1 plan unattended. Its playbook is `docs/agents/project-owner.md`. It merges only on green CI and never with `needs-unity` set; clear that label by running `/unity-verify` locally.
+A local scheduled task ("UV Wizard owner") works through the v1 plan unattended. Its playbook is `docs/agents/project-owner.md`. It merges only on green CI and never with `needs-unity` set; clear that label by running `/unity-verify` locally.
 
 ## Dev environment
 
