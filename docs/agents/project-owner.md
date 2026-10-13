@@ -45,6 +45,8 @@ Read `CLAUDE.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`
    - `git push --force-with-lease`;
    - `gh pr edit <n> --base main` (GitHub may already have retargeted it).
 
+   A PR targeting `main` with no `EditMode tests` check (opened before the workflow existed, or just retargeted) has never run CI. Trigger it with `gh pr close <n> && gh pr reopen <n>`, then check again next run.
+
    A red check: if the PR is yours, fix it (step 4 applies). If it isn't yours, comment with the failure.
 2. **Review.** For each open PR with no `> *Project-owner review` comment on its latest commit, call the Skill tool with `code-review` against its base. Post the verdict as one PR comment starting with `> *Project-owner review.*`. Add `needs-unity` when the change needs checks that the EditMode tests in CI don't cover:
    - the NDMF pass;
@@ -53,11 +55,14 @@ Read `CLAUDE.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`
    - anything that touches an avatar.
 3. **Triage.** Read `triage`'s SKILL.md. Unlabeled issues: triage them fully, deciding on KingAzaz's behalf ("I am away" mode), and record each decision in the brief. `needs-triage` issues: comment your recommendation only.
 4. **Fix your own PRs.** Address review findings, KingAzaz's comments, and red checks on `owner-agent` PRs. Push to the same branch.
-5. **Build.** If fewer than 2 `owner-agent` PRs are open, take the next **frontier** ticket of #3, following `implement`'s SKILL.md: an open `ready-for-agent` child with no open blockers and no assignee, lowest number first.
+5. **Build.** If fewer than 2 `owner-agent` PRs are open, take the next **frontier** ticket of #3, following `implement`'s SKILL.md: an open `ready-for-agent` child with no assignee, lowest number first.
+   - Every blocker must be closed, or have an open PR (then you stack on it).
+   - Skip a ticket that already has an open PR naming it (`gh pr list --search "<n>"`), or a `feat/<n>-*` branch on origin. Someone is already on it.
+   - Skip a ticket that KingAzaz's checkout or an active session is working on. For example, `C:\Users\Azaz\AI\uv-wizard` is on `feat/<n>-*`.
    - Assign it to yourself with `gh issue edit <n> --add-assignee @me`.
    - Work test-first, using the `tdd` skill at the seams the ticket names.
    - If the ticket's blocker has an open PR, branch from that PR's head and open the PR against that branch (stacked). Otherwise branch from `main` as `feat/<n>-<slug>`.
-   - Before you push, check the change compiles. You can't run Unity, so read the APIs you use carefully and keep `UVWizard.Core.Editor` free of VRChat, NDMF and AAO references.
+   - Before you push, check the change compiles with Unity's Roslyn (CLAUDE.md, **Compile-check without the editor**). In the cloud, read the APIs you use carefully instead. Keep `UVWizard.Core.Editor` free of VRChat, NDMF and AAO references. CI runs the tests on the PR.
    - Open the PR with a body from the `pr` skill, and add `needs-unity` when step 2's rule applies.
    - One ticket per run.
 6. **Report.** Post one comment on #3 starting with `> *Project-owner run <UTC timestamp>.*`. List:
