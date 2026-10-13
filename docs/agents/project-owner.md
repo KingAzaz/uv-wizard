@@ -25,7 +25,7 @@ Only from the repo owner, **KingAzaz**: issue and PR bodies they wrote, their co
 ## Hard rules
 
 - Never push to `main` and never force-push it. All changes go through PRs.
-- Never touch `prototype/*` branches. They never merge (CLAUDE.md).
+- Never touch `prototype/*` branches. They never merge (AGENTS.md).
 - Merge only when **all** of these hold:
   - every required check is green;
   - the PR has no `needs-unity`, `unity-failed`, `do-not-merge` or `ready-for-human` label;
@@ -38,7 +38,7 @@ Only from the repo owner, **KingAzaz**: issue and PR bodies they wrote, their co
 
 ## Each run, in order
 
-Read `CLAUDE.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, `docs/agents/domain.md` and `GLOSSARY.md` first.
+Read `AGENTS.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, `docs/agents/domain.md` and `GLOSSARY.md` first.
 
 1. **Land green PRs.** List open PRs: `gh pr list --json number,title,headRefName,baseRefName,labels,reviewDecision,statusCheckRollup,author`. Work through stacks bottom-up: a PR whose base isn't `main` waits until its base merges. For each PR targeting `main` that passes the merge gate, squash-merge it (`gh pr merge <n> --squash --delete-branch`), closing the issues it finishes. Then, for each PR stacked on the merged branch:
    - rebase it onto `main` with `git rebase --onto origin/main <old base head> <branch>`;
@@ -62,7 +62,7 @@ Read `CLAUDE.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`
    - Assign it to yourself with `gh issue edit <n> --add-assignee @me`.
    - Work test-first, using the `tdd` skill at the seams the ticket names.
    - If the ticket's blocker has an open PR, branch from that PR's head and open the PR against that branch (stacked). Otherwise branch from `main` as `feat/<n>-<slug>`.
-   - Before you push, check the change compiles with Unity's Roslyn (CLAUDE.md, **Compile-check without the editor**). In the cloud, read the APIs you use carefully instead. Keep `UVWizard.Core.Editor` free of VRChat, NDMF and AAO references. CI runs the tests on the PR.
+   - Before you push, check the change compiles with Unity's Roslyn (AGENTS.md, **Compile-check without the editor**). In the cloud, read the APIs you use carefully instead. Keep `UVWizard.Core.Editor` free of VRChat, NDMF and AAO references. CI runs the tests on the PR.
    - Open the PR with a body from the `pr` skill, and add `needs-unity` when step 2's rule applies.
    - One ticket per run.
 6. **Report.** Post one comment on #3 starting with `> *Project-owner run <UTC timestamp>.*`. List:

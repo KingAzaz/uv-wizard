@@ -5,7 +5,7 @@ argument-hint: "[PR number | main]  (no argument: every open PR labelled needs-u
 disable-model-invocation: true
 ---
 
-The cloud project-owner routine cannot run Unity, so this is the local check. It only works on the dev machine: the dev Unity project (see CLAUDE.md, **Dev environment**) compiles `C:\Users\Azaz\AI\uv-wizard` through a `file:` link, and the Unity MCP must be connected. If the MCP tools are missing or Unity does not answer, say so and stop.
+The cloud project-owner routine cannot run Unity, so this is the local check. It only works on the dev machine: the dev Unity project (see AGENTS.md, **Dev environment**) compiles `C:\Users\Azaz\AI\uv-wizard` through a `file:` link, and the Unity MCP must be connected. If the MCP tools are missing or Unity does not answer, say so and stop.
 
 ## Targets
 
