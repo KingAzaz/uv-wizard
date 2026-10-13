@@ -19,6 +19,7 @@ A local scheduled task ("UV Wizard owner") works through the v1 plan unattended.
 ## Dev environment
 
 - **Dev Unity project:** `%LOCALAPPDATA%\VRChatCreatorCompanion\VRChatProjects\uv-wizard` (Unity 2022.3.22f1, VRChat SDK 3.10.5, AAO 1.9.20, NDMF 1.14.8). It is not a git repo. Its `Packages/manifest.json` links this package with `"com.kingazaz.uv-wizard": "file:C:/Users/Azaz/AI/uv-wizard/Packages/com.kingazaz.uv-wizard"`, so Unity compiles whatever branch this checkout is on. Its test avatars (Rexouium, Furyon Raccoon) are paid assets: never copy them into this repo.
+- **Tests:** the dev project's `Packages/manifest.json` lists `"testables": ["com.kingazaz.uv-wizard"]`. Without it, Unity doesn't compile a `file:`-linked package's test assemblies. Run them from the Test Runner, or through MCP `run_tests` (EditMode, assembly `UVWizard.Core.Editor.Tests`).
 - **This checkout is Unity's.** A `git switch` here changes the code under the open editor. Do docs-only or other non-Unity work in a `git worktree` (e.g. `../uv-wizard-docs`).
 - **Unity MCP:** MCP for Unity (CoplayDev) **v10.2.0**. The package is in the dev project's manifest; the server is in this repo's `.mcp.json` (stdio, `mcpforunityserver==10.2.0` via uvx, telemetry off). `.mcp.json` has a machine-specific path, so it is excluded locally via `.git/info/exclude`, not committed.
   - In Unity, **Window → MCP for Unity** uses the **stdio** transport. **Don't click "Configure" for Claude Code there**: it overwrites `.mcp.json` with an unpinned entry.
