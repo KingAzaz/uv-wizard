@@ -12,6 +12,10 @@ The seven default triage labels, used as-is. See `docs/agents/triage-labels.md`.
 
 Single-context. See `docs/agents/domain.md`.
 
+### Project owner
+
+A scheduled cloud routine works through the v1 plan unattended. Its playbook is `docs/agents/project-owner.md`. It merges only on green CI and never with `needs-unity` set; clear that label by running `/unity-verify` locally.
+
 ## Dev environment
 
 - **Dev Unity project:** `%LOCALAPPDATA%\VRChatCreatorCompanion\VRChatProjects\uv-wizard` (Unity 2022.3.22f1, VRChat SDK 3.10.5, AAO 1.9.20, NDMF 1.14.8). It is not a git repo. Its `Packages/manifest.json` links this package with `"com.kingazaz.uv-wizard": "file:C:/Users/Azaz/AI/uv-wizard/Packages/com.kingazaz.uv-wizard"`, so Unity compiles whatever branch this checkout is on. Its test avatars (Rexouium, Furyon Raccoon) are paid assets: never copy them into this repo.
