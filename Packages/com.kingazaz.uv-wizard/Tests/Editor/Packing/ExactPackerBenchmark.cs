@@ -2,10 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using NUnit.Framework;
 using UnityEditor;
-using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UVWizard.Core.Islands;
 using UVWizard.Core.Packing;
 using Debug = UnityEngine.Debug;
@@ -14,52 +13,34 @@ namespace UVWizard.Core.Tests.Packing
 {
     /// <summary>
     /// Timings for ADR 0002's packer, comparable with the prototype's (2048 atlas, 4 px blocks, 8 px
-    /// between charts, geometric bisection on scale to 1%). Run by hand; results go to the console.
+    /// between charts, geometric bisection on scale to 1%). These are menu commands rather than tests,
+    /// so test runs stay fast; results go to the console. Time with the editor focused and compare
+    /// variants back to back: an unfocused editor ran the same search about 30% slower.
     /// </summary>
-    [Explicit, Category("Benchmark")]
-    public class ExactPackerBenchmark
+    internal static class ExactPackerBenchmark
     {
         static readonly PackSettings Settings = new PackSettings(atlasSize: 2048, padding: 8);
 
-        [TestCase(1000)]
-        [TestCase(3000)]
-        public void SyntheticCharts(int count)
+        [MenuItem("Tools/UV Wizard/Benchmarks/Exact Packer: Synthetic Charts")]
+        static void SyntheticCharts()
         {
-            Report($"synthetic x{count}", Synthetic(count, seed: 1));
+            Report("synthetic x1000", Synthetic(1000, seed: 1));
+            Report("synthetic x3000", Synthetic(3000, seed: 1));
         }
 
-        // Avatars listed in UVWIZARD_BENCH_AVATARS, separated by ';': prefab paths, or
-        // "<scene path>|<root object name>" for avatars that only exist in a scene. The test runner
-        // opens a scene of its own, so such scenes are opened here, additively. The dev avatars are
-        // paid assets, so their names aren't written in the repo.
-        [Test]
-        public void Avatars()
+        // Every avatar (a root object with a VRCAvatarDescriptor) in the open scenes. The dev avatars
+        // are paid assets, so their names aren't written in the repo.
+        [MenuItem("Tools/UV Wizard/Benchmarks/Exact Packer: Avatars in Open Scenes")]
+        static void Avatars()
         {
-            var entries = Environment.GetEnvironmentVariable("UVWIZARD_BENCH_AVATARS");
-            if (string.IsNullOrEmpty(entries)) Assert.Ignore("Set UVWIZARD_BENCH_AVATARS to avatar prefab paths or scene|root entries.");
-            foreach (var entry in entries.Split(';'))
-            {
-                var bar = entry.IndexOf('|');
-                if (bar < 0)
-                {
-                    var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(entry);
-                    Assert.That(prefab, Is.Not.Null, entry);
-                    Report(prefab.name, ChartsOf(prefab));
-                    continue;
-                }
-
-                var scene = EditorSceneManager.OpenScene(entry.Substring(0, bar), OpenSceneMode.Additive);
-                try
-                {
-                    var root = scene.GetRootGameObjects().FirstOrDefault(r => r.name == entry.Substring(bar + 1));
-                    Assert.That(root, Is.Not.Null, entry);
-                    Report(root.name, ChartsOf(root));
-                }
-                finally
-                {
-                    EditorSceneManager.CloseScene(scene, true);
-                }
-            }
+            var avatars = Enumerable.Range(0, SceneManager.sceneCount)
+                .Select(SceneManager.GetSceneAt)
+                .Where(scene => scene.isLoaded)
+                .SelectMany(scene => scene.GetRootGameObjects())
+                .Where(root => root.GetComponents<Component>().Any(c => c != null && c.GetType().Name == "VRCAvatarDescriptor"))
+                .ToList();
+            if (avatars.Count == 0) Debug.LogWarning("[UV Wizard bench] No avatars in the open scenes.");
+            foreach (var avatar in avatars) Report(avatar.name, ChartsOf(avatar));
         }
 
         static void Report(string name, List<ChartShape> charts)
