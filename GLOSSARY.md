@@ -1,6 +1,6 @@
 # UV Wizard
 
-UV Wizard turns a VRChat avatar with many materials into a Quest-ready avatar with one material, by packing the parts of its textures that the avatar actually uses into a single atlas.
+UV Wizard turns a VRChat avatar with many materials into a mobile-ready avatar with one material, by packing the parts of its textures that the avatar actually uses into a single atlas.
 
 ## Language
 
@@ -56,8 +56,12 @@ _Avoid_: Combine, optimize, process
 
 ### Targets and results
 
+**Mobile**:
+VRChat's Android and iOS platforms, Quest included. They share one set of performance ranks and allow only VRChat's mobile shaders. A bake changes only mobile builds.
+_Avoid_: Quest, Android (when both platforms are meant)
+
 **Preset**:
-The Android performance rank a bake aims for: Excellent, Good or Medium. A preset fixes the budget and how many material slots are allowed.
+The mobile performance rank a bake aims for: Excellent, Good or Medium. A preset fixes the budget and how many material slots are allowed.
 _Avoid_: Quality level, mode, profile
 
 **Budget**:
@@ -65,8 +69,8 @@ The most texture memory a preset allows, counted across all channels: 10 MB for 
 _Avoid_: VRAM limit, size limit, texture cap
 
 **Excluded material**:
-A source material that the bake leaves unmerged because merging it would break the avatar, such as one swapped by an animation.
-_Avoid_: Skipped material, ignored material
+A source material that the bake keeps out of the atlas because merging it would break the avatar, such as one swapped by an animation. It still gets its own Toon Standard material, since mobile allows no other shader, and so costs a material slot of its own.
+_Avoid_: Skipped material, ignored material, unmerged material
 
 **Flagged material**:
 A source material that is merged but may look different afterwards, such as a transparent or cutout material that becomes opaque.
@@ -79,7 +83,7 @@ _Avoid_: Log, stats, summary
 ### Product
 
 **Core**:
-The free, MIT-licensed UV Wizard package: everything that turns an avatar into a Quest-ready one.
+The free, MIT-licensed UV Wizard package: everything that turns an avatar into a mobile-ready one.
 _Avoid_: Free version, lite, base
 
 **Pro**:
