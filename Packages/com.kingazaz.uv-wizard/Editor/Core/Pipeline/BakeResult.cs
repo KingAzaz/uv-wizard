@@ -11,8 +11,10 @@ namespace UVWizard.Core.Pipeline
     {
         public BakeResult(bool fits, Material? mergedMaterial, Texture2D? atlas, Material? representative,
             IReadOnlyList<(Mesh Source, Mesh Rewritten)> replacedMeshes, IReadOnlyList<SlotNote> excluded,
-            IReadOnlyList<SlotNote> flagged, Texture2D? emissionAtlas = null, float emissionStrength = 1)
+            IReadOnlyList<SlotNote> flagged, Texture2D? emissionAtlas = null, float emissionStrength = 1,
+            IReadOnlyList<(Renderer Renderer, int[] SlotOf)>? movedSlots = null)
         {
+            MovedSlots = movedSlots ?? Array.Empty<(Renderer, int[])>();
             EmissionAtlas = emissionAtlas;
             EmissionStrength = emissionStrength;
             Fits = fits;
@@ -54,6 +56,12 @@ namespace UVWizard.Core.Pipeline
 
         /// <summary>Each mesh a renderer used before, and the rewritten copy it uses now.</summary>
         public IReadOnlyList<(Mesh Source, Mesh Rewritten)> ReplacedMeshes { get; }
+
+        /// <summary>
+        /// For each renderer with merged slots, where each of its slots went: its merged slots collapse into one,
+        /// so the slots after them move down. SlotOf[old] is the new index.
+        /// </summary>
+        public IReadOnlyList<(Renderer Renderer, int[] SlotOf)> MovedSlots { get; }
 
         /// <summary>Slots kept out of the atlas: they keep their source material and UV0.</summary>
         public IReadOnlyList<SlotNote> Excluded { get; }

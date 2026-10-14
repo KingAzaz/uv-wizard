@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using nadena.dev.ndmf;
+using nadena.dev.ndmf.animator;
 using UnityEngine;
 using UVWizard.Core.Pipeline;
 
@@ -21,11 +22,15 @@ namespace UVWizard.NDMF
             if (root.GetComponentInChildren<UVWizardAvatar>(true) == null || !MobileBuild.IsActive) return;
 
             var shader = ToonStandard.Shader;
-            Bake(root, shader != null ? ToonStandard.Options(shader) : null);
+            Bake(root, shader != null ? ToonStandard.Options(shader) : null,
+                context.ActivateExtensionContextRecursive<AnimatorServicesContext>());
         }
 
-        /// <summary>Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing.</summary>
-        internal static void Bake(GameObject root, BakeOptions? options)
+        /// <summary>
+        /// Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing. Without animator
+        /// services, no slot counts as animated.
+        /// </summary>
+        internal static void Bake(GameObject root, BakeOptions? options, AnimatorServicesContext? animators = null)
         {
             if (options == null)
             {
@@ -33,7 +38,10 @@ namespace UVWizard.NDMF
                 return;
             }
 
-            var result = AvatarBaker.Bake(root.GetComponentsInChildren<Renderer>(true), options);
+            var renderers = root.GetComponentsInChildren<Renderer>(true);
+            var animated = animators != null ? MaterialAnimations.Find(animators, renderers) : null;
+            var result = AvatarBaker.Bake(renderers, options, animated);
+            if (animators != null) MaterialAnimations.FollowMovedSlots(animators, result.MovedSlots);
 
             // A mesh two renderers share is rewritten for each; NDMF tracks the first copy.
             var registered = new HashSet<Mesh>();
