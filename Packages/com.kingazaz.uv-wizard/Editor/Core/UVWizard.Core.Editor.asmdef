@@ -15,6 +15,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.poiyomi.toon",
+            "expression": "",
+            "define": "UVWIZARD_POIYOMI"
+        }
+    ],
     "noEngineReferences": false
 }
