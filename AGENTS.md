@@ -26,7 +26,7 @@ Both stand down while another session in this repo is running or the checkout is
 - **Tests:** the dev project's `Packages/manifest.json` lists `"testables": ["com.kingazaz.uv-wizard"]`. Without it, Unity doesn't compile a `file:`-linked package's test assemblies. Run them from the Test Runner, or through MCP `run_tests` (EditMode, assemblies `UVWizard.Core.Editor.Tests` and `UVWizard.Core.Editor.Tests.VRChat`; the second needs the VRChat SDK, so CI compiles it out).
   - **Benchmarks** are menu commands under **Tools → UV Wizard → Benchmarks** (MCP `execute_menu_item`). They log to the console.
   - A run longer than a few seconds can drop the MCP call, which then retries it. Read the results from the console.
-- **CI** (`.github/workflows/test.yml`) runs the EditMode tests in this repo's own Unity project, which has no VRChat SDK, NDMF or AAO.
+- **CI** (`.github/workflows/test.yml`) runs the EditMode tests in this repo's own Unity project, which has no VRChat SDK, NDMF or AAO. Like VRChat projects, it uses Linear colour space, so colour tests mean the same as on real avatars.
   - Declare every Unity-registry package the code uses in `package.json` `dependencies`.
   - Put code and tests that need the SDK, NDMF or AAO in assemblies gated by `versionDefines` and `defineConstraints`, so CI compiles them out, and label those PRs `needs-unity`.
 - **This checkout is Unity's.** A `git switch` here changes the code under the open editor. Do docs-only or other non-Unity work in a `git worktree` (e.g. `../uv-wizard-docs`).
