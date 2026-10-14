@@ -27,14 +27,15 @@ namespace UVWizard.Core.Pipeline
         // The most the merged material multiplies its Emission atlas by: Toon Standard's _EmissionStrength range.
         const float MaxEmissionStrength = 2;
 
-        public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options)
+        /// <param name="laterEdits">What a tool after the bake will do to the rewritten meshes, or null for none.</param>
+        public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options, ILaterMeshEdits? laterEdits = null)
         {
             var excluded = new List<SlotNote>();
             var flagged = new List<SlotNote>();
             var slots = new List<Slot>();
             var readings = new Dictionary<Material, SourceMaterialReading>();
             foreach (var renderer in renderers)
-                CollectSlots(renderer, readings, slots, excluded, flagged);
+                CollectSlots(renderer, readings, slots, excluded, flagged, laterEdits);
             if (slots.Count == 0) return BakeResult.Unchanged(true, excluded, flagged);
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -83,17 +84,18 @@ namespace UVWizard.Core.Pipeline
             var merged = MergedMaterial(options, atlas, emissionAtlas, emissionStrength, normalAtlas, representative,
                 slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
-            var replaced = RewriteRenderers(slots, merged);
+            var replaced = RewriteRenderers(slots, merged, laterEdits);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged, emissionAtlas,
                 emissionStrength, normalAtlas);
         }
 
         // Sorts each of the renderer's material slots into merged (a Slot), excluded or skipped.
         static void CollectSlots(Renderer renderer, Dictionary<Material, SourceMaterialReading> readings, List<Slot> slots,
-            List<SlotNote> excluded, List<SlotNote> flagged)
+            List<SlotNote> excluded, List<SlotNote> flagged, ILaterMeshEdits? laterEdits)
         {
             var mesh = MeshOf(renderer);
             if (mesh == null) return;
+            using var removals = laterEdits?.Removals(renderer);
             var materials = renderer.sharedMaterials;
             using var meshes = MeshUtility.AcquireReadOnlyMeshData(mesh);
             var data = meshes[0];
@@ -134,7 +136,10 @@ namespace UVWizard.Core.Pipeline
                 }
 
                 uv0 ??= Uvs(data);
-                var triangles = Indices(data, s);
+                var corners = Indices(data, s);
+                // Triangles a later tool deletes take no atlas space.
+                var removed = removals == null ? null : Removed(corners, s, removals);
+                var triangles = removed == null ? corners : Kept(corners, removed);
                 var texture = reading.Albedo?.Texture;
                 // Islands and charts live in the texture's own UV space, tiling and offset applied, so a tiled
                 // texture counts its repeats against the limit and its charts are sized by the texels they sample.
@@ -150,7 +155,8 @@ namespace UVWizard.Core.Pipeline
                 }
                 if (reading.Verdict == MaterialVerdict.Flagged && triangles.Length > 0)
                     flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? "It may look different after the bake."));
-                slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, triangles, islands, TextureSize(reading)));
+                slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, corners, removed, triangles,
+                    islands, TextureSize(reading)));
             }
         }
 
@@ -173,6 +179,24 @@ namespace UVWizard.Core.Pipeline
             using var indices = new NativeArray<int>(data.GetSubMesh(submesh).indexCount, Allocator.Temp);
             data.GetIndices(indices, submesh);
             return indices.ToArray();
+        }
+
+        // Which of the submesh's triangles a later tool deletes, or null when it deletes none of them.
+        static bool[]? Removed(int[] corners, int submesh, ITriangleRemovals removals)
+        {
+            var removed = new bool[corners.Length / 3];
+            var any = false;
+            for (var t = 0; t < removed.Length; t++)
+                any |= removed[t] = removals.WillRemove(submesh, corners[t * 3], corners[t * 3 + 1], corners[t * 3 + 2]);
+            return any ? removed : null;
+        }
+
+        static int[] Kept(int[] corners, bool[] removed)
+        {
+            var kept = new List<int>(corners.Length);
+            for (var t = 0; t < removed.Length; t++)
+                if (!removed[t]) kept.AddRange(new[] { corners[t * 3], corners[t * 3 + 1], corners[t * 3 + 2] });
+            return kept.ToArray();
         }
 
         // Source texels per unit of the charts' UV space, the albedo's with its tiling applied: the most that any
@@ -410,10 +434,11 @@ namespace UVWizard.Core.Pipeline
         }
 
         // Gives each renderer with merged slots a rewritten mesh and the merged material on those slots.
-        static List<(Mesh Source, Mesh Rewritten)> RewriteRenderers(List<Slot> slots, Material merged)
+        static List<(Mesh Source, Mesh Rewritten)> RewriteRenderers(List<Slot> slots, Material merged,
+            ILaterMeshEdits? laterEdits)
         {
             // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was.
-            var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials)>();
+            var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)>();
             for (var first = 0; first < slots.Count;)
             {
                 var renderer = slots[first].Renderer;
@@ -421,10 +446,11 @@ namespace UVWizard.Core.Pipeline
                 var atlasUvs = new Vector2[]?[mesh.subMeshCount];
                 var end = first;
                 for (; end < slots.Count && slots[end].Renderer == renderer; end++)
-                    atlasUvs[slots[end].Submesh] = slots[end].AtlasUv;
+                    atlasUvs[slots[end].Submesh] = CornerAtlasUvs(slots[end]);
                 first = end;
 
-                var rewritten = Uv0Rewriter.Rewrite(mesh, atlasUvs);
+                var (keptIn, keepSubmeshes) = laterEdits?.Needs(renderer) ?? (null, false);
+                var rewritten = Uv0Rewriter.Rewrite(mesh, atlasUvs, keptIn, keepSubmeshes);
                 var materials = renderer.sharedMaterials;
                 var drawn = Math.Min(materials.Length, mesh.subMeshCount);
                 var count = 0;
@@ -435,11 +461,11 @@ namespace UVWizard.Core.Pipeline
                 for (var s = mesh.subMeshCount; s < materials.Length; s++)
                     replacement[count + s - mesh.subMeshCount] = materials[s];
 
-                changes.Add((renderer, mesh, rewritten.Mesh, replacement));
+                changes.Add((renderer, mesh, rewritten.Mesh, replacement, keptIn));
             }
 
             var replaced = new List<(Mesh Source, Mesh Rewritten)>();
-            foreach (var (renderer, source, rewritten, materials) in changes)
+            foreach (var (renderer, source, rewritten, materials, _) in changes)
             {
                 // A skinned renderer keeps its blend-shape weights: the rewritten mesh has the same blend shapes.
                 if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten;
@@ -447,15 +473,36 @@ namespace UVWizard.Core.Pipeline
                 renderer.sharedMaterials = materials;
                 replaced.Add((source, rewritten));
             }
+            foreach (var (renderer, _, _, _, keptIn) in changes)
+                if (keptIn is { } channel) laterEdits!.KeptSourceUv0(renderer, channel);
             return replaced;
+        }
+
+        // An atlas UV for every corner of the slot's submesh. A corner of a triangle a later tool deletes takes its
+        // vertex's atlas UV from a kept triangle, so the vertex doesn't split, or the atlas origin if it has none.
+        static Vector2[] CornerAtlasUvs(Slot slot)
+        {
+            if (slot.Removed == null) return slot.AtlasUv;
+            var atVertex = new Dictionary<int, Vector2>();
+            for (var k = 0; k < slot.Triangles.Length; k++) atVertex[slot.Triangles[k]] = slot.AtlasUv[k];
+            var uvs = new Vector2[slot.Corners.Length];
+            var kept = 0;
+            for (var t = 0; t < slot.Removed.Length; t++)
+            for (var k = t * 3; k < t * 3 + 3; k++)
+                uvs[k] = !slot.Removed[t] ? slot.AtlasUv[kept++]
+                    : atVertex.TryGetValue(slot.Corners[k], out var uv) ? uv : Vector2.zero;
+            return uvs;
         }
 
         /// <summary>One merged material slot: a submesh of a renderer, its source, and its atlas UVs once packed.</summary>
         sealed class Slot
         {
             public Slot(Renderer renderer, Mesh mesh, int submesh, Material material, SourceMaterialReading reading,
-                Vector2[] uv0, Vector2[] sampled, int[] triangles, Island[] islands, Vector2Int textureSize)
+                Vector2[] uv0, Vector2[] sampled, int[] corners, bool[]? removed, int[] triangles, Island[] islands,
+                Vector2Int textureSize)
             {
+                Corners = corners;
+                Removed = removed;
                 Renderer = renderer;
                 Mesh = mesh;
                 Submesh = submesh;
@@ -480,7 +527,16 @@ namespace UVWizard.Core.Pipeline
             /// <summary>Each vertex's UV0 with the albedo texture's tiling and offset applied: where it samples.</summary>
             public Vector2[] Sampled { get; }
 
-            /// <summary>Three vertex indices per triangle, base vertex applied.</summary>
+            /// <summary>The submesh's indices, base vertex applied: three per triangle.</summary>
+            public int[] Corners { get; }
+
+            /// <summary>One flag per triangle of <see cref="Corners"/>: true when a later tool deletes it. Null when none is.</summary>
+            public bool[]? Removed { get; }
+
+            /// <summary>
+            /// Three vertex indices per triangle that bakes: <see cref="Corners"/> less the triangles a later tool
+            /// deletes.
+            /// </summary>
             public int[] Triangles { get; }
 
             /// <summary>False for an empty submesh: it's merged so it costs no material slot, but shows nothing.</summary>

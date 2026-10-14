@@ -5,7 +5,9 @@
         "UVWizard.Core.Editor",
         "UVWizard.Runtime",
         "nadena.dev.ndmf",
-        "nadena.dev.ndmf.runtime"
+        "nadena.dev.ndmf.runtime",
+        "com.anatawa12.avatar-optimizer.api.editor",
+        "com.anatawa12.avatar-optimizer.runtime"
     ],
     "includePlatforms": [
         "Editor"
@@ -23,6 +25,11 @@
             "name": "nadena.dev.ndmf",
             "expression": "",
             "define": "UVWIZARD_NDMF"
+        },
+        {
+            "name": "com.anatawa12.avatar-optimizer",
+            "expression": "",
+            "define": "UVWIZARD_AAO"
         }
     ],
     "noEngineReferences": false

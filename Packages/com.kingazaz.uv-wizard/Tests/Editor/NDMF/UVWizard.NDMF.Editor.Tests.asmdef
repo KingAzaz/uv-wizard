@@ -8,7 +8,9 @@
         "nadena.dev.ndmf",
         "nadena.dev.ndmf.runtime",
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "com.anatawa12.avatar-optimizer.api.editor",
+        "com.anatawa12.avatar-optimizer.runtime"
     ],
     "includePlatforms": [
         "Editor"
@@ -37,6 +39,11 @@
             "name": "com.vrchat.base",
             "expression": "",
             "define": "UVWIZARD_VRCHAT_SDK"
+        },
+        {
+            "name": "com.anatawa12.avatar-optimizer",
+            "expression": "",
+            "define": "UVWIZARD_AAO"
         }
     ],
     "noEngineReferences": false

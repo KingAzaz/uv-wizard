@@ -16,7 +16,7 @@ namespace UVWizard.NDMF.Tests
 {
     // NDMF and the VRChat SDK aren't in CI's project, so these run only in the dev project.
     [Category("GPU")]
-    public class BakePassTests
+    public partial class BakePassTests
     {
         const string ToonStandardName = "VRChat/Mobile/Toon Standard";
         readonly List<Object> created = new List<Object>();
@@ -540,12 +540,13 @@ namespace UVWizard.NDMF.Tests
         static List<ErrorContext> Build(GameObject avatar) =>
             ErrorReport.CaptureErrors(() => AvatarProcessor.ProcessAvatar(avatar));
 
-        // An avatar root with a skinned body of two submeshes, a hat and a skinned tail, on Standard materials.
+        // An avatar root with a skinned body of two submeshes, a hat and a skinned tail, on Standard materials. It
+        // doesn't add Trace and Optimize, whose own optimizations these tests don't cover.
         GameObject Avatar(bool withComponent)
         {
             var root = Keep(new GameObject("Avatar"));
             root.AddComponent<VRCAvatarDescriptor>();
-            if (withComponent) root.AddComponent<UVWizardAvatar>();
+            if (withComponent) root.AddComponent<UVWizardAvatar>().addTraceAndOptimize = false;
 
             var body = new GameObject("Body").AddComponent<SkinnedMeshRenderer>();
             body.transform.SetParent(root.transform);
