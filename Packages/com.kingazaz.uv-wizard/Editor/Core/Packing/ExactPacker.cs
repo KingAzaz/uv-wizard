@@ -47,9 +47,8 @@ namespace UVWizard.Core.Packing
             var block = settings.BlockSize;
             var gridSize = settings.AtlasSize / block;
             var gridWords = (gridSize + 63) / 64;
-            // Two neighbouring charts each keep half the padding, rounded up to whole cells.
-            var padCells = (settings.Padding + 2 * block - 1) / (2 * block);
 
+            var boxes = new ChartBox[charts.Count];
             var infos = new NativeArray<MaskInfo>(charts.Count, Allocator.TempJob);
             var cornerCount = 0;
             foreach (var chart in charts) cornerCount += chart.Corners.Count;
@@ -57,23 +56,16 @@ namespace UVWizard.Core.Packing
             int cornerStart = 0, cellCount = 0, bitCount = 0;
             for (var i = 0; i < charts.Count; i++)
             {
-                var min = new Vector2(float.PositiveInfinity, float.PositiveInfinity);
-                var max = new Vector2(float.NegativeInfinity, float.NegativeInfinity);
-                foreach (var corner in charts[i].Corners)
-                {
-                    corners[cornerStart++] = corner;
-                    min = Vector2.Min(min, corner);
-                    max = Vector2.Max(max, corner);
-                }
-                var cellsPerTexel = scales[i] / block;
+                foreach (var corner in charts[i].Corners) corners[cornerStart++] = corner;
+                var box = boxes[i] = ChartBox.Of(charts[i], scales[i], settings);
                 var info = new MaskInfo
                 {
-                    CellsPerTexel = cellsPerTexel,
+                    CellsPerTexel = scales[i] / block,
                     CornerStart = cornerStart - charts[i].Corners.Count,
                     CornerCount = charts[i].Corners.Count,
-                    Min = min,
-                    Width = Math.Max(1, Mathf.CeilToInt((max.x - min.x) * cellsPerTexel)) + 2 * padCells,
-                    Height = Math.Max(1, Mathf.CeilToInt((max.y - min.y) * cellsPerTexel)) + 2 * padCells,
+                    Min = box.Min,
+                    Width = box.Width,
+                    Height = box.Height,
                 };
                 info.RowWords = (info.Width + 63) / 64;
                 info.TurnedRowWords = (info.Height + 63) / 64;
@@ -98,7 +90,7 @@ namespace UVWizard.Core.Packing
             {
                 new RasterizeChartsJob
                 {
-                    Corners = corners, Infos = infos, PadCells = padCells,
+                    Corners = corners, Infos = infos, PadCells = ChartBox.PadCellsFor(settings),
                     Cells = cells, Scratch = scratch, Bits = bits, Covered = covered,
                 }.Schedule(charts.Count, 1).Complete();
 
@@ -123,7 +115,10 @@ namespace UVWizard.Core.Packing
                 if (placedCount < charts.Count) return new PackResult(false, Array.Empty<Placement>());
                 var placements = new Placement[charts.Count];
                 for (var i = 0; i < charts.Count; i++)
-                    placements[i] = PlacementOf(infos[i], positions[i], turned[i], scales[i], block, padCells);
+                {
+                    var cell = positions[i];
+                    placements[i] = boxes[i].PlacementAt(new Vector2Int(cell.x, cell.y), turned[i], scales[i], block);
+                }
                 return new PackResult(true, placements);
             }
             finally
@@ -193,21 +188,6 @@ namespace UVWizard.Core.Packing
                 state.Dispose();
                 rowFits.Dispose();
             }
-        }
-
-        // In pixels, with the mask's corner at origin = cell * block: unturned, a chart texel t
-        // lands at origin + pad * block + (t - min) * scale. Turned, the mask's cells map (u, v)
-        // to (v, Width - u), so t lands at
-        // origin + (pad * block + (t.y - min.y) * scale, (Width - pad) * block - (t.x - min.x) * scale).
-        static Placement PlacementOf(MaskInfo info, int2 cell, bool turned, float scale, int block, int padCells)
-        {
-            Vector2 min = info.Min;
-            if (!turned)
-                return new Placement(new Vector2(cell.x + padCells, cell.y + padCells) * block - scale * min, false, scale);
-            var offset = new Vector2(
-                (cell.x + padCells) * block - scale * min.y,
-                (cell.y + info.Width - padCells) * block + scale * min.x);
-            return new Placement(offset, true, scale);
         }
     }
 }
