@@ -701,6 +701,82 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(CornerUvs(Filter(second).sharedMesh, 0), Is.EqualTo(CornerUvs(Filter(first).sharedMesh, 0)));
         }
 
+        [Test]
+        public void TrianglesALaterToolDeletesTakeNoAtlasSpaceButStayForItToDelete()
+        {
+            // The 320 quads of ChartsThatFitAtNoScaleLeaveEveryRendererUnchanged, of which the tool deletes all
+            // but the first: what's left fits.
+            var quads = Enumerable.Range(0, 320).Select(i => Quad(0, (i % 20) / 20f, (i / 20) / 16f, (i % 20 + 0.4f) / 20f, (i / 20 + 0.4f) / 16f)).ToArray();
+            var mesh = Mesh(quads);
+            var renderer = MeshRenderer(mesh, Standard(Gradient(1024, 0), Color.white));
+            var tool = new LaterTool { Deletes = (submesh, a, b, c) => a >= 4 };
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 0), tool, renderer);
+
+            Assert.That(result.Fits, Is.True);
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
+            Assert.That(Filter(renderer).sharedMesh.GetIndices(0), Has.Length.EqualTo(320 * 6), "the tool deletes them, not the bake");
+            Assert.That(tool.Disposed, Is.True);
+        }
+
+        [Test]
+        public void ADeletedTriangleDoesntSplitTheVerticesItSharesWithKeptOnes()
+        {
+            // One island of eight triangles, the last of which the tool deletes.
+            var mesh = Grid(1, 2, 4);
+            var last = mesh.GetIndices(0).Skip(21).ToArray();
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white));
+            var tool = new LaterTool { Deletes = (submesh, a, b, c) => new[] { a, b, c }.SequenceEqual(last) };
+
+            Bake(new BakeOptions(Shader.Find("Standard")), tool, renderer);
+
+            Assert.That(Filter(renderer).sharedMesh.vertexCount, Is.EqualTo(mesh.vertexCount));
+        }
+
+        [Test]
+        public void ALaterToolThatReadsTheSourceUv0FindsItInTheChannelItAskedFor()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white));
+            var tool = new LaterTool { SourceUv0Channel = 3 };
+
+            Bake(new BakeOptions(Shader.Find("Standard")), tool, renderer);
+
+            var rewritten = Filter(renderer).sharedMesh;
+            var kept = new List<Vector2>();
+            rewritten.GetUVs(3, kept);
+            Assert.That(rewritten.GetIndices(0).Select(i => kept[i]), Is.EqualTo(CornerUvs(mesh, 0).Concat(CornerUvs(mesh, 1))));
+            Assert.That(tool.Kept, Is.EqualTo(new[] { ((Renderer)renderer, 3) }));
+        }
+
+        [Test]
+        public void ARendererWhoseSourceUv0ALaterToolCantFindIsExcluded()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var materials = new[] { Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white) };
+            var renderer = MeshRenderer(mesh, materials);
+            var tool = new LaterTool { NoChannelFree = true, Deletes = (submesh, a, b, c) => true };
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), tool, renderer);
+
+            Assert.That(Filter(renderer).sharedMesh, Is.SameAs(mesh));
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(materials));
+            Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(materials));
+            Assert.That(tool.Disposed, Is.False, "its triangles aren't asked about");
+        }
+
+        [Test]
+        public void ALaterToolThatReadsMaterialSlotsKeepsThemApart()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white));
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { KeepsSubmeshes = true }, renderer);
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial, result.MergedMaterial }));
+            Assert.That(Filter(renderer).sharedMesh.subMeshCount, Is.EqualTo(2));
+        }
+
         BakeResult Bake(params Renderer[] renderers) => Bake(StandardOptions(), renderers);
 
         // Standard as the merged shader, with its normal-map keyword.
@@ -709,15 +785,35 @@ namespace UVWizard.Core.Tests.Pipeline
             new BakeOptions(Shader.Find("Standard"), atlasSize, padding, compression, normalMapKeyword: "_NORMALMAP",
                 normalEncoding: normalEncoding);
 
-        BakeResult Bake(BakeOptions options, params Renderer[] renderers)
+        BakeResult Bake(BakeOptions options, params Renderer[] renderers) => Bake(options, null, renderers);
+
+        BakeResult Bake(BakeOptions options, ILaterMeshEdits? laterEdits, params Renderer[] renderers)
         {
-            var result = AvatarBaker.Bake(renderers, options);
+            var result = AvatarBaker.Bake(renderers, options, laterEdits);
             if (result.MergedMaterial != null) created.Add(result.MergedMaterial);
             if (result.Atlas != null) created.Add(result.Atlas);
             if (result.EmissionAtlas != null) created.Add(result.EmissionAtlas);
             if (result.NormalAtlas != null) created.Add(result.NormalAtlas);
             foreach (var (_, rewritten) in result.ReplacedMeshes) created.Add(rewritten);
             return result;
+        }
+
+        // A tool after the bake that deletes some triangles, and may read the source UV0 or the material slots.
+        sealed class LaterTool : ILaterMeshEdits, ITriangleRemovals
+        {
+            public Func<int, int, int, int, bool>? Deletes;
+            public int? SourceUv0Channel;
+            public bool KeepsSubmeshes;
+            public bool Disposed;
+            public readonly List<(Renderer, int)> Kept = new List<(Renderer, int)>();
+
+            public ITriangleRemovals? Removals(Renderer renderer) => Deletes != null ? this : null;
+            public bool NoChannelFree;
+            public (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer) =>
+                NoChannelFree ? null : (SourceUv0Channel, KeepsSubmeshes);
+            public void KeptSourceUv0(Renderer renderer, int channel) => Kept.Add((renderer, channel));
+            public bool WillRemove(int submesh, int a, int b, int c) => Deletes!(submesh, a, b, c);
+            public void Dispose() => Disposed = true;
         }
 
         T Keep<T>(T o) where T : Object

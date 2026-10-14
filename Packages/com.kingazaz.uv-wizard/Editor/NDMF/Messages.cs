@@ -13,6 +13,7 @@ namespace UVWizard.NDMF
     /// </summary>
     internal static class Messages
     {
+        public const string AddedTraceAndOptimize = "uvwizard.added-trace-and-optimize";
         public const string Excluded = "uvwizard.excluded";
         public const string Flagged = "uvwizard.flagged";
         public const string NoFit = "uvwizard.no-fit";
@@ -20,6 +21,10 @@ namespace UVWizard.NDMF
 
         static readonly (string Key, string Text)[] English =
         {
+            (AddedTraceAndOptimize, "Added AAO Trace and Optimize"),
+            (AddedTraceAndOptimize + ":description", "UV Wizard added Avatar Optimizer's Trace and Optimize with its " +
+                "default settings, so AAO can merge the avatar's skinned meshes into one. Its defaults don't change how " +
+                "the avatar looks. To stop this, turn off Add Trace And Optimize on the UV Wizard component."),
             (Excluded, "Kept out of the atlas: {0}"),
             (Excluded + ":description", "{2} The material stays on {1} as it was."),
             (Flagged, "May look different after the bake: {0}"),

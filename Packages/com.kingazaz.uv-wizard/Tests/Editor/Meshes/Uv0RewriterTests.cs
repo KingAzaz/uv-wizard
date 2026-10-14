@@ -155,6 +155,51 @@ namespace UVWizard.Core.Tests.Meshes
         }
 
         [Test]
+        public void MergedSubmeshesCanKeepTheirOwnPlaces()
+        {
+            // For a later tool that reads the mesh per material slot.
+            var source = Square(new[] { 0, 1, 2 }, new[] { 1, 3, 2 }, new[] { 2, 1, 3 });
+
+            var result = Uv0Rewriter.Rewrite(source, new[] { new[] { A0, A1, A2 }, null, new[] { B2, B1, B3 } },
+                keepSubmeshes: true);
+            Keep(result.Mesh);
+
+            Assert.That(result.Mesh.subMeshCount, Is.EqualTo(3));
+            Assert.That(result.SubmeshOf, Is.EqualTo(new[] { 0, 1, 2 }));
+            Assert.That(result.MergedSubmesh, Is.EqualTo(0));
+            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(new[] { A0, A1, A2 }));
+            Assert.That(CornerUvs(result.Mesh, 1, 0), Is.EqualTo(CornerUvs(source, 1, 0)));
+            Assert.That(CornerUvs(result.Mesh, 2, 0), Is.EqualTo(new[] { B2, B1, B3 }));
+        }
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public void TheSourceUv0CanBeKeptInAnEmptyChannelOnEveryCopy(bool split)
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+            source.uv6 = null;
+            var atlasUvs = split ? TwoCharts : OneChart;
+
+            var result = Uv0Rewriter.Rewrite(source, new[] { atlasUvs }, keepSourceUv0In: 5);
+            Keep(result.Mesh);
+
+            Assert.That(result.Mesh.vertexCount, Is.EqualTo(split ? 6 : 4));
+            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(atlasUvs));
+            Assert.That(CornerUvs(result.Mesh, 0, 5), Is.EqualTo(CornerUvs(source, 0, 0)));
+            Assert.That(CornerUvs(result.Mesh, 0, 4), Is.EqualTo(CornerUvs(source, 0, 4)), "the other channels stay");
+            Assert.That(source.HasVertexAttribute(VertexAttribute.TexCoord5), Is.False, "the source is left as it was");
+        }
+
+        [Test]
+        public void TheSourceUv0CantBeKeptInAChannelTheMeshUses()
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+
+            Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, keepSourceUv0In: 5));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, keepSourceUv0In: 0));
+        }
+
+        [Test]
         public void AMeshWithNothingMergedHasNoMergedSubmesh()
         {
             var source = Square(new[] { 0, 1, 2 }, new[] { 2, 1, 3 });

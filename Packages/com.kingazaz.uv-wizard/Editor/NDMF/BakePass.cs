@@ -24,6 +24,14 @@ namespace UVWizard.NDMF
             Bake(root, shader != null ? ToonStandard.Options(shader) : null);
         }
 
+        // Avatar Optimizer runs after the bake and edits the meshes it rewrites.
+        static ILaterMeshEdits? LaterMeshEdits() =>
+#if UVWIZARD_AAO
+            new AaoMeshEdits();
+#else
+            null;
+#endif
+
         /// <summary>Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing.</summary>
         internal static void Bake(GameObject root, BakeOptions? options)
         {
@@ -33,7 +41,7 @@ namespace UVWizard.NDMF
                 return;
             }
 
-            var result = AvatarBaker.Bake(root.GetComponentsInChildren<Renderer>(true), options);
+            var result = AvatarBaker.Bake(root.GetComponentsInChildren<Renderer>(true), options, LaterMeshEdits());
 
             // A mesh two renderers share is rewritten for each; NDMF tracks the first copy.
             var registered = new HashSet<Mesh>();
