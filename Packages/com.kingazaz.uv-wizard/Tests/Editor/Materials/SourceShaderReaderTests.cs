@@ -302,5 +302,12 @@ namespace UVWizard.Core.Tests.Materials
             AssertColour(Color.green, albedo.Tint);
             Assert.That(albedo.ScaleOffset, Is.EqualTo(new Vector4(1, 1, 0, 0)));
         }
+
+        [TestCase("Standard")]
+        [TestCase("Unlit/Texture")]
+        public void StandardAndUnknownShadersDontUseVertexColour(string shader)
+        {
+            Assert.That(SourceShaderReader.Read(Material(shader)).UsesVertexColour, Is.False);
+        }
     }
 }

@@ -24,7 +24,8 @@ namespace UVWizard.Core.Materials
             var normal = normalMap != null
                 ? new ChannelSource(normalMap, Color.white, scaleOffset, 0, material.GetFloat("_BumpScale"))
                 : null;
-            var reading = new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null);
+            var reading = new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null,
+                usesVertexColour: !material.IsKeywordEnabled("DISABLE_VERTEX_COLORING"));
             var detail = MaterialProperties.DetailOffUv0(material, "_DETAIL", "_UVSec");
             return detail == null ? reading : reading.Excluded(detail);
         }
@@ -63,7 +64,8 @@ namespace UVWizard.Core.Materials
                 ? new ChannelSource(normalMap, Color.white, MaterialProperties.ScaleOffset(material, "_BumpMap"), 0,
                     material.GetFloat("_BumpScale"))
                 : null;
-            var reading = new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null);
+            var reading = new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null,
+                usesVertexColour: material.GetFloat("_VertexColor") > 0.5f);
             var detail = MaterialProperties.DetailOffUv0(material, "USE_DETAIL_MAPS", "_DetailUV");
             return detail == null ? reading : reading.Excluded(detail);
         }
