@@ -68,11 +68,12 @@ namespace UVWizard.Core.Tests.Budgets
                 Is.EqualTo(5468));
         }
 
+        // RGBA32, not a compressed format: CI's Linux GPU can't create a compressed 3D texture.
         [Test]
         public void A3DTextureCountsItsDepthWithoutMips()
         {
-            Assert.That(TextureMemory.Bytes(Keep(new Texture3D(32, 32, 4, TextureFormat.ASTC_6x6, mipChain: true))),
-                Is.EqualTo(1823));
+            Assert.That(TextureMemory.Bytes(Keep(new Texture3D(32, 32, 4, TextureFormat.RGBA32, mipChain: true))),
+                Is.EqualTo(32 * 32 * 4 * 4));
         }
 
         [Test]
