@@ -17,19 +17,26 @@ namespace UVWizard.Core.Baking
         static readonly int MainTex = Shader.PropertyToID("_MainTex");
         static readonly int Tint = Shader.PropertyToID("_Color");
         static readonly int SourceScaleOffset = Shader.PropertyToID("_SourceST");
+        static readonly int Strength = Shader.PropertyToID("_Strength");
+        static readonly int SourceEncoding = Shader.PropertyToID("_SourceEncoding");
+
+        const int ColourPass = 0;
+        const int NormalPass = 1;
 
         /// <summary>
         /// Draws every source's triangles at their atlas UVs, sampling the source texture and
         /// multiplying in its tint, then fills the gutters with the nearest chart's colour and
-        /// builds mips. The result is an opaque, readable, uncompressed sRGB texture.
+        /// builds mips. The result is an opaque, readable, uncompressed, clamped sRGB texture. A Normal plan
+        /// writes each source's decoded normal instead, untinted, into a linear texture.
         /// </summary>
         public static Texture2D Bake(BakePlan plan)
         {
             var size = plan.AtlasSize;
+            var normals = plan.NormalEncoding != null;
             var material = new Material(LoadShader()) { hideFlags = HideFlags.HideAndDontSave };
             var target = RenderTexture.GetTemporary(new RenderTextureDescriptor(size, size, RenderTextureFormat.ARGB32, 0)
             {
-                sRGB = true,
+                sRGB = !normals,
                 useMipMap = false,
             });
             var meshes = new List<Mesh>();
@@ -47,15 +54,20 @@ namespace UVWizard.Core.Baking
                     material.SetTexture(MainTex, source.Texture);
                     material.SetColor(Tint, source.Tint);
                     material.SetVector(SourceScaleOffset, source.ScaleOffset);
-                    material.SetPass(0);
+                    material.SetFloat(Strength, source.Strength);
+                    material.SetFloat(SourceEncoding, source.Encoding == NormalEncoding.AG ? 1 : 0);
+                    material.SetPass(normals ? NormalPass : ColourPass);
                     Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
                 }
                 GL.PopMatrix();
 
-                var atlas = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: true, linear: false);
+                // Atlas UVs stay inside 0..1, so a chart at one edge mustn't be filtered with the opposite edge.
+                var atlas = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: true, linear: normals)
+                    { wrapMode = TextureWrapMode.Clamp };
                 atlas.ReadPixels(new Rect(0, 0, size, size), 0, 0, recalculateMipMaps: false);
                 var texels = atlas.GetPixels32(0);
                 FillGutters(texels, size);
+                if (plan.NormalEncoding == NormalEncoding.AG) ToAg(texels);
                 atlas.SetPixels32(texels, 0);
                 atlas.Apply(updateMipmaps: true, makeNoLongerReadable: false);
                 return atlas;
@@ -88,6 +100,16 @@ namespace UVWizard.Core.Baking
             mesh.uv = source.SourceUv;
             mesh.triangles = source.Triangles;
             return mesh;
+        }
+
+        // XYZ texels to the mobile DXT5nm-style layout, (y, y, y, x).
+        static void ToAg(Color32[] texels)
+        {
+            for (var i = 0; i < texels.Length; i++)
+            {
+                var t = texels[i];
+                texels[i] = new Color32(t.g, t.g, t.g, t.r);
+            }
         }
 
         // The shader writes alpha 1 and the target starts at alpha 0, so alpha marks the texels a

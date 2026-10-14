@@ -7,6 +7,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UVWizard.Core.Baking;
 using UVWizard.Core.Pipeline;
 using VRC.SDK3.Avatars.Components;
 using Object = UnityEngine.Object;
@@ -112,6 +113,109 @@ namespace UVWizard.NDMF.Tests
             var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
             Assert.That(merged.GetTexture("_EmissionMap"), Is.Null);
             Assert.That(merged.GetColor("_EmissionColor").maxColorComponent, Is.EqualTo(0), "Toon Standard's default: no glow");
+        }
+
+        [Test]
+        public void ANormalMappedToonStandardSourceTurnsOnTheMergedMaterialsNormalMap()
+        {
+            var avatar = Avatar(withComponent: true);
+            var toon = NormalMapped(ToonStandardMaterial(Gradient(16, 4), culling: 2), NormalGradient(16), 0.5f);
+            avatar.transform.Find("Hat").GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(errors, Is.Empty);
+            var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
+            Assert.That(merged.IsKeywordEnabled("USE_NORMAL_MAPS"), Is.True);
+            Assert.That(merged.GetFloat("_BumpScale"), Is.EqualTo(1), "the atlas holds the source's strength");
+            var normals = (Texture2D)merged.GetTexture("_BumpMap");
+            Assert.That(normals, Is.Not.Null.And.Not.SameAs(merged.mainTexture));
+            Assert.That(normals.format, Is.EqualTo(TextureFormat.ASTC_6x6));
+            Assert.That(normals.isDataSRGB, Is.False);
+        }
+
+        [Test]
+        public void AnAvatarWithoutNormalMapsLeavesTheMergedMaterialsNormalMapOff()
+        {
+            var avatar = Avatar(withComponent: true);
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(errors, Is.Empty);
+            var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
+            Assert.That(merged.shader.name, Is.EqualTo(ToonStandardName), "the bake ran");
+            Assert.That(merged.IsKeywordEnabled("USE_NORMAL_MAPS"), Is.False);
+            Assert.That(merged.GetTexture("_BumpMap"), Is.Null);
+        }
+
+        [TestCase(4)]
+        [TestCase(-4)]
+        public void ANormalMapTiledMoreFinelyThanTheAlbedoKeepsItsDetail(float tiling)
+        {
+            // The 32 px checker's 4-texel cells, tiled 4 times, are 1/32 of a UV apart. Counted at its own size
+            // the chart would get 32 texels per UV, one per cell, smearing neighbouring cells together. Tiled -4
+            // times, mirrored, they're as close.
+            var avatar = Avatar(withComponent: true);
+            var toon = NormalMapped(ToonStandardMaterial(Gradient(16, 4), culling: 2), NormalChecker(32, 4), 1);
+            toon.SetTextureScale("_BumpMap", new Vector2(tiling, tiling));
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshFilter>().sharedMesh = Grid(1, 6, 32);
+            hat.GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
+            var before = Centroids(hat.gameObject).Select(c => Decoded(TiledSample((Texture2D)toon.GetTexture("_BumpMap"), c.Uv, tiling))).ToArray();
+
+            // The checker is in Unity's XYZ layout, so the atlas is too, whatever the editor's build target.
+            BakePass.Bake(avatar, new BakeOptions(Shader.Find(ToonStandardName), normalEncoding: NormalEncoding.RGorAG));
+
+            var normals = (Texture2D)hat.GetComponent<MeshRenderer>().sharedMaterial.GetTexture("_BumpMap");
+            var after = Centroids(hat.gameObject).Select(c => Decoded(normals.GetPixelBilinear(c.Uv.x, c.Uv.y))).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                Assert.That(Vector3.Distance(before[k], after[k]), Is.LessThanOrEqualTo(0.08f), $"triangle {k}: {after[k]}, expected {before[k]}");
+        }
+
+        [Test]
+        public void AnEmissionMapTiledMoreFinelyThanTheAlbedoKeepsItsDetail()
+        {
+            // As for the normal map: the emission checker's cells are 1/32 of a UV apart.
+            var avatar = Avatar(withComponent: true);
+            var toon = ToonStandardMaterial(Gradient(16, 4), culling: 2);
+            var glow = Checker(32, 4);
+            toon.SetTexture("_EmissionMap", glow);
+            toon.SetTextureScale("_EmissionMap", new Vector2(4, 4));
+            toon.SetColor("_EmissionColor", Color.white);
+            toon.SetFloat("_EmissionStrength", 1);
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshFilter>().sharedMesh = Grid(1, 6, 32);
+            hat.GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
+            var before = Centroids(hat.gameObject).Select(c => TiledSample(glow, c.Uv, 4)).ToArray();
+
+            BakePass.Bake(avatar, new BakeOptions(Shader.Find(ToonStandardName)));
+
+            var emission = (Texture2D)hat.GetComponent<MeshRenderer>().sharedMaterial.GetTexture("_EmissionMap");
+            var after = Centroids(hat.gameObject).Select(c => emission.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
+            for (var k = 0; k < before.Length; k++)
+            for (var channel = 0; channel < 3; channel++)
+                Assert.That(after[k][channel], Is.EqualTo(before[k][channel]).Within(0.08f), $"triangle {k}, channel {channel}");
+        }
+
+        [Test]
+        public void AnAlbedoScaledToZeroStillBakesItsTiledNormalMap()
+        {
+            // The albedo's zero scale squeezes the hat's chart to a point, leaving the tiling ratio nothing to divide by.
+            var avatar = Avatar(withComponent: true);
+            var toon = NormalMapped(ToonStandardMaterial(Gradient(16, 4), culling: 2), NormalChecker(32, 4), 1);
+            toon.mainTextureScale = Vector2.zero;
+            toon.SetTextureScale("_BumpMap", new Vector2(4, 4));
+            avatar.transform.Find("Hat").GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(errors, Is.Empty);
+            var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
+            Assert.That(merged.shader.name, Is.EqualTo(ToonStandardName), "the bake ran");
+            Assert.That(merged.GetTexture("_BumpMap"), Is.Not.Null);
         }
 
         [Test]
@@ -349,6 +453,87 @@ namespace UVWizard.NDMF.Tests
             var material = Keep(new Material(Shader.Find(ToonStandardName)) { mainTexture = texture });
             material.SetFloat("_Culling", culling);
             return material;
+        }
+
+        // Turns on Toon Standard's normal map at the given strength.
+        static Material NormalMapped(Material material, Texture2D map, float strength)
+        {
+            material.EnableKeyword("USE_NORMAL_MAPS");
+            material.SetTexture("_BumpMap", map);
+            material.SetFloat("_BumpScale", strength);
+            return material;
+        }
+
+        // A readable linear normal map, in Unity's XYZ layout, tilting smoothly along both axes.
+        Texture2D NormalGradient(int size) => NormalMap(size, (u, v) => new Vector3(0.6f * (u - 0.3f), 0.5f * (v - 0.6f), 1),
+            FilterMode.Bilinear);
+
+        // A point-filtered normal map whose cells, cell texels wide, tilt left and right in turn.
+        Texture2D NormalChecker(int size, int cell) => NormalMap(size, (u, v) =>
+            new Vector3(((int)(u * size) / cell + (int)(v * size) / cell) % 2 == 0 ? 0.5f : -0.5f, 0, 1), FilterMode.Point);
+
+        Texture2D NormalMap(int size, System.Func<float, float, Vector3> normal, FilterMode filter)
+        {
+            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: true)
+                { wrapMode = TextureWrapMode.Repeat, filterMode = filter });
+            var texels = new Color[size * size];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var n = normal((x + 0.5f) / size, (y + 0.5f) / size).normalized;
+                texels[y * size + x] = new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1);
+            }
+            texture.SetPixels(texels);
+            texture.Apply();
+            return texture;
+        }
+
+        // A point-filtered sRGB black and white checker whose cells are cell texels wide.
+        Texture2D Checker(int size, int cell)
+        {
+            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: false)
+                { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point });
+            var texels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+                texels[y * size + x] = (x / cell + y / cell) % 2 == 0 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255);
+            texture.SetPixels32(texels);
+            texture.Apply();
+            return texture;
+        }
+
+        // The texture sampled at the UV tiled the given number of times.
+        static Color TiledSample(Texture2D texture, Vector2 uv, float tiling) => texture.GetPixelBilinear(uv.x * tiling, uv.y * tiling);
+
+        // A texel in Unity's XYZ layout: x, y and z in red, green and blue.
+        static Vector3 Decoded(Color texel) => new Vector3(texel.r * 2 - 1, texel.g * 2 - 1, texel.b * 2 - 1);
+
+        // One connected island: a cells x cells grid of quads, sharing their corners, from UV first/per to
+        // (first + cells)/per on each axis.
+        Mesh Grid(int first, int cells, int per)
+        {
+            var positions = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            for (var y = 0; y <= cells; y++)
+            for (var x = 0; x <= cells; x++)
+            {
+                var uv = new Vector2(first + x, first + y) / per;
+                uvs.Add(uv);
+                positions.Add(uv);
+            }
+            var triangles = new List<int>();
+            for (var y = 0; y < cells; y++)
+            for (var x = 0; x < cells; x++)
+            {
+                var i = y * (cells + 1) + x;
+                triangles.AddRange(new[] { i, i + cells + 1, i + 1, i + 1, i + cells + 1, i + cells + 2 });
+            }
+            var mesh = Keep(new Mesh());
+            mesh.SetVertices(positions);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            return mesh;
         }
 
         // Processes the avatar in place, on the ambient platform, which is VRChat's in a VRChat project.

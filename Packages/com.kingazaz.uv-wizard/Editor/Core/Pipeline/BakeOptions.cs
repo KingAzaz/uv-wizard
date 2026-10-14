@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UVWizard.Core.Baking;
 
 namespace UVWizard.Core.Pipeline
 {
@@ -19,9 +20,15 @@ namespace UVWizard.Core.Pipeline
         /// <param name="representativeProperties">
         /// Properties copied from the representative source: the merged-shader source with the most chart area.
         /// </param>
+        /// <param name="normalMapKeyword">The merged shader's keyword that turns its normal map on.</param>
+        /// <param name="normalEncoding">
+        /// How the build's normal maps are encoded, which the merged shader decodes: source textures imported as
+        /// normal maps are read this way, and the Normal atlas is written this way. The active build target's when null.
+        /// </param>
         public BakeOptions(Shader mergedShader, int atlasSize = 2048, int padding = 8, TextureFormat? compression = null,
             string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null,
-            string cullingProperty = "_Culling")
+            string cullingProperty = "_Culling", string normalMapKeyword = "USE_NORMAL_MAPS",
+            NormalEncoding? normalEncoding = null)
         {
             MergedShader = mergedShader;
             AtlasSize = atlasSize;
@@ -31,6 +38,8 @@ namespace UVWizard.Core.Pipeline
             DefaultRamp = defaultRamp;
             RepresentativeProperties = representativeProperties ?? Array.Empty<string>();
             CullingProperty = cullingProperty;
+            NormalMapKeyword = normalMapKeyword;
+            NormalEncoding = normalEncoding ?? NormalMaps.PlatformEncoding;
         }
 
         public Shader MergedShader { get; }
@@ -41,5 +50,7 @@ namespace UVWizard.Core.Pipeline
         public Texture? DefaultRamp { get; }
         public IReadOnlyList<string> RepresentativeProperties { get; }
         public string CullingProperty { get; }
+        public string NormalMapKeyword { get; }
+        public NormalEncoding NormalEncoding { get; }
     }
 }
