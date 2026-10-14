@@ -223,6 +223,22 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AFlaggedMaterialThatDrawsNothingIsntListed()
+        {
+            // A transparent source becomes opaque, but on an empty submesh there's nothing to see.
+            var transparent = Standard(Gradient(16, 0), Color.white);
+            transparent.SetFloat("_Mode", 3);
+            transparent.EnableKeyword("_ALPHAPREMULTIPLY_ON");
+            var mesh = Mesh(Array.Empty<(Vector3[], Vector2[])>(), new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) });
+            var renderer = MeshRenderer(mesh, transparent, Standard(Gradient(16, 1), Color.white));
+
+            var result = Bake(renderer);
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
+            Assert.That(result.Flagged, Is.Empty);
+        }
+
+        [Test]
         public void AMergedShaderSourceThatDrawsNothingDoesntRepresent()
         {
             // The only Standard source sits on an empty submesh; the drawn one uses Unlit/Texture.

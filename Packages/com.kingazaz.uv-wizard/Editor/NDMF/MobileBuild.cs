@@ -16,9 +16,9 @@ namespace UVWizard.NDMF
         /// </summary>
         public static bool? Override { get; set; }
 
-        public static bool IsActive => For(EditorUserBuildSettings.activeBuildTarget);
+        public static bool IsActive => IsActiveFor(EditorUserBuildSettings.activeBuildTarget);
 
-        public static bool For(BuildTarget target) =>
+        public static bool IsActiveFor(BuildTarget target) =>
             Override ?? target is BuildTarget.Android or BuildTarget.iOS;
     }
 }

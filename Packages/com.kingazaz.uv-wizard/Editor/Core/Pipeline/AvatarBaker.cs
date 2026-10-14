@@ -77,7 +77,7 @@ namespace UVWizard.Core.Pipeline
             if (options.Compression is { } format) AtlasCompressor.Compress(atlas, format);
 
             var representative = Representative(slots, charts, options.MergedShader);
-            var merged = MergedMaterial(options, atlas, representative, slots.Exists(slot => slot.Reading.UsesVertexColour));
+            var merged = MergedMaterial(options, atlas, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var replaced = RewriteRenderers(slots, merged);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged);
@@ -143,7 +143,7 @@ namespace UVWizard.Core.Pipeline
                     Exclude("Part of it repeats its texture across more than two tiles, more than the atlas can hold.");
                     continue;
                 }
-                if (reading.Verdict == MaterialVerdict.Flagged)
+                if (reading.Verdict == MaterialVerdict.Flagged && triangles.Length > 0)
                     flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? "It may look different after the bake."));
                 slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, triangles, islands, TextureSize(reading)));
             }
@@ -228,6 +228,7 @@ namespace UVWizard.Core.Pipeline
             var colouredVertices = new Dictionary<Mesh, bool[]?>();
             foreach (var slot in slots)
             {
+                if (!slot.Draws) continue;
                 if (merged.HasProperty(culling) && slot.Material.HasProperty(culling)
                     && slot.Material.GetFloat(culling) != merged.GetFloat(culling))
                     flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
@@ -372,6 +373,9 @@ namespace UVWizard.Core.Pipeline
 
             /// <summary>Three vertex indices per triangle, base vertex applied.</summary>
             public int[] Triangles { get; }
+
+            /// <summary>False for an empty submesh: it's merged so it costs no material slot, but shows nothing.</summary>
+            public bool Draws => Triangles.Length > 0;
 
             public Island[] Islands { get; }
             public Vector2Int TextureSize { get; }

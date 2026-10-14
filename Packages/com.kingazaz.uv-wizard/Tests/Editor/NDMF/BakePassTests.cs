@@ -69,13 +69,15 @@ namespace UVWizard.NDMF.Tests
         [Test]
         public void OnlyMobileTargetsBakeUnlessOverridden()
         {
-            Assert.That(MobileBuild.For(BuildTarget.Android), Is.True);
-            Assert.That(MobileBuild.For(BuildTarget.iOS), Is.True);
-            Assert.That(MobileBuild.For(BuildTarget.StandaloneWindows64), Is.False);
+            Assert.That(MobileBuild.IsActiveFor(BuildTarget.Android), Is.True);
+            Assert.That(MobileBuild.IsActiveFor(BuildTarget.iOS), Is.True);
+            Assert.That(MobileBuild.IsActiveFor(BuildTarget.StandaloneWindows64), Is.False);
+            Assert.That(MobileBuild.IsActive, Is.EqualTo(MobileBuild.IsActiveFor(EditorUserBuildSettings.activeBuildTarget)),
+                "a build follows the project's target");
             MobileBuild.Override = true;
-            Assert.That(MobileBuild.For(BuildTarget.StandaloneWindows64), Is.True, "a manual bake's mobile preview");
+            Assert.That(MobileBuild.IsActiveFor(BuildTarget.StandaloneWindows64), Is.True, "a manual bake's mobile preview");
             MobileBuild.Override = false;
-            Assert.That(MobileBuild.For(BuildTarget.Android), Is.False, "forced to PC");
+            Assert.That(MobileBuild.IsActiveFor(BuildTarget.Android), Is.False, "forced to PC");
         }
 
         [Test]
@@ -190,6 +192,44 @@ namespace UVWizard.NDMF.Tests
             Build(avatar);
 
             Assert.That(hat.sharedMaterial.GetFloat("_VertexColor"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void AnEmptySlotDoesntTurnVertexColourOn()
+        {
+            // The hat's first submesh draws nothing; its material would use vertex colour.
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshFilter>().sharedMesh = Mesh(new (Vector3[], Vector2[])[0], new[] { Quad(2, 0.05f, 0.4f, 0.55f, 0.95f) });
+            hat.GetComponent<MeshRenderer>().sharedMaterials = new[]
+            {
+                Keep(new Material(Shader.Find("VRChat/Mobile/Standard Lite")) { mainTexture = Gradient(16, 4) }),
+                Standard(Gradient(16, 2)),
+            };
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.GetFloat("_VertexColor"), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void AnEmptySlotIsntFlaggedForItsCulling()
+        {
+            // The body is Toon Standard culling back faces and covers the most area. The hat's first submesh draws
+            // nothing, on a double-sided Toon Standard material.
+            var avatar = Avatar(withComponent: true);
+            var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
+            body.sharedMaterials = body.sharedMaterials.Select(source => ToonStandardMaterial(source.mainTexture, culling: 2)).ToArray();
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshFilter>().sharedMesh = Mesh(new (Vector3[], Vector2[])[0], new[] { Quad(2, 0.05f, 0.4f, 0.55f, 0.95f) });
+            hat.GetComponent<MeshRenderer>().sharedMaterials = new[]
+                { ToonStandardMaterial(Gradient(16, 4), culling: 0), ToonStandardMaterial(Gradient(16, 2), culling: 2) };
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(Texts(errors), Is.Empty);
         }
 
         [Test]
