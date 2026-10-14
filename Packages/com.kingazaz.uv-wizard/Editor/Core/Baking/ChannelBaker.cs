@@ -8,11 +8,11 @@ using UnityEngine.Rendering;
 
 namespace UVWizard.Core.Baking
 {
-    /// <summary>Renders the Albedo channel of the atlas on the GPU.</summary>
-    internal static class AlbedoBaker
+    /// <summary>Renders one channel of the atlas on the GPU.</summary>
+    internal static class ChannelBaker
     {
-        const string ShaderName = "Hidden/UVWizard/BakeAlbedo";
-        const string ShaderPath = "Packages/com.kingazaz.uv-wizard/Editor/Core/Baking/BakeAlbedo.shader";
+        const string ShaderName = "Hidden/UVWizard/BakeChannel";
+        const string ShaderPath = "Packages/com.kingazaz.uv-wizard/Editor/Core/Baking/BakeChannel.shader";
 
         static readonly int MainTex = Shader.PropertyToID("_MainTex");
         static readonly int Tint = Shader.PropertyToID("_Color");

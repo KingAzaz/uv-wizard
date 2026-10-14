@@ -9,7 +9,7 @@ using Object = UnityEngine.Object;
 namespace UVWizard.Core.Tests.Baking
 {
     [Category("GPU")]
-    public class AlbedoBakerTests
+    public class ChannelBakerTests
     {
         // sRGB 8-bit round trips through the linear render target can move a channel by one step.
         const int Tolerance = 2;
@@ -160,7 +160,7 @@ namespace UVWizard.Core.Tests.Baking
 
         Texture2D Bake(BakePlan plan)
         {
-            var atlas = AlbedoBaker.Bake(plan);
+            var atlas = ChannelBaker.Bake(plan);
             created.Add(atlas);
             return atlas;
         }

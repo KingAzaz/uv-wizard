@@ -11,8 +11,10 @@ namespace UVWizard.Core.Pipeline
     {
         public BakeResult(bool fits, Material? mergedMaterial, Texture2D? atlas, Material? representative,
             IReadOnlyList<(Mesh Source, Mesh Rewritten)> replacedMeshes, IReadOnlyList<SlotNote> excluded,
-            IReadOnlyList<SlotNote> flagged)
+            IReadOnlyList<SlotNote> flagged, Texture2D? emissionAtlas = null, float emissionStrength = 1)
         {
+            EmissionAtlas = emissionAtlas;
+            EmissionStrength = emissionStrength;
             Fits = fits;
             MergedMaterial = mergedMaterial;
             Atlas = atlas;
@@ -32,7 +34,17 @@ namespace UVWizard.Core.Pipeline
         /// <summary>The material every merged slot now uses. Null when nothing was merged.</summary>
         public Material? MergedMaterial { get; }
 
+        /// <summary>The Albedo channel's texture.</summary>
         public Texture2D? Atlas { get; }
+
+        /// <summary>The Emission channel's texture, or null when no merged slot emits.</summary>
+        public Texture2D? EmissionAtlas { get; }
+
+        /// <summary>
+        /// What the merged material multiplies the Emission atlas by: the brightest merged emission's intensity,
+        /// at least 1 and at most 2. The atlas holds each emission divided by it.
+        /// </summary>
+        public float EmissionStrength { get; }
 
         /// <summary>
         /// The source the merged material's shared settings came from, or null when no source with its shader draws

@@ -67,6 +67,54 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void AGlowingToonStandardSourceStillGlowsAndNothingElseDoes()
+        {
+            // The hat emits its map at strength 1.5. The merged material carries that strength, so the atlas holds
+            // the map itself; every other part bakes black.
+            var avatar = Avatar(withComponent: true);
+            var toon = ToonStandardMaterial(Gradient(16, 4), culling: 2);
+            var glow = Gradient(16, 5);
+            toon.SetTexture("_EmissionMap", glow);
+            toon.SetColor("_EmissionColor", Color.white);
+            toon.SetFloat("_EmissionStrength", 1.5f);
+            avatar.transform.Find("Hat").GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
+            var glowing = Centroids(avatar).Select(c => c.Material == toon).ToArray();
+            var before = Centroids(avatar).Select(c => glow.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(errors, Is.Empty);
+            var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
+            Assert.That(merged.GetColor("_EmissionColor"), Is.EqualTo(Color.white));
+            Assert.That(merged.GetFloat("_EmissionStrength"), Is.EqualTo(1.5f).Within(1e-4f));
+            Assert.That(merged.GetFloat("_EmissionUV"), Is.EqualTo(0));
+            var emission = (Texture2D)merged.GetTexture("_EmissionMap");
+            Assert.That(emission, Is.Not.Null.And.Not.SameAs(merged.mainTexture));
+            Assert.That(emission.format, Is.EqualTo(TextureFormat.ASTC_6x6));
+            var readable = Readable(emission);
+            var after = Centroids(avatar).Select(c => readable.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
+            Assert.That(glowing, Has.Some.True);
+            for (var k = 0; k < after.Length; k++)
+            for (var channel = 0; channel < 3; channel++)
+                Assert.That(after[k][channel], Is.EqualTo(glowing[k] ? before[k][channel] : 0).Within(0.08f),
+                    $"triangle {k}, channel {channel}");
+        }
+
+        [Test]
+        public void AnAvatarThatDoesntGlowGetsNoEmissionTexture()
+        {
+            var avatar = Avatar(withComponent: true);
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
+            Assert.That(merged.GetTexture("_EmissionMap"), Is.Null);
+            Assert.That(merged.GetColor("_EmissionColor").maxColorComponent, Is.EqualTo(0), "Toon Standard's default: no glow");
+        }
+
+        [Test]
         public void OnlyMobileTargetsBakeUnlessOverridden()
         {
             Assert.That(MobileBuild.IsActiveFor(BuildTarget.Android), Is.True);
