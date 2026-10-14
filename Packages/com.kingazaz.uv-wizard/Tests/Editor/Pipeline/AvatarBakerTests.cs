@@ -82,6 +82,24 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AMaterialItsReaderExcludesKeepsItsSlot()
+        {
+            // Standard's detail maps sampled from UV1 can't be remapped.
+            var merged = Standard(Gradient(16, 0), Color.white);
+            var detailed = Standard(Gradient(16, 1), Color.white);
+            detailed.EnableKeyword("_DETAIL_MULX2");
+            detailed.SetFloat("_UVSec", 1);
+            var first = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), merged);
+            var second = MeshRenderer(Mesh(new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) }), detailed);
+
+            var result = Bake(first, second);
+
+            Assert.That(second.sharedMaterials, Is.EqualTo(new[] { detailed }));
+            Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(new[] { detailed }));
+            Assert.That(result.Excluded[0].Reason, Does.Contain("UV1"));
+        }
+
+        [Test]
         public void AFlaggedMaterialIsMergedAndListed()
         {
             var transparent = Standard(Gradient(16, 0), Color.white);

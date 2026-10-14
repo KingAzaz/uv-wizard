@@ -1,0 +1,29 @@
+{
+    "name": "UVWizard.NDMF.Editor",
+    "rootNamespace": "UVWizard.NDMF",
+    "references": [
+        "UVWizard.Core.Editor",
+        "UVWizard.Runtime",
+        "nadena.dev.ndmf",
+        "nadena.dev.ndmf.runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UVWIZARD_NDMF"
+    ],
+    "versionDefines": [
+        {
+            "name": "nadena.dev.ndmf",
+            "expression": "",
+            "define": "UVWIZARD_NDMF"
+        }
+    ],
+    "noEngineReferences": false
+}
