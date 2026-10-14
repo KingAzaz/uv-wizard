@@ -21,10 +21,11 @@ namespace UVWizard.NDMF
         protected override void Execute(BuildContext context)
         {
             var root = context.AvatarRootObject;
-            if (root.GetComponentInChildren<UVWizardAvatar>(true) == null || !MobileBuild.IsActive) return;
+            var avatar = root.GetComponentInChildren<UVWizardAvatar>(true);
+            if (avatar == null || !MobileBuild.IsActive) return;
 
             var shader = ToonStandard.Shader;
-            Bake(root, shader != null ? ToonStandard.Options(shader) : null,
+            Bake(root, shader != null ? ToonStandard.Options(shader, avatar) : null,
                 context.Extension<AnimatorServicesContext>());
         }
 

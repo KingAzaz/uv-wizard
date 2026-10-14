@@ -132,7 +132,7 @@ namespace UVWizard.NDMF.Tests
             Assert.That(merged.GetFloat("_BumpScale"), Is.EqualTo(1), "the atlas holds the source's strength");
             var normals = (Texture2D)merged.GetTexture("_BumpMap");
             Assert.That(normals, Is.Not.Null.And.Not.SameAs(merged.mainTexture));
-            Assert.That(normals.format, Is.EqualTo(TextureFormat.ASTC_6x6));
+            Assert.That(normals.format, Is.EqualTo(TextureFormat.ASTC_4x4), "normals band at 6x6, and Good has room for 4x4");
             Assert.That(normals.isDataSRGB, Is.False);
         }
 

@@ -8,13 +8,14 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Baking;
+using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
 using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Pipeline
 {
     [Category("GPU")]
-    public class AvatarBakerTests
+    public partial class AvatarBakerTests
     {
         readonly List<Object> created = new List<Object>();
 
@@ -323,9 +324,9 @@ namespace UVWizard.Core.Tests.Pipeline
             var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
 
-            var result = Bake(StandardOptions(compression: TextureFormat.ASTC_6x6), renderer);
+            var result = Bake(StandardOptions(compress: true), renderer);
 
-            Assert.That(result.NormalAtlas!.format, Is.EqualTo(TextureFormat.ASTC_6x6));
+            Assert.That(result.NormalAtlas!.format, Is.EqualTo(TextureFormat.ASTC_4x4));
             Assert.That(result.NormalAtlas.isDataSRGB, Is.False);
         }
 
@@ -850,10 +851,10 @@ namespace UVWizard.Core.Tests.Pipeline
         BakeResult Bake(params Renderer[] renderers) => Bake(StandardOptions(), renderers);
 
         // Standard as the merged shader, with its normal-map keyword.
-        static BakeOptions StandardOptions(int atlasSize = 2048, int padding = 8, TextureFormat? compression = null,
-            NormalEncoding normalEncoding = NormalEncoding.RGorAG) =>
-            new BakeOptions(Shader.Find("Standard"), atlasSize, padding, compression, normalMapKeyword: "_NORMALMAP",
-                normalEncoding: normalEncoding);
+        static BakeOptions StandardOptions(int atlasSize = 2048, int padding = 8, bool compress = false,
+            NormalEncoding normalEncoding = NormalEncoding.RGorAG, Budget? budget = null, Channels channels = Channels.All) =>
+            new BakeOptions(Shader.Find("Standard"), atlasSize, padding, compress, normalMapKeyword: "_NORMALMAP",
+                normalEncoding: normalEncoding, budget: budget, channels: channels);
 
         BakeResult Bake(BakeOptions options, params Renderer[] renderers) => Bake(options, null, renderers);
 

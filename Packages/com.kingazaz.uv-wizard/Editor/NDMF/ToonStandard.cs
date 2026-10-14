@@ -2,6 +2,7 @@
 
 using UnityEditor;
 using UnityEngine;
+using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
 
 namespace UVWizard.NDMF
@@ -24,11 +25,22 @@ namespace UVWizard.NDMF
         public static Shader? Shader => AssetDatabase.LoadAssetAtPath<Shader>(AssetDatabase.GUIDToAssetPath(ShaderGuid));
 
         /// <summary>
-        /// A 2048 atlas until presets and budgets arrive (#21), compressed to ASTC 6x6, the block size mobile
-        /// avatar tools commonly use.
+        /// Atlas channels up to 2048, sized and compressed to ASTC so the avatar fits the component's preset, with
+        /// the channels it turns on.
         /// </summary>
-        public static BakeOptions Options(Shader shader) => new BakeOptions(shader, atlasSize: 2048, padding: 8,
-            compression: TextureFormat.ASTC_6x6, rampProperty: "_Ramp",
-            defaultRamp: Resources.Load<Texture2D>(DefaultRamp), representativeProperties: SharedProperties);
+        public static BakeOptions Options(Shader shader, UVWizardAvatar avatar) => new BakeOptions(shader, atlasSize: 2048,
+            padding: 8, compress: true, rampProperty: "_Ramp", defaultRamp: Resources.Load<Texture2D>(DefaultRamp),
+            representativeProperties: SharedProperties, budget: BudgetOf(avatar.preset), channels: ChannelsOf(avatar));
+
+        static Budget BudgetOf(UVWizardAvatar.Preset preset) => preset switch
+        {
+            UVWizardAvatar.Preset.Excellent => Budget.Excellent,
+            UVWizardAvatar.Preset.Medium => Budget.Medium,
+            _ => Budget.Good,
+        };
+
+        static Channels ChannelsOf(UVWizardAvatar avatar) =>
+            (avatar.albedo ? Channels.Albedo : Channels.None) | (avatar.emission ? Channels.Emission : Channels.None) |
+            (avatar.normal ? Channels.Normal : Channels.None);
     }
 }
