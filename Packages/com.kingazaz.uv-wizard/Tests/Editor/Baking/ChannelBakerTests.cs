@@ -142,6 +142,22 @@ namespace UVWizard.Core.Tests.Baking
         }
 
         [Test]
+        public void AChartAtTheAtlasEdgeDoesntBlendWithTheOppositeEdge()
+        {
+            // Atlas UVs never leave 0..1, so sampling at the very edge must not wrap around to the other side.
+            var red = Solid(new Color32(255, 0, 0, 255));
+            var blue = Solid(new Color32(0, 0, 255, 255));
+            var plan = Plan(16,
+                Quad(red, Color.white, Identity, Corners(0, 0, 1, 1), Corners(0, 0, 0.5f, 1)),
+                Quad(blue, Color.white, Identity, Corners(0, 0, 1, 1), Corners(0.5f, 0, 1, 1)));
+
+            var atlas = Bake(plan);
+
+            AssertColour(new Color32(255, 0, 0, 255), atlas.GetPixelBilinear(0.001f, 0.5f), "the left edge");
+            AssertColour(new Color32(0, 0, 255, 255), atlas.GetPixelBilinear(0.999f, 0.5f), "the right edge");
+        }
+
+        [Test]
         public void GuttersMatchTheChartAtEveryMip()
         {
             // One small chart: if empty texels kept the background, low mips would darken.
@@ -154,6 +170,131 @@ namespace UVWizard.Core.Tests.Baking
             for (var mip = 0; mip < atlas.mipmapCount; mip++)
             foreach (var texel in atlas.GetPixels32(mip))
                 AssertColour(new Color32(40, 200, 120, 255), texel, $"a texel at mip {mip}");
+        }
+
+        [Test]
+        public void AnXyzNormalMapRoundTrips()
+        {
+            var source = NormalMap(Xyz);
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(source, 1, NormalEncoding.RGorAG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++)
+                AssertDecodes(SourceNormal(i, j), Texel(atlas, i, j), $"atlas ({i}, {j})");
+        }
+
+        [Test]
+        public void ADxt5nmNormalMapRoundTrips()
+        {
+            var source = NormalMap(Dxt5nm);
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(source, 1, NormalEncoding.RGorAG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++)
+                AssertDecodes(SourceNormal(i, j), Texel(atlas, i, j), $"atlas ({i}, {j})");
+        }
+
+        [Test]
+        public void AMobileDxt5nmStyleNormalMapRoundTrips()
+        {
+            var source = NormalMap(Ag);
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(source, 1, NormalEncoding.AG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++)
+                AssertDecodes(SourceNormal(i, j), Texel(atlas, i, j), $"atlas ({i}, {j})");
+        }
+
+        [Test]
+        public void TheNormalAtlasCanBeWrittenTheMobileDxt5nmStyleWay()
+        {
+            var source = NormalMap(Xyz);
+            var plan = NormalPlan(16, NormalEncoding.AG,
+                NormalQuad(source, 1, NormalEncoding.RGorAG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++)
+            {
+                var texel = Texel(atlas, i, j);
+                var expected = SourceNormal(i, j);
+                Assert.That(Unpacked(texel.a), Is.EqualTo(expected.x).Within(NormalTolerance), $"atlas ({i}, {j}): x, from alpha");
+                Assert.That(Unpacked(texel.g), Is.EqualTo(expected.y).Within(NormalTolerance), $"atlas ({i}, {j}): y, from green");
+                Assert.That((texel.r, texel.b), Is.EqualTo((texel.g, texel.g)), $"atlas ({i}, {j}): red and blue repeat y, as Unity lays it out");
+            }
+        }
+
+        [Test]
+        public void StrengthScalesTheNormalsTiltThenRenormalizes()
+        {
+            // SourceNormal(0, 0) is (-0.388, -0.324, 0.863). At strength 2 its x and y double, and it's renormalized.
+            var source = NormalMap(Xyz);
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(source, 2, NormalEncoding.RGorAG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            AssertDecodes(new Vector3(-0.584f, -0.487f, 0.649f), Texel(atlas, 0, 0), "atlas (0, 0)");
+            AssertDecodes(new Vector3(0.584f, 0.487f, 0.649f), Texel(atlas, 3, 3), "atlas (3, 3)");
+        }
+
+        [Test]
+        public void ASourceWithoutANormalMapBakesFlat()
+        {
+            // White isn't a normal map: it decodes to a normal lying flat along x and y. Strength 0 flattens it.
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(Texture2D.whiteTexture, 0, NormalEncoding.RGorAG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            AssertDecodes(new Vector3(0, 0, 1), Texel(atlas, 2, 2), "atlas (2, 2)");
+        }
+
+        [Test]
+        public void NormalsAreNeverTinted()
+        {
+            var source = NormalMap(Xyz);
+            var plan = NormalPlan(16, NormalEncoding.RGorAG, new BakeSource(source, new Color(1, 0, 0.5f), Identity,
+                Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f), new[] { 0, 1, 2, 0, 2, 3 }));
+
+            var atlas = Bake(plan);
+
+            AssertDecodes(SourceNormal(1, 2), Texel(atlas, 1, 2), "atlas (1, 2)");
+        }
+
+        [Test]
+        public void TheNormalAtlasIsLinear()
+        {
+            // An sRGB texture would be linearized as it's sampled, bending every normal.
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(NormalMap(Xyz), 1, NormalEncoding.RGorAG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            Assert.That(atlas.isDataSRGB, Is.False);
+        }
+
+        [Test]
+        public void NormalGuttersTakeTheNearestChartsNormal()
+        {
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(NormalMap(Xyz), 1, NormalEncoding.RGorAG, Corners(0, 0, 0.25f, 0.25f), Corners(0, 0, 0.25f, 1)),
+                NormalQuad(NormalMap(Xyz), 1, NormalEncoding.RGorAG, Corners(0.75f, 0.75f, 1, 1), Corners(0.75f, 0, 1, 1)));
+
+            var atlas = Bake(plan);
+
+            AssertDecodes(SourceNormal(0, 0), Texel(atlas, 5, 7), "gutter texel nearer the left chart");
+            AssertDecodes(SourceNormal(3, 3), Texel(atlas, 10, 7), "gutter texel nearer the right chart");
         }
 
         static readonly Vector4 Identity = new Vector4(1, 1, 0, 0);
@@ -224,6 +365,63 @@ namespace UVWizard.Core.Tests.Baking
             Assert.That(Math.Abs(expected.g - actual.g), Is.LessThanOrEqualTo(Tolerance), $"{where}: green {actual.g}, expected {expected.g}");
             Assert.That(Math.Abs(expected.b - actual.b), Is.LessThanOrEqualTo(Tolerance), $"{where}: blue {actual.b}, expected {expected.b}");
             Assert.That(actual.a, Is.EqualTo(255), $"{where}: alpha");
+        }
+
+        static BakePlan NormalPlan(int atlasSize, NormalEncoding encoding, params BakeSource[] sources) =>
+            new BakePlan(atlasSize, sources, encoding);
+
+        static BakeSource NormalQuad(Texture texture, float strength, NormalEncoding encoding, Vector2[] sourceCorners,
+            Vector2[] atlasCorners)
+        {
+            return new BakeSource(texture, Color.white, Identity, sourceCorners, atlasCorners, new[] { 0, 1, 2, 0, 2, 3 },
+                strength, encoding);
+        }
+
+        // Every texel of the 4x4 normal map tilts its own way.
+        static Vector3 SourceNormal(int x, int y) => new Vector3(0.3f * (x - 1.5f), 0.25f * (y - 1.5f), 1).normalized;
+
+        // A point-filtered linear normal map holding SourceNormal, encoded by the given layout.
+        Texture2D NormalMap(Func<Vector3, Color32> encode)
+        {
+            var texture = new Texture2D(4, 4, TextureFormat.RGBA32, mipChain: false, linear: true)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            var pixels = new Color32[16];
+            for (var y = 0; y < 4; y++)
+            for (var x = 0; x < 4; x++)
+                pixels[y * 4 + x] = encode(SourceNormal(x, y));
+            texture.SetPixels32(pixels);
+            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            created.Add(texture);
+            return texture;
+        }
+
+        static byte Packed(float component) => (byte)Mathf.RoundToInt((component * 0.5f + 0.5f) * 255);
+
+        static float Unpacked(byte stored) => stored / 255f * 2 - 1;
+
+        // Unity's XYZ layout: x, y and z in red, green and blue.
+        static Color32 Xyz(Vector3 n) => new Color32(Packed(n.x), Packed(n.y), Packed(n.z), 255);
+
+        // Desktop DXT5nm: x in alpha, y in green, red and blue 1.
+        static Color32 Dxt5nm(Vector3 n) => new Color32(255, Packed(n.y), 255, Packed(n.x));
+
+        // Unity's DXT5nm-style layout for mobile: (y, y, y, x).
+        static Color32 Ag(Vector3 n) => new Color32(Packed(n.y), Packed(n.y), Packed(n.y), Packed(n.x));
+
+        // A normal's tolerance per component: two 8-bit roundings and a rebuilt z.
+        const float NormalTolerance = 0.03f;
+
+        // The atlas texel decodes to the normal both ways a mobile build may read it: Unity's XYZ decoder, which
+        // takes z from blue, and its RG-or-AG decoder, which rebuilds z.
+        static void AssertDecodes(Vector3 expected, Color32 texel, string where)
+        {
+            var xyz = new Vector3(Unpacked(texel.r), Unpacked(texel.g), Unpacked(texel.b));
+            Assert.That(Vector3.Distance(expected, xyz), Is.LessThanOrEqualTo(NormalTolerance), $"{where}: XYZ decodes to {xyz}, expected {expected}");
+            // With alpha 1, the RG-or-AG decoder reads x and y from red and green as well.
+            Assert.That(texel.a, Is.EqualTo(255), $"{where}: alpha, which the RG-or-AG decoder multiplies into x");
         }
 
         // The stored sRGB bytes, unconverted.

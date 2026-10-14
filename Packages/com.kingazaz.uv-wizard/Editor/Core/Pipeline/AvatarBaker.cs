@@ -27,16 +27,19 @@ namespace UVWizard.Core.Pipeline
         // The most the merged material multiplies its Emission atlas by: Toon Standard's _EmissionStrength range.
         const float MaxEmissionStrength = 2;
 
+        /// <param name="laterEdits">What a tool after the bake will do to the rewritten meshes, or null for none.</param>
         /// <param name="animated">Slots that animations swap or change, which stay out of the atlas.</param>
         public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options,
-            IReadOnlyList<AnimatedSlot>? animated = null)
+            ILaterMeshEdits? laterEdits = null, IReadOnlyList<AnimatedSlot>? animated = null)
         {
             var excluded = new List<SlotNote>();
             var flagged = new List<SlotNote>();
             var slots = new List<Slot>();
+            var needs = new Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)>();
             var readings = new Dictionary<Material, SourceMaterialReading>();
             foreach (var renderer in renderers)
-                CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged);
+                CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
+                    laterEdits, needs);
             if (slots.Count == 0) return BakeResult.Unchanged(true, excluded, flagged);
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -77,26 +80,38 @@ namespace UVWizard.Core.Pipeline
                 }
             }
 
-            var atlas = ChannelBaker.Bake(new BakePlan(options.AtlasSize, slots.ConvertAll(AlbedoSource)));
-            atlas.name = "UV Wizard Albedo";
-            if (options.Compression is { } format) AtlasCompressor.Compress(atlas, format);
+            var atlas = BakeChannel(new BakePlan(options.AtlasSize, slots.ConvertAll(AlbedoSource)), "UV Wizard Albedo", options);
             var (emissionAtlas, emissionStrength) = EmissionAtlas(slots, options, flagged);
+            var normalAtlas = NormalAtlas(slots, options);
 
             var representative = Representative(slots, charts, options.MergedShader);
-            var merged = MergedMaterial(options, atlas, emissionAtlas, emissionStrength, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
+            var merged = MergedMaterial(options, atlas, emissionAtlas, emissionStrength, normalAtlas, representative,
+                slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
-            var (replaced, moved) = RewriteRenderers(slots, merged);
+            var (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged, emissionAtlas,
-                emissionStrength, moved);
+                emissionStrength, normalAtlas, moved);
         }
 
         // Sorts each of the renderer's material slots into merged (a Slot), excluded or skipped.
         static void CollectSlots(Renderer renderer, IReadOnlyList<AnimatedSlot> animated,
             Dictionary<Material, SourceMaterialReading> readings, List<Slot> slots, List<SlotNote> excluded,
-            List<SlotNote> flagged)
+            List<SlotNote> flagged, ILaterMeshEdits? laterEdits,
+            Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs)
         {
             var mesh = MeshOf(renderer);
             if (mesh == null) return;
+            if (laterEdits?.Needs(renderer) is { } rendererNeeds) needs[renderer] = rendererNeeds;
+            else if (laterEdits != null)
+            {
+                var sources = renderer.sharedMaterials;
+                for (var s = 0; s < sources.Length; s++)
+                    if (sources[s] != null)
+                        excluded.Add(new SlotNote(renderer, s, sources[s], "A tool that runs after the bake reads " +
+                            "this mesh's UV0, and the bake can't keep it where that tool would find it."));
+                return;
+            }
+            using var removals = laterEdits?.Removals(renderer);
             var materials = renderer.sharedMaterials;
             using var meshes = MeshUtility.AcquireReadOnlyMeshData(mesh);
             var data = meshes[0];
@@ -148,7 +163,10 @@ namespace UVWizard.Core.Pipeline
                 }
 
                 uv0 ??= Uvs(data);
-                var triangles = Indices(data, s);
+                var corners = Indices(data, s);
+                // Triangles a later tool deletes take no atlas space.
+                var removed = removals == null ? null : Removed(corners, s, removals);
+                var triangles = removed == null ? corners : Kept(corners, removed);
                 var texture = reading.Albedo?.Texture;
                 // Islands and charts live in the texture's own UV space, tiling and offset applied, so a tiled
                 // texture counts its repeats against the limit and its charts are sized by the texels they sample.
@@ -164,7 +182,8 @@ namespace UVWizard.Core.Pipeline
                 }
                 if (reading.Verdict == MaterialVerdict.Flagged && triangles.Length > 0)
                     flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? "It may look different after the bake."));
-                slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, triangles, islands, TextureSize(reading)));
+                slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, corners, removed, triangles,
+                    islands, TextureSize(reading)));
             }
         }
 
@@ -199,16 +218,52 @@ namespace UVWizard.Core.Pipeline
             return indices.ToArray();
         }
 
-        // Source texels per unit of the texture's own UV space: the larger of the albedo and emission textures, so
-        // neither channel is baked below its own detail.
+        // Which of the submesh's triangles a later tool deletes, or null when it deletes none of them.
+        static bool[]? Removed(int[] corners, int submesh, ITriangleRemovals removals)
+        {
+            var removed = new bool[corners.Length / 3];
+            var any = false;
+            for (var t = 0; t < removed.Length; t++)
+                any |= removed[t] = removals.WillRemove(submesh, corners[t * 3], corners[t * 3 + 1], corners[t * 3 + 2]);
+            return any ? removed : null;
+        }
+
+        static int[] Kept(int[] corners, bool[] removed)
+        {
+            var kept = new List<int>(corners.Length);
+            for (var t = 0; t < removed.Length; t++)
+                if (!removed[t]) kept.AddRange(new[] { corners[t * 3], corners[t * 3 + 1], corners[t * 3 + 2] });
+            return kept.ToArray();
+        }
+
+        // Source texels per unit of the charts' UV space, the albedo's with its tiling applied: the most that any
+        // channel the slot bakes needs, so none is baked below its own detail. A channel tiled more finely than the
+        // albedo needs more texels per unit.
         static Vector2Int TextureSize(SourceMaterialReading reading)
         {
+            var albedoScale = reading.Albedo?.ScaleOffset ?? new Vector4(1, 1, 0, 0);
             Vector2Int? size = null;
-            foreach (var texture in new[] { reading.Albedo?.Texture, reading.Emission?.Texture })
-                if (texture != null)
-                    size = Vector2Int.Max(size ?? Vector2Int.zero, new Vector2Int(texture.width, texture.height));
+            foreach (var channel in new[] { reading.Albedo, BakedEmission(reading), BakedNormal(reading) })
+            {
+                if (channel?.Texture is not { } texture) continue;
+                var tiling = new Vector2(Ratio(channel.ScaleOffset.x, albedoScale.x), Ratio(channel.ScaleOffset.y, albedoScale.y));
+                var needed = Vector2Int.CeilToInt(Vector2.Scale(new Vector2(texture.width, texture.height), tiling));
+                size = Vector2Int.Max(size ?? Vector2Int.zero, needed);
+            }
             return size ?? UntexturedSize;
         }
+
+        // How many times a channel's texture repeats per repeat of the albedo's. A zero albedo scale collapses every
+        // chart to a point, so any ratio does.
+        static float Ratio(float channel, float albedo) => albedo != 0 ? Mathf.Abs(channel / albedo) : 1;
+
+        // The source's emission, or null when it doesn't glow.
+        static ChannelSource? BakedEmission(SourceMaterialReading reading) =>
+            reading.Emission is { } emission && Intensity(emission.Tint) > 0 ? emission : null;
+
+        // The source's normal map, or null when it has none or its strength flattens it.
+        static ChannelSource? BakedNormal(SourceMaterialReading reading) =>
+            reading.Normal is { Texture: not null } normal && normal.Strength != 0 ? normal : null;
 
         // Calls visit(corner index, position in chart texels) for every corner of the island's triangles,
         // moved into the island's home tile.
@@ -227,8 +282,7 @@ namespace UVWizard.Core.Pipeline
         static (Texture2D? Atlas, float Strength) EmissionAtlas(List<Slot> slots, BakeOptions options,
             List<SlotNote> flagged)
         {
-            var emitting = slots.FindAll(slot =>
-                slot.Draws && slot.Reading.Emission != null && Intensity(slot.Reading.Emission.Tint) > 0);
+            var emitting = slots.FindAll(slot => slot.Draws && BakedEmission(slot.Reading) != null);
             if (emitting.Count == 0) return (null, 1);
             var strength = 1f;
             foreach (var slot in emitting) strength = Mathf.Max(strength, Intensity(slot.Reading.Emission!.Tint));
@@ -243,7 +297,7 @@ namespace UVWizard.Core.Pipeline
             }
 
             // Slots that don't emit bake black, so the gutter fill can't spread a glow over their charts.
-            var atlas = ChannelBaker.Bake(new BakePlan(options.AtlasSize, slots.ConvertAll(slot =>
+            var atlas = BakeChannel(new BakePlan(options.AtlasSize, slots.ConvertAll(slot =>
             {
                 var emission = slot.Reading.Emission;
                 if (emission == null) return Source(slot, null, Color.black);
@@ -251,10 +305,29 @@ namespace UVWizard.Core.Pipeline
                 var divisor = Mathf.Max(strength, Intensity(emission.Tint));
                 var tint = new Color(linear.r / divisor, linear.g / divisor, linear.b / divisor, linear.a).gamma;
                 return Source(slot, new ChannelSource(emission.Texture, tint, emission.ScaleOffset, emission.UvChannel), Color.black);
-            })));
-            atlas.name = "UV Wizard Emission";
-            if (options.Compression is { } format) AtlasCompressor.Compress(atlas, format);
+            })), "UV Wizard Emission", options);
             return (atlas, strength);
+        }
+
+        // The Normal channel, or null when no merged slot that draws has a normal map. Slots without one bake flat,
+        // so the gutter fill can't spread another chart's bumps over theirs.
+        static Texture2D? NormalAtlas(List<Slot> slots, BakeOptions options)
+        {
+            if (!slots.Exists(slot => slot.Draws && BakedNormal(slot.Reading) != null)) return null;
+            return BakeChannel(new BakePlan(options.AtlasSize, slots.ConvertAll(slot =>
+            {
+                var normal = BakedNormal(slot.Reading);
+                var encoding = normal != null ? NormalMaps.EncodingOf(normal.Texture!, options.NormalEncoding) : NormalEncoding.RGorAG;
+                return Source(slot, normal, Color.white, normal?.Strength ?? 0, encoding);
+            }), options.NormalEncoding), "UV Wizard Normal", options);
+        }
+
+        static Texture2D BakeChannel(BakePlan plan, string name, BakeOptions options)
+        {
+            var atlas = ChannelBaker.Bake(plan);
+            atlas.name = name;
+            if (options.Compression is { } format) AtlasCompressor.Compress(atlas, format);
+            return atlas;
         }
 
         // A colour's brightest linear component: what the shader multiplies by once the colour is linearized.
@@ -263,15 +336,16 @@ namespace UVWizard.Core.Pipeline
         static BakeSource AlbedoSource(Slot slot) => Source(slot, slot.Reading.Albedo, Color.white);
 
         // One bake source per slot, its corners unshared so each carries its own atlas UV. A slot without the
-        // channel bakes the fallback tint.
-        static BakeSource Source(Slot slot, ChannelSource? channel, Color fallback)
+        // channel bakes the fallback tint, or, for normals, flat at strength 0.
+        static BakeSource Source(Slot slot, ChannelSource? channel, Color fallback, float strength = 1,
+            NormalEncoding encoding = NormalEncoding.RGorAG)
         {
             var sourceUv = Array.ConvertAll(slot.Triangles, v => slot.Uv0[v]);
             var corners = new int[sourceUv.Length];
             for (var k = 0; k < corners.Length; k++) corners[k] = k;
             return new BakeSource(channel?.Texture != null ? channel.Texture : Texture2D.whiteTexture,
                 channel?.Tint ?? fallback, channel?.ScaleOffset ?? new Vector4(1, 1, 0, 0), sourceUv, slot.AtlasUv,
-                corners);
+                corners, strength, encoding);
         }
 
         // The source with the merged shader whose charts cover the most texels, first in slot order on a tie. A
@@ -343,7 +417,7 @@ namespace UVWizard.Core.Pipeline
         }
 
         static Material MergedMaterial(BakeOptions options, Texture2D atlas, Texture2D? emissionAtlas,
-            float emissionStrength, Material? representative, bool vertexColour)
+            float emissionStrength, Texture2D? normalAtlas, Material? representative, bool vertexColour)
         {
             var material = new Material(options.MergedShader) { name = "UV Wizard merged" };
             material.mainTexture = atlas;
@@ -359,6 +433,13 @@ namespace UVWizard.Core.Pipeline
                 }
                 else material.SetColor("_EmissionColor", new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
                 if (material.HasProperty("_EmissionUV")) material.SetFloat("_EmissionUV", 0);
+            }
+            // The atlas already holds each source's strength.
+            if (normalAtlas != null)
+            {
+                material.SetTexture("_BumpMap", normalAtlas);
+                if (material.HasFloat("_BumpScale")) material.SetFloat("_BumpScale", 1);
+                material.EnableKeyword(options.NormalMapKeyword);
             }
             if (material.HasColor("_Color")) material.SetColor("_Color", Color.white);
             if (material.HasFloat("_VertexColor")) material.SetFloat("_VertexColor", vertexColour ? 1 : 0);
@@ -392,10 +473,12 @@ namespace UVWizard.Core.Pipeline
         // Gives each renderer with merged slots a rewritten mesh and the merged material on those slots, and says
         // where each of its slots went.
         static (List<(Mesh Source, Mesh Rewritten)> Replaced, List<(Renderer Renderer, int[] SlotOf)> Moved)
-            RewriteRenderers(List<Slot> slots, Material merged)
+            RewriteRenderers(List<Slot> slots, Material merged, ILaterMeshEdits? laterEdits,
+                Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs)
         {
             // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was.
-            var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials, int[] SlotOf)>();
+            var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials, int[] SlotOf,
+                int? KeptIn)>();
             for (var first = 0; first < slots.Count;)
             {
                 var renderer = slots[first].Renderer;
@@ -403,10 +486,11 @@ namespace UVWizard.Core.Pipeline
                 var atlasUvs = new Vector2[]?[mesh.subMeshCount];
                 var end = first;
                 for (; end < slots.Count && slots[end].Renderer == renderer; end++)
-                    atlasUvs[slots[end].Submesh] = slots[end].AtlasUv;
+                    atlasUvs[slots[end].Submesh] = CornerAtlasUvs(slots[end]);
                 first = end;
 
-                var rewritten = Uv0Rewriter.Rewrite(mesh, atlasUvs);
+                var (keptIn, keepSubmeshes) = needs.TryGetValue(renderer, out var rendererNeeds) ? rendererNeeds : (null, false);
+                var rewritten = Uv0Rewriter.Rewrite(mesh, atlasUvs, keptIn, keepSubmeshes);
                 var materials = renderer.sharedMaterials;
                 var drawn = Math.Min(materials.Length, mesh.subMeshCount);
                 var count = 0;
@@ -418,12 +502,12 @@ namespace UVWizard.Core.Pipeline
                 for (var s = mesh.subMeshCount; s < materials.Length; s++)
                     replacement[slotOf[s] = count + s - mesh.subMeshCount] = materials[s];
 
-                changes.Add((renderer, mesh, rewritten.Mesh, replacement, slotOf));
+                changes.Add((renderer, mesh, rewritten.Mesh, replacement, slotOf, keptIn));
             }
 
             var replaced = new List<(Mesh Source, Mesh Rewritten)>();
             var moved = new List<(Renderer Renderer, int[] SlotOf)>();
-            foreach (var (renderer, source, rewritten, materials, slotOf) in changes)
+            foreach (var (renderer, source, rewritten, materials, slotOf, _) in changes)
             {
                 // A skinned renderer keeps its blend-shape weights: the rewritten mesh has the same blend shapes.
                 if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten;
@@ -432,15 +516,36 @@ namespace UVWizard.Core.Pipeline
                 replaced.Add((source, rewritten));
                 moved.Add((renderer, slotOf));
             }
+            foreach (var (renderer, _, _, _, _, keptIn) in changes)
+                if (keptIn is { } channel) laterEdits!.KeptSourceUv0(renderer, channel);
             return (replaced, moved);
+        }
+
+        // An atlas UV for every corner of the slot's submesh. A corner of a triangle a later tool deletes takes its
+        // vertex's atlas UV from a kept triangle, so the vertex doesn't split, or the atlas origin if it has none.
+        static Vector2[] CornerAtlasUvs(Slot slot)
+        {
+            if (slot.Removed == null) return slot.AtlasUv;
+            var atVertex = new Dictionary<int, Vector2>();
+            for (var k = 0; k < slot.Triangles.Length; k++) atVertex[slot.Triangles[k]] = slot.AtlasUv[k];
+            var uvs = new Vector2[slot.Corners.Length];
+            var kept = 0;
+            for (var t = 0; t < slot.Removed.Length; t++)
+            for (var k = t * 3; k < t * 3 + 3; k++)
+                uvs[k] = !slot.Removed[t] ? slot.AtlasUv[kept++]
+                    : atVertex.TryGetValue(slot.Corners[k], out var uv) ? uv : Vector2.zero;
+            return uvs;
         }
 
         /// <summary>One merged material slot: a submesh of a renderer, its source, and its atlas UVs once packed.</summary>
         sealed class Slot
         {
             public Slot(Renderer renderer, Mesh mesh, int submesh, Material material, SourceMaterialReading reading,
-                Vector2[] uv0, Vector2[] sampled, int[] triangles, Island[] islands, Vector2Int textureSize)
+                Vector2[] uv0, Vector2[] sampled, int[] corners, bool[]? removed, int[] triangles, Island[] islands,
+                Vector2Int textureSize)
             {
+                Corners = corners;
+                Removed = removed;
                 Renderer = renderer;
                 Mesh = mesh;
                 Submesh = submesh;
@@ -465,7 +570,16 @@ namespace UVWizard.Core.Pipeline
             /// <summary>Each vertex's UV0 with the albedo texture's tiling and offset applied: where it samples.</summary>
             public Vector2[] Sampled { get; }
 
-            /// <summary>Three vertex indices per triangle, base vertex applied.</summary>
+            /// <summary>The submesh's indices, base vertex applied: three per triangle.</summary>
+            public int[] Corners { get; }
+
+            /// <summary>One flag per triangle of <see cref="Corners"/>: true when a later tool deletes it. Null when none is.</summary>
+            public bool[]? Removed { get; }
+
+            /// <summary>
+            /// Three vertex indices per triangle that bakes: <see cref="Corners"/> less the triangles a later tool
+            /// deletes.
+            /// </summary>
             public int[] Triangles { get; }
 
             /// <summary>False for an empty submesh: it's merged so it costs no material slot, but shows nothing.</summary>

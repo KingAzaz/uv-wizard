@@ -22,7 +22,7 @@ namespace UVWizard.Core.Meshes
         /// Returns a copy of the mesh whose merged triangles sample the atlas. A vertex whose
         /// triangles want different UV0s, because they sit in different charts or some belong to an
         /// excluded material, gets one copy per UV0 with every other attribute copied. The merged
-        /// submeshes collapse into one.
+        /// submeshes collapse into one, unless <paramref name="keepSubmeshes"/> is set.
         /// </summary>
         /// <param name="atlasUvs">
         /// One entry per submesh. Null keeps the submesh's UV0, for an excluded material. Otherwise
@@ -30,17 +30,31 @@ namespace UVWizard.Core.Meshes
         /// wherever its corners' UVs differ at all, so the corners of a vertex in one chart must
         /// get bit-identical atlas UVs.
         /// </param>
+        /// <param name="keepSourceUv0In">
+        /// A UV channel, 1 to 7, that the mesh doesn't use, to hold every copy's UV0 as the source has it, for
+        /// a later tool that reads the source UVs. Null keeps no copy.
+        /// </param>
+        /// <param name="keepSubmeshes">
+        /// Keeps every merged submesh in its own place, for a later tool that reads the mesh per material slot.
+        /// </param>
         /// <remarks>
         /// UV0 keeps its format: Float32, Float16 or UNorm16. Float16 holds atlas UVs to within
         /// 2^-11, a texel of a 2048 atlas.
         /// </remarks>
-        public static RewrittenMesh Rewrite(Mesh source, IReadOnlyList<Vector2[]?> atlasUvs)
+        public static RewrittenMesh Rewrite(Mesh source, IReadOnlyList<Vector2[]?> atlasUvs, int? keepSourceUv0In = null,
+            bool keepSubmeshes = false)
         {
             // The editor's MeshUtility variant reads meshes whose Read/Write is off.
             using var meshes = MeshUtility.AcquireReadOnlyMeshData(source);
             var data = meshes[0];
             if (atlasUvs.Count != data.subMeshCount)
                 throw new ArgumentException($"{atlasUvs.Count} entries for {data.subMeshCount} submeshes.", nameof(atlasUvs));
+            if (keepSourceUv0In is { } keptIn)
+            {
+                if (keptIn is < 1 or > 7) throw new ArgumentOutOfRangeException(nameof(keepSourceUv0In));
+                if (data.HasVertexAttribute(TexCoord(keptIn)))
+                    throw new ArgumentException($"The mesh already uses UV{keptIn}.", nameof(keepSourceUv0In));
+            }
 
             var indices = new int[data.subMeshCount][];
             for (var s = 0; s < data.subMeshCount; s++)
@@ -97,7 +111,15 @@ namespace UVWizard.Core.Meshes
                 CopyBoneWeights(data, source, mesh, sourceOf);
                 CopyBlendShapes(source, mesh, sourceOf);
             }
-            var (submeshOf, merged) = WriteSubmeshes(data, mesh, atlasUvs, corners);
+            if (keepSourceUv0In is { } channel)
+            {
+                using var sourceUv0 = new NativeArray<Vector2>(data.vertexCount, Allocator.Temp);
+                data.GetUVs(0, sourceUv0);
+                var kept = new Vector2[sourceOf.Length];
+                for (var v = 0; v < kept.Length; v++) kept[v] = sourceUv0[sourceOf[v]];
+                mesh.SetUVs(channel, kept);
+            }
+            var (submeshOf, merged) = WriteSubmeshes(data, mesh, atlasUvs, corners, keepSubmeshes);
             mesh.bounds = source.bounds;
             // Mip streaming picks the atlas's mip level from UV0's texel density. Unity's
             // recalculation logs an error on a mesh with line or point submeshes, so those keep the
@@ -105,6 +127,8 @@ namespace UVWizard.Core.Meshes
             if (merged != null && AllTriangles(mesh)) mesh.RecalculateUVDistributionMetric(0);
             return new RewrittenMesh(mesh, submeshOf, merged);
         }
+
+        static VertexAttribute TexCoord(int channel) => VertexAttribute.TexCoord0 + channel;
 
         /// <summary>True when UV0 stored this way can be rewritten to atlas positions.</summary>
         public static bool CanHoldAtlasUvs(VertexAttributeFormat format, int dimension) =>
@@ -243,17 +267,19 @@ namespace UVWizard.Core.Meshes
             return runs;
         }
 
-        // Excluded submeshes keep their order; the merged ones become one, where the first of them was.
+        // Excluded submeshes keep their order; the merged ones become one, where the first of them was, unless
+        // they keep their places too.
         static (int[] SubmeshOf, int? Merged) WriteSubmeshes(Mesh.MeshData data, Mesh mesh,
-            IReadOnlyList<Vector2[]?> atlasUvs, int[][] corners)
+            IReadOnlyList<Vector2[]?> atlasUvs, int[][] corners, bool keepSubmeshes)
         {
             var submeshOf = new int[data.subMeshCount];
             var written = new List<(List<int> Indices, MeshTopology Topology)>();
             int? merged = null;
             for (var s = 0; s < data.subMeshCount; s++)
             {
-                if (atlasUvs[s] == null)
+                if (atlasUvs[s] == null || keepSubmeshes)
                 {
+                    if (atlasUvs[s] != null) merged ??= written.Count;
                     submeshOf[s] = written.Count;
                     written.Add((new List<int>(corners[s]), data.GetSubMesh(s).topology));
                     continue;
@@ -352,7 +378,10 @@ namespace UVWizard.Core.Meshes
         /// <summary>For each source submesh, the rewritten mesh's submesh that holds its triangles.</summary>
         public IReadOnlyList<int> SubmeshOf { get; }
 
-        /// <summary>The submesh that takes the merged material, or null when nothing on the mesh was merged.</summary>
+        /// <summary>
+        /// The submesh that takes the merged material, the first of them when merged submeshes keep their
+        /// places, or null when nothing on the mesh was merged.
+        /// </summary>
         public int? MergedSubmesh { get; }
     }
 }

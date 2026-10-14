@@ -4,8 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UVWizard.Core.Baking;
 using UVWizard.Core.Pipeline;
 using Object = UnityEngine.Object;
 
@@ -197,6 +199,201 @@ namespace UVWizard.Core.Tests.Pipeline
             var result = Bake(renderer);
 
             Assert.That(result.EmissionAtlas, Is.Null);
+        }
+
+        [Test]
+        public void ADimmerEmitterBesideOneClampedAtTheLimitIsDividedByTheLimit()
+        {
+            // The blinding source peaks at 3, so the strength stops at 2. The dim one, at 0.6, is stored as 0.3.
+            var blinding = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(3, 1.5f, 0.6f).gamma);
+            var dim = Emitting(Standard(Gradient(16, 1), Color.white), null, new Color(0.6f, 0.6f, 0.6f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f) }, new[] { Quad(1, 0.5f, 0.5f, 0.9f, 0.9f) }),
+                blinding, dim);
+
+            var result = Bake(renderer);
+
+            Assert.That(result.EmissionStrength, Is.EqualTo(2));
+            var centroids = Centroids(renderer).ToArray();
+            AssertClose(new Color(0.3f, 0.3f, 0.3f).gamma, result.EmissionAtlas!.GetPixelBilinear(centroids[3].Uv.x, centroids[3].Uv.y), "dim");
+        }
+
+        [Test]
+        public void AnEmissionSwitchedOnButBlackDoesntSizeTheCharts()
+        {
+            // Its 256 px map would size the chart for 256 texels per UV, but nothing glows, so only the albedo counts.
+            var plain = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+            var dark = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }),
+                Emitting(Standard(Gradient(16, 0), Color.white), Gradient(256, 1), Color.black));
+
+            Bake(plain);
+            Bake(dark);
+
+            Assert.That(CornerUvs(Filter(dark).sharedMesh, 0), Is.EqualTo(CornerUvs(Filter(plain).sharedMesh, 0)));
+        }
+
+        [Test]
+        public void ANormalMappedSourceBakesItsNormalsIntoTheNormalAtlas()
+        {
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
+            var before = Centroids(renderer).Select(SourceNormal).ToArray();
+
+            var result = Bake(renderer);
+
+            Assert.That(result.NormalAtlas, Is.Not.Null);
+            Assert.That(result.MergedMaterial!.GetTexture("_BumpMap"), Is.SameAs(result.NormalAtlas));
+            Assert.That(result.MergedMaterial.GetFloat("_BumpScale"), Is.EqualTo(1), "the atlas holds each source's strength");
+            Assert.That(result.MergedMaterial.IsKeywordEnabled("_NORMALMAP"), Is.True);
+            var after = Centroids(renderer).Select(c => Decoded(result.NormalAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y))).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertNormalClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void WhenNoMergedSlotHasANormalMapTheNormalChannelStaysOff()
+        {
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+
+            var result = Bake(renderer);
+
+            Assert.That(result.NormalAtlas, Is.Null);
+            Assert.That(result.MergedMaterial!.GetTexture("_BumpMap"), Is.Null);
+            Assert.That(result.MergedMaterial.IsKeywordEnabled("_NORMALMAP"), Is.False);
+        }
+
+        [Test]
+        public void ANormalMapAtZeroStrengthLeavesTheNormalChannelOff()
+        {
+            var flat = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 0);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), flat);
+
+            var result = Bake(renderer);
+
+            Assert.That(result.NormalAtlas, Is.Null);
+        }
+
+        [Test]
+        public void ANormalMappedSlotThatDrawsNothingLeavesTheNormalChannelOff()
+        {
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var mesh = Mesh(Array.Empty<(Vector3[], Vector2[])>(), new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) });
+            var renderer = MeshRenderer(mesh, bumpy, Standard(Gradient(16, 2), Color.white));
+
+            var result = Bake(renderer);
+
+            Assert.That(result.NormalAtlas, Is.Null);
+        }
+
+        [Test]
+        public void ASlotWithoutANormalMapBakesFlatBesideOneWithIt()
+        {
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var plain = Standard(Gradient(16, 2), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) }),
+                bumpy, plain);
+            var plainTriangles = Filter(renderer).sharedMesh.GetIndices(1).Length / 3;
+
+            var result = Bake(renderer);
+
+            var centroids = Centroids(renderer).ToArray();
+            for (var k = centroids.Length - plainTriangles; k < centroids.Length; k++)
+                AssertNormalClose(Vector3.forward, Decoded(result.NormalAtlas!.GetPixelBilinear(centroids[k].Uv.x, centroids[k].Uv.y)),
+                    $"plain triangle {k}");
+        }
+
+        [Test]
+        public void ANormalMapSharperThanTheAlbedoKeepsItsDetail()
+        {
+            // The albedo is untextured, so on its own it would size the chart at 8 texels per UV, smearing the
+            // normal checker's 4-texel cells together. Each grid cell lies inside one checker cell.
+            var bumpy = NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalChecker(32, 4), 1);
+            var renderer = MeshRenderer(Grid(1, 6, 8), bumpy);
+            var before = Centroids(renderer).Select(SourceNormal).ToArray();
+
+            var result = Bake(renderer);
+
+            var after = Centroids(renderer).Select(c => Decoded(result.NormalAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y))).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertNormalClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void TheCompressedNormalAtlasStaysLinear()
+        {
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
+
+            var result = Bake(StandardOptions(compression: TextureFormat.ASTC_6x6), renderer);
+
+            Assert.That(result.NormalAtlas!.format, Is.EqualTo(TextureFormat.ASTC_6x6));
+            Assert.That(result.NormalAtlas.isDataSRGB, Is.False);
+        }
+
+        [Test]
+        public void OnAPlatformThatReadsNormalsFromAlphaAndGreenTheAtlasIsWrittenThatWay()
+        {
+            // The source is made in code, not imported as a normal map, so it's read as it is, with x in red.
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
+            var before = Centroids(renderer).Select(SourceNormal).ToArray();
+
+            var result = Bake(StandardOptions(normalEncoding: NormalEncoding.AG), renderer);
+
+            var after = Centroids(renderer).Select(c => DecodedAg(result.NormalAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y))).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertNormalClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void AChartTurnedInTheAtlasLightsLikeItsSource()
+        {
+            // The first chart is 64 x 36 texels in a 64 px atlas. With 4 px of padding it leaves a 64 x 24 strip,
+            // which takes the second, 20 x 60, only turned on its side. Each keeps its mesh's tangents, which follow
+            // its source's U.
+            var wide = MeshRenderer(TangentQuad(new Vector2(0, 0), new Vector2(1, 0.5625f)),
+                NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 0), 1));
+            var tall = MeshRenderer(TangentQuad(new Vector2(0, 0), new Vector2(0.3125f, 0.9375f)),
+                NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 1), 1));
+            var before = new[] { WorldNormals(wide), WorldNormals(tall) };
+
+            Bake(StandardOptions(atlasSize: 64, padding: 4), wide, tall);
+
+            var uvs = Filter(tall).sharedMesh.uv;
+            var sourceU = uvs[1] - uvs[0];
+            Assert.That(Mathf.Abs(sourceU.y), Is.GreaterThan(Mathf.Abs(sourceU.x)), "the tall chart is turned");
+            AssertSameNormals(before[0], WorldNormals(wide), "wide");
+            AssertSameNormals(before[1], WorldNormals(tall), "tall");
+        }
+
+        [Test]
+        public void AMirroredChartLightsLikeItsSource()
+        {
+            // Two quads sample the same texels, one mirrored, so they stack into one chart. The mirrored one's
+            // tangents point the other way.
+            var mesh = TangentQuads((new Vector2(0, 0), new Vector2(0.5f, 0.5f)), (new Vector2(0.5f, 0), new Vector2(0, 0.5f)));
+            var renderer = MeshRenderer(mesh, NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 0), 1));
+            Assume.That(mesh.tangents.Select(t => t.w).Distinct().Count(), Is.EqualTo(2), "one quad is mirrored");
+            var before = WorldNormals(renderer);
+
+            Bake(StandardOptions(atlasSize: 64, padding: 0), renderer);
+
+            var uvs = Filter(renderer).sharedMesh.uv;
+            Assert.That(uvs.Distinct().Count(), Is.EqualTo(4), "the quads share one chart");
+            AssertSameNormals(before, WorldNormals(renderer), "mirrored");
+        }
+
+        [Test]
+        public void TheWorldNormalRenderShowsTheNearestSurfaceWhateverTheDrawOrder()
+        {
+            // Guards the render comparisons above: overlapping surfaces mustn't come out by draw order.
+            var near = new[] { Quad(0.2f, 0, 0, 1, 1) };
+            var far = new[] { Quad(0.8f, 0, 0, 1, 1) };
+            var tilted = NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 0), 1);
+            var other = NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 3), 1);
+            var nearFirst = MeshRenderer(WithTangents(Mesh(near, far)), tilted, other);
+            var farFirst = MeshRenderer(WithTangents(Mesh(far, near)), other, tilted);
+
+            AssertSameNormals(WorldNormals(nearFirst), WorldNormals(farFirst), "drawn in either order");
         }
 
         [Test]
@@ -574,18 +771,125 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(CornerUvs(Filter(second).sharedMesh, 0), Is.EqualTo(CornerUvs(Filter(first).sharedMesh, 0)));
         }
 
-        BakeResult Bake(params Renderer[] renderers) => Bake(new BakeOptions(Shader.Find("Standard")), renderers);
-
-        BakeResult Bake(BakeOptions options, params Renderer[] renderers) => Bake(options, renderers, Array.Empty<AnimatedSlot>());
-
-        BakeResult Bake(BakeOptions options, Renderer[] renderers, params AnimatedSlot[] animated)
+        [Test]
+        public void TrianglesALaterToolDeletesTakeNoAtlasSpaceButStayForItToDelete()
         {
-            var result = AvatarBaker.Bake(renderers, options, animated);
+            // The 320 quads of ChartsThatFitAtNoScaleLeaveEveryRendererUnchanged, of which the tool deletes all
+            // but the first: what's left fits.
+            var quads = Enumerable.Range(0, 320).Select(i => Quad(0, (i % 20) / 20f, (i / 20) / 16f, (i % 20 + 0.4f) / 20f, (i / 20 + 0.4f) / 16f)).ToArray();
+            var mesh = Mesh(quads);
+            var renderer = MeshRenderer(mesh, Standard(Gradient(1024, 0), Color.white));
+            var tool = new LaterTool { Deletes = (submesh, a, b, c) => a >= 4 };
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 0), tool, renderer);
+
+            Assert.That(result.Fits, Is.True);
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
+            Assert.That(Filter(renderer).sharedMesh.GetIndices(0), Has.Length.EqualTo(320 * 6), "the tool deletes them, not the bake");
+            Assert.That(tool.Disposed, Is.True);
+        }
+
+        [Test]
+        public void ADeletedTriangleDoesntSplitTheVerticesItSharesWithKeptOnes()
+        {
+            // One island of eight triangles, the last of which the tool deletes.
+            var mesh = Grid(1, 2, 4);
+            var last = mesh.GetIndices(0).Skip(21).ToArray();
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white));
+            var tool = new LaterTool { Deletes = (submesh, a, b, c) => new[] { a, b, c }.SequenceEqual(last) };
+
+            Bake(new BakeOptions(Shader.Find("Standard")), tool, renderer);
+
+            Assert.That(Filter(renderer).sharedMesh.vertexCount, Is.EqualTo(mesh.vertexCount));
+        }
+
+        [Test]
+        public void ALaterToolThatReadsTheSourceUv0FindsItInTheChannelItAskedFor()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white));
+            var tool = new LaterTool { SourceUv0Channel = 3 };
+
+            Bake(new BakeOptions(Shader.Find("Standard")), tool, renderer);
+
+            var rewritten = Filter(renderer).sharedMesh;
+            var kept = new List<Vector2>();
+            rewritten.GetUVs(3, kept);
+            Assert.That(rewritten.GetIndices(0).Select(i => kept[i]), Is.EqualTo(CornerUvs(mesh, 0).Concat(CornerUvs(mesh, 1))));
+            Assert.That(tool.Kept, Is.EqualTo(new[] { ((Renderer)renderer, 3) }));
+        }
+
+        [Test]
+        public void ARendererWhoseSourceUv0ALaterToolCantFindIsExcluded()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var materials = new[] { Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white) };
+            var renderer = MeshRenderer(mesh, materials);
+            var tool = new LaterTool { NoChannelFree = true, Deletes = (submesh, a, b, c) => true };
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), tool, renderer);
+
+            Assert.That(Filter(renderer).sharedMesh, Is.SameAs(mesh));
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(materials));
+            Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(materials));
+            Assert.That(tool.Disposed, Is.False, "its triangles aren't asked about");
+        }
+
+        [Test]
+        public void ALaterToolThatReadsMaterialSlotsKeepsThemApart()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white));
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { KeepsSubmeshes = true }, renderer);
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial, result.MergedMaterial }));
+            Assert.That(Filter(renderer).sharedMesh.subMeshCount, Is.EqualTo(2));
+        }
+
+        BakeResult Bake(params Renderer[] renderers) => Bake(StandardOptions(), renderers);
+
+        // Standard as the merged shader, with its normal-map keyword.
+        static BakeOptions StandardOptions(int atlasSize = 2048, int padding = 8, TextureFormat? compression = null,
+            NormalEncoding normalEncoding = NormalEncoding.RGorAG) =>
+            new BakeOptions(Shader.Find("Standard"), atlasSize, padding, compression, normalMapKeyword: "_NORMALMAP",
+                normalEncoding: normalEncoding);
+
+        BakeResult Bake(BakeOptions options, params Renderer[] renderers) => Bake(options, null, renderers);
+
+        BakeResult Bake(BakeOptions options, Renderer[] renderers, params AnimatedSlot[] animated) =>
+            Bake(options, null, renderers, animated);
+
+        BakeResult Bake(BakeOptions options, ILaterMeshEdits? laterEdits, params Renderer[] renderers) =>
+            Bake(options, laterEdits, renderers, Array.Empty<AnimatedSlot>());
+
+        BakeResult Bake(BakeOptions options, ILaterMeshEdits? laterEdits, Renderer[] renderers, AnimatedSlot[] animated)
+        {
+            var result = AvatarBaker.Bake(renderers, options, laterEdits, animated);
             if (result.MergedMaterial != null) created.Add(result.MergedMaterial);
             if (result.Atlas != null) created.Add(result.Atlas);
             if (result.EmissionAtlas != null) created.Add(result.EmissionAtlas);
+            if (result.NormalAtlas != null) created.Add(result.NormalAtlas);
             foreach (var (_, rewritten) in result.ReplacedMeshes) created.Add(rewritten);
             return result;
+        }
+
+        // A tool after the bake that deletes some triangles, and may read the source UV0 or the material slots.
+        sealed class LaterTool : ILaterMeshEdits, ITriangleRemovals
+        {
+            public Func<int, int, int, int, bool>? Deletes;
+            public int? SourceUv0Channel;
+            public bool KeepsSubmeshes;
+            public bool Disposed;
+            public readonly List<(Renderer, int)> Kept = new List<(Renderer, int)>();
+
+            public ITriangleRemovals? Removals(Renderer renderer) => Deletes != null ? this : null;
+            public bool NoChannelFree;
+            public (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer) =>
+                NoChannelFree ? null : (SourceUv0Channel, KeepsSubmeshes);
+            public void KeptSourceUv0(Renderer renderer, int channel) => Kept.Add((renderer, channel));
+            public bool WillRemove(int submesh, int a, int b, int c) => Deletes!(submesh, a, b, c);
+            public void Dispose() => Disposed = true;
         }
 
         T Keep<T>(T o) where T : Object
@@ -625,6 +929,124 @@ namespace UVWizard.Core.Tests.Pipeline
             material.SetTexture("_EmissionMap", map);
             material.SetColor("_EmissionColor", colour);
             return material;
+        }
+
+        // Turns on Standard's normal map at the given strength. Standard samples it with _MainTex_ST.
+        static Material NormalMapped(Material material, Texture2D map, float strength)
+        {
+            material.EnableKeyword("_NORMALMAP");
+            material.SetTexture("_BumpMap", map);
+            material.SetFloat("_BumpScale", strength);
+            return material;
+        }
+
+        // A readable linear normal map, in Unity's XYZ layout, whose normal tilts smoothly and differently along each
+        // axis, and differently per seed.
+        Texture2D NormalGradient(int size, int seed) => NormalMap(size, (u, v) =>
+            new Vector3(0.6f * (u - 0.3f) + 0.1f * seed, 0.5f * (v - 0.6f), 1).normalized, FilterMode.Bilinear);
+
+        // A point-filtered normal map whose cells, cell texels wide, tilt left and right in turn.
+        Texture2D NormalChecker(int size, int cell) => NormalMap(size, (u, v) =>
+        {
+            var parity = (int)(u * size) / cell + (int)(v * size) / cell;
+            return new Vector3(parity % 2 == 0 ? 0.5f : -0.5f, 0, 1).normalized;
+        }, FilterMode.Point);
+
+        Texture2D NormalMap(int size, Func<float, float, Vector3> normal, FilterMode filter)
+        {
+            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: true)
+                { wrapMode = TextureWrapMode.Clamp, filterMode = filter });
+            var texels = new Color[size * size];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+            {
+                var n = normal((x + 0.5f) / size, (y + 0.5f) / size);
+                texels[y * size + x] = new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1);
+            }
+            texture.SetPixels(texels);
+            texture.Apply();
+            return texture;
+        }
+
+        // A quad filling the view, its UVs covering the given rectangle, with normals and tangents.
+        Mesh TangentQuad(Vector2 uvMin, Vector2 uvMax) => TangentQuads((uvMin, uvMax));
+
+        // Side-by-side quads filling the view, each with UVs from its first corner (bottom left) to its second (top
+        // right). A first corner right of the second mirrors the quad.
+        Mesh TangentQuads(params (Vector2 UvMin, Vector2 UvMax)[] quads)
+        {
+            var positions = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var triangles = new List<int>();
+            for (var q = 0; q < quads.Length; q++)
+            {
+                var (min, max) = quads[q];
+                float left = 0.05f + 0.9f * q / quads.Length, right = 0.05f + 0.9f * (q + 1) / quads.Length;
+                var start = positions.Count;
+                positions.AddRange(new[] { new Vector3(left, 0.05f), new Vector3(right, 0.05f), new Vector3(left, 0.95f), new Vector3(right, 0.95f) });
+                uvs.AddRange(new[] { min, new Vector2(max.x, min.y), new Vector2(min.x, max.y), max });
+                triangles.AddRange(new[] { start, start + 2, start + 1, start + 1, start + 2, start + 3 });
+            }
+            var mesh = Keep(new Mesh());
+            mesh.SetVertices(positions);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+            return mesh;
+        }
+
+        // Each pixel's world normal, rendered with the renderer's own normal maps the way Standard samples them and
+        // with its mesh's own normals and tangents. Alpha is 0 where nothing is drawn.
+        Color[] WorldNormals(MeshRenderer renderer)
+        {
+            const int size = 64;
+            var shader = Shader.Find("Hidden/UVWizard/Tests/WorldNormal");
+            if (shader == null)
+                shader = AssetDatabase.LoadAssetAtPath<Shader>("Packages/com.kingazaz.uv-wizard/Tests/Editor/Pipeline/WorldNormal.shader");
+            var material = Keep(new Material(shader));
+            var target = RenderTexture.GetTemporary(new RenderTextureDescriptor(size, size, RenderTextureFormat.ARGBFloat, 24) { sRGB = false });
+            var previous = RenderTexture.active;
+            try
+            {
+                RenderTexture.active = target;
+                GL.Clear(clearDepth: true, clearColor: true, Color.clear);
+                GL.PushMatrix();
+                GL.LoadOrtho();
+                var mesh = Filter(renderer).sharedMesh;
+                for (var s = 0; s < mesh.subMeshCount; s++)
+                {
+                    var source = renderer.sharedMaterials[s];
+                    material.SetTexture("_BumpMap", source.GetTexture("_BumpMap"));
+                    material.SetTextureScale("_BumpMap", source.mainTextureScale);
+                    material.SetTextureOffset("_BumpMap", source.mainTextureOffset);
+                    material.SetFloat("_BumpScale", source.GetFloat("_BumpScale"));
+                    material.SetPass(0);
+                    Graphics.DrawMeshNow(mesh, Matrix4x4.identity, s);
+                }
+                GL.PopMatrix();
+                var pixels = Keep(new Texture2D(size, size, TextureFormat.RGBAFloat, mipChain: false, linear: true));
+                pixels.ReadPixels(new Rect(0, 0, size, size), 0, 0);
+                return pixels.GetPixels();
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(target);
+            }
+        }
+
+        // Every pixel drawn in both renders has the same world normal, to within about 3 degrees.
+        static void AssertSameNormals(Color[] expected, Color[] actual, string what)
+        {
+            var compared = 0;
+            for (var i = 0; i < expected.Length; i++)
+            {
+                if (expected[i].a < 1 || actual[i].a < 1) continue;
+                compared++;
+                AssertNormalClose(Decoded(expected[i]), Decoded(actual[i]), $"{what}, pixel ({i % 64}, {i / 64})");
+            }
+            Assert.That(compared, Is.GreaterThan(1000), $"{what}: pixels drawn in both");
         }
 
         // A quad at depth z covering the given UV rectangle, as four corners: position = UV.
@@ -703,6 +1125,12 @@ namespace UVWizard.Core.Tests.Pipeline
             return mesh;
         }
 
+        static Mesh WithTangents(Mesh mesh)
+        {
+            mesh.RecalculateTangents();
+            return mesh;
+        }
+
         MeshRenderer MeshRenderer(Mesh mesh, params Material[] materials)
         {
             var go = Keep(new GameObject("renderer"));
@@ -748,6 +1176,29 @@ namespace UVWizard.Core.Tests.Pipeline
             return ((Texture2D)material.GetTexture("_EmissionMap")).GetPixelBilinear(uv.x, uv.y) *
                    material.GetColor("_EmissionColor");
         }
+
+        // The normal Standard reads at the centroid from the normal map, in Unity's XYZ layout.
+        static Vector3 SourceNormal((Vector2 Uv, Material Material) centroid)
+        {
+            var material = centroid.Material;
+            var uv = Vector2.Scale(centroid.Uv, material.mainTextureScale) + material.mainTextureOffset;
+            return Decoded(((Texture2D)material.GetTexture("_BumpMap")).GetPixelBilinear(uv.x, uv.y));
+        }
+
+        // A texel in Unity's XYZ layout: x, y and z in red, green and blue.
+        static Vector3 Decoded(Color texel) => new Vector3(texel.r * 2 - 1, texel.g * 2 - 1, texel.b * 2 - 1);
+
+        // A texel in Unity's mobile DXT5nm-style layout: x in alpha, y in green, z rebuilt.
+        static Vector3 DecodedAg(Color texel)
+        {
+            var xy = new Vector2(texel.a * 2 - 1, texel.g * 2 - 1);
+            return new Vector3(xy.x, xy.y, Mathf.Sqrt(Mathf.Max(0, 1 - xy.sqrMagnitude)));
+        }
+
+        // Within 0.06, about 3 degrees: 8-bit texels, and the atlas holds the source at a sub-texel offset.
+        static void AssertNormalClose(Vector3 expected, Vector3 actual, string where) =>
+            Assert.That(Vector3.Distance(expected.normalized, actual.normalized), Is.LessThanOrEqualTo(0.06f),
+                $"{where}: {actual}, expected {expected}");
 
         // Within 0.05 per channel: the atlas holds the source at a sub-texel offset.
         static void AssertClose(Color expected, Color actual, string where)
