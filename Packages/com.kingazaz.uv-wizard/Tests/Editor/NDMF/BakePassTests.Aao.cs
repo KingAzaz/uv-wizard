@@ -63,14 +63,17 @@ namespace UVWizard.NDMF.Tests
         [Test]
         public void AnAvatarWithItsOwnTraceAndOptimizeKeepsIt()
         {
+            // The avatar's own Trace and Optimize doesn't merge meshes, and stays the one AAO reads.
             var avatar = MergeableAvatar(addTraceAndOptimize: true);
-            avatar.AddComponent<TraceAndOptimize>();
+            var own = new SerializedObject(avatar.AddComponent<TraceAndOptimize>());
+            own.FindProperty("mergeSkinnedMesh").boolValue = false;
+            own.ApplyModifiedPropertiesWithoutUndo();
 
             MobileBuild.Override = true;
             var errors = Build(avatar);
 
             Assert.That(OwnReports(errors), Is.Empty);
-            Assert.That(avatar.GetComponentsInChildren<Renderer>(true), Has.Length.EqualTo(1));
+            Assert.That(avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true), Has.Length.EqualTo(2));
         }
 
         // MmdBody: Trace and Optimize's MMD world compatibility, on by default, keeps a mesh named Body directly

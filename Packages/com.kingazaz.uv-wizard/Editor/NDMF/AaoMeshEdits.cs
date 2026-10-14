@@ -13,7 +13,8 @@ namespace UVWizard.NDMF
     /// What Avatar Optimizer will do to the meshes the bake rewrites, through AAO's public interop API (ADR 0001).
     /// Triangles AAO's Remove Mesh components will delete take no atlas space. Remove Mesh By Mask and By UV Tile
     /// read UVs per material slot, so a renderer with either keeps its source UV0 in a free channel, registered as
-    /// evacuated, and keeps its merged submeshes apart; Trace and Optimize merges the slots afterwards.
+    /// evacuated, and keeps its merged submeshes apart; Trace and Optimize merges the slots afterwards. A renderer
+    /// whose mesh has no free channel for the source UV0 stays out of the bake.
     /// </summary>
     /// <remarks>AAO's interop works on skinned renderers only, so other renderers pass through.</remarks>
     internal sealed class AaoMeshEdits : ILaterMeshEdits
@@ -23,13 +24,13 @@ namespace UVWizard.NDMF
                 ? new ProviderRemovals(provider)
                 : null;
 
-        public (int? KeepSourceUv0In, bool KeepSubmeshes) Needs(Renderer renderer)
+        public (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer)
         {
             if (renderer is not SkinnedMeshRenderer skinned) return (null, false);
             var readsUvs = false;
             for (var channel = 0; channel < 8; channel++) readsUvs |= UVUsageCompabilityAPI.IsTexCoordUsed(skinned, channel);
             if (!UVUsageCompabilityAPI.IsTexCoordUsed(skinned, 0)) return (null, readsUvs);
-            return (FreeChannel(skinned), true);
+            return FreeChannel(skinned) is { } free ? (free, true) : null;
         }
 
         public void KeptSourceUv0(Renderer renderer, int channel) =>

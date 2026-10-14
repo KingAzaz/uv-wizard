@@ -33,9 +33,10 @@ namespace UVWizard.Core.Pipeline
             var excluded = new List<SlotNote>();
             var flagged = new List<SlotNote>();
             var slots = new List<Slot>();
+            var needs = new Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)>();
             var readings = new Dictionary<Material, SourceMaterialReading>();
             foreach (var renderer in renderers)
-                CollectSlots(renderer, readings, slots, excluded, flagged, laterEdits);
+                CollectSlots(renderer, readings, slots, excluded, flagged, laterEdits, needs);
             if (slots.Count == 0) return BakeResult.Unchanged(true, excluded, flagged);
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -84,17 +85,28 @@ namespace UVWizard.Core.Pipeline
             var merged = MergedMaterial(options, atlas, emissionAtlas, emissionStrength, normalAtlas, representative,
                 slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
-            var replaced = RewriteRenderers(slots, merged, laterEdits);
+            var replaced = RewriteRenderers(slots, merged, laterEdits, needs);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged, emissionAtlas,
                 emissionStrength, normalAtlas);
         }
 
         // Sorts each of the renderer's material slots into merged (a Slot), excluded or skipped.
         static void CollectSlots(Renderer renderer, Dictionary<Material, SourceMaterialReading> readings, List<Slot> slots,
-            List<SlotNote> excluded, List<SlotNote> flagged, ILaterMeshEdits? laterEdits)
+            List<SlotNote> excluded, List<SlotNote> flagged, ILaterMeshEdits? laterEdits,
+            Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs)
         {
             var mesh = MeshOf(renderer);
             if (mesh == null) return;
+            if (laterEdits?.Needs(renderer) is { } rendererNeeds) needs[renderer] = rendererNeeds;
+            else if (laterEdits != null)
+            {
+                var sources = renderer.sharedMaterials;
+                for (var s = 0; s < sources.Length; s++)
+                    if (sources[s] != null)
+                        excluded.Add(new SlotNote(renderer, s, sources[s], "A tool that runs after the bake reads " +
+                            "this mesh's UV0, and the mesh has no free UV channel to keep it in."));
+                return;
+            }
             using var removals = laterEdits?.Removals(renderer);
             var materials = renderer.sharedMaterials;
             using var meshes = MeshUtility.AcquireReadOnlyMeshData(mesh);
@@ -435,7 +447,7 @@ namespace UVWizard.Core.Pipeline
 
         // Gives each renderer with merged slots a rewritten mesh and the merged material on those slots.
         static List<(Mesh Source, Mesh Rewritten)> RewriteRenderers(List<Slot> slots, Material merged,
-            ILaterMeshEdits? laterEdits)
+            ILaterMeshEdits? laterEdits, Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs)
         {
             // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was.
             var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)>();
@@ -449,7 +461,7 @@ namespace UVWizard.Core.Pipeline
                     atlasUvs[slots[end].Submesh] = CornerAtlasUvs(slots[end]);
                 first = end;
 
-                var (keptIn, keepSubmeshes) = laterEdits?.Needs(renderer) ?? (null, false);
+                var (keptIn, keepSubmeshes) = needs.TryGetValue(renderer, out var rendererNeeds) ? rendererNeeds : (null, false);
                 var rewritten = Uv0Rewriter.Rewrite(mesh, atlasUvs, keptIn, keepSubmeshes);
                 var materials = renderer.sharedMaterials;
                 var drawn = Math.Min(materials.Length, mesh.subMeshCount);

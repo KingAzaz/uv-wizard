@@ -750,6 +750,22 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ARendererWhoseSourceUv0ALaterToolCantFindIsExcluded()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var materials = new[] { Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white) };
+            var renderer = MeshRenderer(mesh, materials);
+            var tool = new LaterTool { NoChannelFree = true, Deletes = (submesh, a, b, c) => true };
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), tool, renderer);
+
+            Assert.That(Filter(renderer).sharedMesh, Is.SameAs(mesh));
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(materials));
+            Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(materials));
+            Assert.That(tool.Disposed, Is.False, "its triangles aren't asked about");
+        }
+
+        [Test]
         public void ALaterToolThatReadsMaterialSlotsKeepsThemApart()
         {
             var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
@@ -792,7 +808,9 @@ namespace UVWizard.Core.Tests.Pipeline
             public readonly List<(Renderer, int)> Kept = new List<(Renderer, int)>();
 
             public ITriangleRemovals? Removals(Renderer renderer) => Deletes != null ? this : null;
-            public (int? KeepSourceUv0In, bool KeepSubmeshes) Needs(Renderer renderer) => (SourceUv0Channel, KeepsSubmeshes);
+            public bool NoChannelFree;
+            public (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer) =>
+                NoChannelFree ? null : (SourceUv0Channel, KeepsSubmeshes);
             public void KeptSourceUv0(Renderer renderer, int channel) => Kept.Add((renderer, channel));
             public bool WillRemove(int submesh, int a, int b, int c) => Deletes!(submesh, a, b, c);
             public void Dispose() => Disposed = true;

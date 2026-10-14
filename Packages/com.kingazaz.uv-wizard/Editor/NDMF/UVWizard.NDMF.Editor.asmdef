@@ -28,7 +28,7 @@
         },
         {
             "name": "com.anatawa12.avatar-optimizer",
-            "expression": "",
+            "expression": "1.8.0",
             "define": "UVWIZARD_AAO"
         }
     ],
