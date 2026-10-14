@@ -172,6 +172,64 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void AStaticMeshWithRemoveMeshByMaskIsKeptOutAndTheMaskDeletesTheRightTriangles()
+        {
+            // AAO runs Remove Mesh By Mask on a MeshRenderer too, but can't be told where the bake keeps its
+            // source UVs. The glasses' first slot has one quad under the mask's white and one under its black;
+            // the second slot's quad lies under the white too, but the mask isn't on that slot.
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var glasses = new GameObject("Glasses");
+            glasses.transform.SetParent(avatar.transform);
+            glasses.AddComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(5, 0.55f, 0.55f, 0.95f, 0.95f), Quad(6, 0.05f, 0.05f, 0.45f, 0.45f) },
+                new[] { Quad(7, 0.6f, 0.6f, 0.9f, 0.9f) });
+            var renderer = glasses.AddComponent<MeshRenderer>();
+            var materials = new[] { Standard(Gradient(16, 5)), Standard(Gradient(16, 7)) };
+            renderer.sharedMaterials = materials;
+            var mask = Keep(new Texture2D(16, 16, TextureFormat.RGBA32, mipChain: false));
+            mask.SetPixels32(Enumerable.Range(0, 256).Select(i => i % 16 >= 8 && i / 16 >= 8 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255)).ToArray());
+            mask.Apply();
+            var removal = glasses.AddComponent<RemoveMeshByMask>();
+            removal.Initialize(1);
+            removal.Materials = new[]
+            {
+                new RemoveMeshByMask.MaterialSlot { Enabled = true, Mask = mask, Mode = RemoveMeshByMask.RemoveMode.RemoveWhite },
+                new RemoveMeshByMask.MaterialSlot { Enabled = false },
+            };
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(OwnReports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)));
+            // The build saves in-memory materials as new objects, so compare the shader, not the reference.
+            Assert.That(renderer.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(materials.Select(m => m.shader.name)));
+            var mesh = glasses.GetComponent<MeshFilter>().sharedMesh;
+            var positions = mesh.vertices;
+            var drawn = Enumerable.Range(0, mesh.subMeshCount).SelectMany(s => mesh.GetIndices(s));
+            Assert.That(drawn.Select(i => positions[i].z).Distinct().OrderBy(z => z), Is.EqualTo(new[] { 6f, 7f }),
+                "the mask deleted the first slot's quad under its white, and only it");
+        }
+
+        [Test]
+        public void AStaticMeshWithRemoveMeshByUvTileIsKeptOut()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var glasses = new GameObject("Glasses");
+            glasses.transform.SetParent(avatar.transform);
+            glasses.AddComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(5, 0.55f, 0.55f, 0.95f, 0.95f) });
+            var renderer = glasses.AddComponent<MeshRenderer>();
+            var materials = new[] { Standard(Gradient(16, 5)) };
+            renderer.sharedMaterials = materials;
+            glasses.AddComponent(typeof(TraceAndOptimize).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile"));
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(OwnReports(errors), Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Excluded) }));
+            // The build saves in-memory materials as new objects, so compare the shader, not the reference.
+            Assert.That(renderer.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(materials.Select(m => m.shader.name)));
+        }
+
+        [Test]
         public void RemoveMeshByUvTileStillDeletesPerMaterialSlot()
         {
             // Both of the torso's slots have their quad in UV1's tile 1, but only the first slot's setting deletes

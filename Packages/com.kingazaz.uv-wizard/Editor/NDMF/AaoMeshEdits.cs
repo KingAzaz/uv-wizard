@@ -2,6 +2,7 @@
 
 #if UVWIZARD_AAO
 using System;
+using Anatawa12.AvatarOptimizer;
 using Anatawa12.AvatarOptimizer.API;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -16,9 +17,17 @@ namespace UVWizard.NDMF
     /// evacuated, and keeps its merged submeshes apart; Trace and Optimize merges the slots afterwards. A renderer
     /// whose mesh has no free channel for the source UV0 stays out of the bake.
     /// </summary>
-    /// <remarks>AAO's interop works on skinned renderers only, so other renderers pass through.</remarks>
+    /// <remarks>
+    /// AAO's interop works on skinned renderers only. Since AAO 1.9.0 its Remove Mesh components run on other
+    /// renderers too, so one with Remove Mesh By Mask or By UV Tile stays out of the bake, where they still read
+    /// its own UVs and slots. Other renderers pass through.
+    /// </remarks>
     internal sealed class AaoMeshEdits : ILaterMeshEdits
     {
+        // Internal to AAO, unlike Remove Mesh By Mask.
+        static readonly Type? RemoveMeshByUVTile =
+            typeof(RemoveMeshByMask).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile");
+
         public ITriangleRemovals? Removals(Renderer renderer) =>
             renderer is SkinnedMeshRenderer skinned && MeshRemovalProvider.GetForRenderer(skinned) is { } provider
                 ? new ProviderRemovals(provider)
@@ -26,7 +35,12 @@ namespace UVWizard.NDMF
 
         public (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer)
         {
-            if (renderer is not SkinnedMeshRenderer skinned) return (null, false);
+            if (renderer is not SkinnedMeshRenderer skinned)
+            {
+                if (renderer.TryGetComponent<RemoveMeshByMask>(out _)) return null;
+                if (RemoveMeshByUVTile != null && renderer.TryGetComponent(RemoveMeshByUVTile, out _)) return null;
+                return (null, false);
+            }
             var readsUvs = false;
             for (var channel = 0; channel < 8; channel++) readsUvs |= UVUsageCompabilityAPI.IsTexCoordUsed(skinned, channel);
             if (!UVUsageCompabilityAPI.IsTexCoordUsed(skinned, 0)) return (null, readsUvs);

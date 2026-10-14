@@ -104,7 +104,7 @@ namespace UVWizard.Core.Pipeline
                 for (var s = 0; s < sources.Length; s++)
                     if (sources[s] != null)
                         excluded.Add(new SlotNote(renderer, s, sources[s], "A tool that runs after the bake reads " +
-                            "this mesh's UV0, and the mesh has no free UV channel to keep it in."));
+                            "this mesh's UV0, and the bake can't keep it where that tool would find it."));
                 return;
             }
             using var removals = laterEdits?.Removals(renderer);

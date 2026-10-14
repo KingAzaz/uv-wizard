@@ -21,8 +21,8 @@ namespace UVWizard.Core.Pipeline
         /// <summary>
         /// How the renderer's rewritten mesh must look for the tool: a UV channel its source mesh doesn't use, to
         /// keep the source UV0 in (null: none), and whether its merged submeshes keep their places. Null when the
-        /// tool reads the source UV0 but the mesh has no free channel to keep it in, so the renderer stays as it
-        /// is. Asked while the renderer still has its source mesh.
+        /// tool reads the source UV0 but couldn't find it after the bake, such as when the mesh has no free
+        /// channel to keep it in, so the renderer stays as it is. Asked while the renderer still has its source mesh.
         /// </summary>
         (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer);
 
