@@ -1,7 +1,7 @@
 // Draws a source's triangles at their atlas UVs (the vertex positions) and samples the source
 // texture at its own UVs, through its own sampler, times the tint. Alpha is 1 so the baker can
 // tell covered texels from empty ones; the merged material is opaque anyway (ADR 0004).
-Shader "Hidden/UVWizard/BakeAlbedo"
+Shader "Hidden/UVWizard/BakeChannel"
 {
     Properties
     {

@@ -24,6 +24,9 @@ namespace UVWizard.Core.Pipeline
         // A source with no texture still needs a little atlas space to hold its tint.
         static readonly Vector2Int UntexturedSize = new Vector2Int(8, 8);
 
+        // The most the merged material multiplies its Emission atlas by: Toon Standard's _EmissionStrength range.
+        const float MaxEmissionStrength = 2;
+
         public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options)
         {
             var excluded = new List<SlotNote>();
@@ -72,15 +75,17 @@ namespace UVWizard.Core.Pipeline
                 }
             }
 
-            var atlas = AlbedoBaker.Bake(new BakePlan(options.AtlasSize, slots.ConvertAll(AlbedoSource)));
+            var atlas = ChannelBaker.Bake(new BakePlan(options.AtlasSize, slots.ConvertAll(AlbedoSource)));
             atlas.name = "UV Wizard Albedo";
             if (options.Compression is { } format) AtlasCompressor.Compress(atlas, format);
+            var (emissionAtlas, emissionStrength) = EmissionAtlas(slots, options, flagged);
 
             var representative = Representative(slots, charts, options.MergedShader);
-            var merged = MergedMaterial(options, atlas, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
+            var merged = MergedMaterial(options, atlas, emissionAtlas, emissionStrength, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var replaced = RewriteRenderers(slots, merged);
-            return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged);
+            return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged, emissionAtlas,
+                emissionStrength);
         }
 
         // Sorts each of the renderer's material slots into merged (a Slot), excluded or skipped.
@@ -170,11 +175,15 @@ namespace UVWizard.Core.Pipeline
             return indices.ToArray();
         }
 
-        // Source texels per unit of the texture's own UV space.
+        // Source texels per unit of the texture's own UV space: the larger of the albedo and emission textures, so
+        // neither channel is baked below its own detail.
         static Vector2Int TextureSize(SourceMaterialReading reading)
         {
-            var texture = reading.Albedo?.Texture;
-            return texture == null ? UntexturedSize : new Vector2Int(texture.width, texture.height);
+            Vector2Int? size = null;
+            foreach (var texture in new[] { reading.Albedo?.Texture, reading.Emission?.Texture })
+                if (texture != null)
+                    size = Vector2Int.Max(size ?? Vector2Int.zero, new Vector2Int(texture.width, texture.height));
+            return size ?? UntexturedSize;
         }
 
         // Calls visit(corner index, position in chart texels) for every corner of the island's triangles,
@@ -187,15 +196,57 @@ namespace UVWizard.Core.Pipeline
                     visit(k, Vector2.Scale(slot.Sampled[slot.Triangles[k]] + shift, texelsPerUv));
         }
 
-        // One bake source per slot, its corners unshared so each carries its own atlas UV.
-        static BakeSource AlbedoSource(Slot slot)
+        // The Emission channel and the strength the merged material multiplies it by, or a null atlas when no
+        // merged slot emits. An 8-bit atlas holds intensities up to 1, so when the brightest emission is above
+        // that, its intensity becomes the strength and every emission is divided by it. The strength stops at
+        // MaxEmissionStrength: an emission brighter than that is dimmed to it, keeping its hue, and flagged.
+        static (Texture2D? Atlas, float Strength) EmissionAtlas(List<Slot> slots, BakeOptions options,
+            List<SlotNote> flagged)
         {
-            var albedo = slot.Reading.Albedo;
+            var emitting = slots.FindAll(slot =>
+                slot.Draws && slot.Reading.Emission != null && Intensity(slot.Reading.Emission.Tint) > 0);
+            if (emitting.Count == 0) return (null, 1);
+            var strength = 1f;
+            foreach (var slot in emitting) strength = Mathf.Max(strength, Intensity(slot.Reading.Emission!.Tint));
+            strength = Mathf.Min(strength, MaxEmissionStrength);
+            foreach (var slot in emitting)
+            {
+                var intensity = Intensity(slot.Reading.Emission!.Tint);
+                if (intensity > MaxEmissionStrength)
+                    flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
+                        $"Its emission is {intensity:0.##} times full brightness, but the merged material's emission " +
+                        $"goes up to {MaxEmissionStrength}, so it glows less."));
+            }
+
+            // Slots that don't emit bake black, so the gutter fill can't spread a glow over their charts.
+            var atlas = ChannelBaker.Bake(new BakePlan(options.AtlasSize, slots.ConvertAll(slot =>
+            {
+                var emission = slot.Reading.Emission;
+                if (emission == null) return Source(slot, null, Color.black);
+                var linear = emission.Tint.linear;
+                var divisor = Mathf.Max(strength, Intensity(emission.Tint));
+                var tint = new Color(linear.r / divisor, linear.g / divisor, linear.b / divisor, linear.a).gamma;
+                return Source(slot, new ChannelSource(emission.Texture, tint, emission.ScaleOffset, emission.UvChannel), Color.black);
+            })));
+            atlas.name = "UV Wizard Emission";
+            if (options.Compression is { } format) AtlasCompressor.Compress(atlas, format);
+            return (atlas, strength);
+        }
+
+        // A colour's brightest linear component: what the shader multiplies by once the colour is linearized.
+        static float Intensity(Color colour) => colour.linear.maxColorComponent;
+
+        static BakeSource AlbedoSource(Slot slot) => Source(slot, slot.Reading.Albedo, Color.white);
+
+        // One bake source per slot, its corners unshared so each carries its own atlas UV. A slot without the
+        // channel bakes the fallback tint.
+        static BakeSource Source(Slot slot, ChannelSource? channel, Color fallback)
+        {
             var sourceUv = Array.ConvertAll(slot.Triangles, v => slot.Uv0[v]);
             var corners = new int[sourceUv.Length];
             for (var k = 0; k < corners.Length; k++) corners[k] = k;
-            return new BakeSource(albedo?.Texture != null ? albedo.Texture : Texture2D.whiteTexture,
-                albedo?.Tint ?? Color.white, albedo?.ScaleOffset ?? new Vector4(1, 1, 0, 0), sourceUv, slot.AtlasUv,
+            return new BakeSource(channel?.Texture != null ? channel.Texture : Texture2D.whiteTexture,
+                channel?.Tint ?? fallback, channel?.ScaleOffset ?? new Vector4(1, 1, 0, 0), sourceUv, slot.AtlasUv,
                 corners);
         }
 
@@ -267,10 +318,24 @@ namespace UVWizard.Core.Pipeline
             return coloured;
         }
 
-        static Material MergedMaterial(BakeOptions options, Texture2D atlas, Material? representative, bool vertexColour)
+        static Material MergedMaterial(BakeOptions options, Texture2D atlas, Texture2D? emissionAtlas,
+            float emissionStrength, Material? representative, bool vertexColour)
         {
             var material = new Material(options.MergedShader) { name = "UV Wizard merged" };
             material.mainTexture = atlas;
+            // The emission colour defaults to black, so without these the atlas wouldn't glow. A shader with no
+            // emission strength gets it on its emission colour instead, which is linearized before use.
+            if (emissionAtlas != null)
+            {
+                material.SetTexture("_EmissionMap", emissionAtlas);
+                if (material.HasFloat("_EmissionStrength"))
+                {
+                    material.SetColor("_EmissionColor", Color.white);
+                    material.SetFloat("_EmissionStrength", emissionStrength);
+                }
+                else material.SetColor("_EmissionColor", new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
+                if (material.HasProperty("_EmissionUV")) material.SetFloat("_EmissionUV", 0);
+            }
             if (material.HasColor("_Color")) material.SetColor("_Color", Color.white);
             if (material.HasFloat("_VertexColor")) material.SetFloat("_VertexColor", vertexColour ? 1 : 0);
             if (representative != null)

@@ -64,6 +64,142 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AnEmittingSourceBakesItsEmissionIntoTheEmissionAtlas()
+        {
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), new Color(0.5f, 1, 0.25f));
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
+            var before = Centroids(renderer).Select(EmissionColour).ToArray();
+
+            var result = Bake(renderer);
+
+            Assert.That(result.EmissionAtlas, Is.Not.Null);
+            Assert.That(result.MergedMaterial!.GetTexture("_EmissionMap"), Is.SameAs(result.EmissionAtlas));
+            Assert.That(result.MergedMaterial.GetColor("_EmissionColor"), Is.EqualTo(Color.white));
+            Assert.That(result.EmissionStrength, Is.EqualTo(1));
+            var after = Centroids(renderer).Select(c => result.EmissionAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void TheEmissionAtlasIsBlackWhereAMaterialDoesntEmit()
+        {
+            // Without emission drawn black, the gutter fill would spread the glow over the plain slot's charts.
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.white);
+            var plain = Standard(Gradient(16, 2), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) }),
+                glowing, plain);
+            var plainTriangles = Filter(renderer).sharedMesh.GetIndices(1).Length / 3;
+
+            var result = Bake(renderer);
+
+            var centroids = Centroids(renderer).ToArray();
+            for (var k = centroids.Length - plainTriangles; k < centroids.Length; k++)
+                AssertClose(Color.black, result.EmissionAtlas!.GetPixelBilinear(centroids[k].Uv.x, centroids[k].Uv.y),
+                    $"plain triangle {k}");
+        }
+
+        [Test]
+        public void WhenNoMergedSlotEmitsTheEmissionChannelStaysOff()
+        {
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+
+            var result = Bake(renderer);
+
+            Assert.That(result.EmissionAtlas, Is.Null);
+            Assert.That(result.MergedMaterial!.GetTexture("_EmissionMap"), Is.Null);
+            Assert.That(result.MergedMaterial.GetColor("_EmissionColor"), Is.EqualTo(Color.black));
+        }
+
+        [Test]
+        public void AnEmittingSlotThatDrawsNothingLeavesTheEmissionChannelOff()
+        {
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.white);
+            var mesh = Mesh(Array.Empty<(Vector3[], Vector2[])>(), new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) });
+            var renderer = MeshRenderer(mesh, glowing, Standard(Gradient(16, 2), Color.white));
+
+            var result = Bake(renderer);
+
+            Assert.That(result.EmissionAtlas, Is.Null);
+        }
+
+        [Test]
+        public void AnHdrEmissionGoesOnTheStrengthAndTheAtlasIsScaledDownByIt()
+        {
+            // Emission colours are linearized before the shader uses them, so intensities are linear. The brightest
+            // source peaks at 1.5, so the strength is 1.5 and every source's emission is divided by it.
+            var bright = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(1.5f, 0.75f, 0.3f).gamma);
+            var dim = Emitting(Standard(Gradient(16, 1), Color.white), null, new Color(0.6f, 0.6f, 0.6f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f) }, new[] { Quad(1, 0.5f, 0.5f, 0.9f, 0.9f) }),
+                bright, dim);
+
+            var result = Bake(renderer);
+
+            Assert.That(result.EmissionStrength, Is.EqualTo(1.5f).Within(1e-4f));
+            var centroids = Centroids(renderer).ToArray();
+            AssertClose(new Color(1, 0.5f, 0.2f).gamma, result.EmissionAtlas!.GetPixelBilinear(centroids[0].Uv.x, centroids[0].Uv.y), "bright");
+            AssertClose(new Color(0.4f, 0.4f, 0.4f).gamma, result.EmissionAtlas.GetPixelBilinear(centroids[3].Uv.x, centroids[3].Uv.y), "dim");
+        }
+
+        [Test]
+        public void AnEmissionBrighterThanTheStrengthCanGoIsClampedKeepingItsHueAndFlagged()
+        {
+            // A peak of 3 is over the strength's limit of 2: it glows at 2, its colour in the same proportions.
+            var blinding = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(3, 1.5f, 0.6f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), blinding);
+
+            var result = Bake(renderer);
+
+            Assert.That(result.EmissionStrength, Is.EqualTo(2));
+            var centroid = Centroids(renderer).First();
+            AssertClose(new Color(1, 0.5f, 0.2f).gamma, result.EmissionAtlas!.GetPixelBilinear(centroid.Uv.x, centroid.Uv.y), "centroid");
+            Assert.That(result.Flagged.Select(note => note.Material), Is.EqualTo(new[] { blinding }));
+            Assert.That(result.Flagged[0].Reason, Does.Contain("emission"));
+        }
+
+        [Test]
+        public void AnEmissionMapSharperThanTheAlbedoKeepsItsDetail()
+        {
+            // The albedo is untextured, so on its own it would size the chart at 8 texels per UV, smearing the
+            // emission checker's 4-texel cells into grey. Each grid cell lies inside one checker cell.
+            var glowing = Emitting(Keep(new Material(Shader.Find("Standard"))), Checker(32, 4), Color.white);
+            var renderer = MeshRenderer(Grid(1, 6, 8), glowing);
+            var before = Centroids(renderer).Select(EmissionColour).ToArray();
+
+            var result = Bake(renderer);
+
+            var after = Centroids(renderer).Select(c => result.EmissionAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void AShaderWithoutAnEmissionStrengthCarriesItOnTheEmissionColour()
+        {
+            // Standard has no _EmissionStrength, but its emission colour is HDR, so the strength goes there.
+            var bright = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(1.5f, 0.75f, 0.3f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
+
+            var result = Bake(renderer);
+
+            var colour = result.MergedMaterial!.GetColor("_EmissionColor").linear;
+            for (var channel = 0; channel < 3; channel++)
+                Assert.That(colour[channel], Is.EqualTo(1.5f).Within(1e-3f), $"channel {channel}");
+        }
+
+        [Test]
+        public void AnEmissionSwitchedOnButBlackLeavesTheEmissionChannelOff()
+        {
+            // A script can turn Standard's emission keyword on with the colour left black: nothing glows.
+            var dark = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.black);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), dark);
+
+            var result = Bake(renderer);
+
+            Assert.That(result.EmissionAtlas, Is.Null);
+        }
+
+        [Test]
         public void AnExcludedSlotKeepsItsMaterialAndUv0()
         {
             // The second slot's island spans five tiles, over the repeat limit.
@@ -375,6 +511,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var result = AvatarBaker.Bake(renderers, options);
             if (result.MergedMaterial != null) created.Add(result.MergedMaterial);
             if (result.Atlas != null) created.Add(result.Atlas);
+            if (result.EmissionAtlas != null) created.Add(result.EmissionAtlas);
             foreach (var (_, rewritten) in result.ReplacedMeshes) created.Add(rewritten);
             return result;
         }
@@ -409,11 +546,62 @@ namespace UVWizard.Core.Tests.Pipeline
             return material;
         }
 
+        // Turns on Standard's emission: the map times the colour, sampled like the main texture.
+        static Material Emitting(Material material, Texture2D? map, Color colour)
+        {
+            material.EnableKeyword("_EMISSION");
+            material.SetTexture("_EmissionMap", map);
+            material.SetColor("_EmissionColor", colour);
+            return material;
+        }
+
         // A quad at depth z covering the given UV rectangle, as four corners: position = UV.
         static (Vector3[] Positions, Vector2[] Uvs) Quad(float z, float uMin, float vMin, float uMax, float vMax)
         {
             var uvs = new[] { new Vector2(uMin, vMin), new Vector2(uMax, vMin), new Vector2(uMin, vMax), new Vector2(uMax, vMax) };
             return (uvs.Select(uv => new Vector3(uv.x, uv.y, z)).ToArray(), uvs);
+        }
+
+        // One connected island: a cells x cells grid of quads, sharing their corners, from UV first/per to
+        // (first + cells)/per on each axis.
+        Mesh Grid(int first, int cells, int per)
+        {
+            var positions = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            for (var y = 0; y <= cells; y++)
+            for (var x = 0; x <= cells; x++)
+            {
+                var uv = new Vector2(first + x, first + y) / per;
+                uvs.Add(uv);
+                positions.Add(uv);
+            }
+            var triangles = new List<int>();
+            for (var y = 0; y < cells; y++)
+            for (var x = 0; x < cells; x++)
+            {
+                var i = y * (cells + 1) + x;
+                triangles.AddRange(new[] { i, i + cells + 1, i + 1, i + 1, i + cells + 1, i + cells + 2 });
+            }
+            var mesh = Keep(new Mesh());
+            mesh.SetVertices(positions);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        // A point-filtered black and white checker whose cells are cell texels wide.
+        Texture2D Checker(int size, int cell)
+        {
+            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: false)
+                { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point });
+            var texels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+                texels[y * size + x] = (x / cell + y / cell) % 2 == 0 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255);
+            texture.SetPixels32(texels);
+            texture.Apply();
+            return texture;
         }
 
         // One submesh per array of quads, two triangles each.
@@ -478,6 +666,15 @@ namespace UVWizard.Core.Tests.Pipeline
             var material = centroid.Material;
             var uv = Vector2.Scale(centroid.Uv, material.mainTextureScale) + material.mainTextureOffset;
             return ((Texture2D)material.mainTexture).GetPixelBilinear(uv.x, uv.y) * material.color;
+        }
+
+        // What Standard emits at the centroid: the emission map times the emission colour.
+        static Color EmissionColour((Vector2 Uv, Material Material) centroid)
+        {
+            var material = centroid.Material;
+            var uv = Vector2.Scale(centroid.Uv, material.mainTextureScale) + material.mainTextureOffset;
+            return ((Texture2D)material.GetTexture("_EmissionMap")).GetPixelBilinear(uv.x, uv.y) *
+                   material.GetColor("_EmissionColor");
         }
 
         // Within 0.05 per channel: the atlas holds the source at a sub-texel offset.
