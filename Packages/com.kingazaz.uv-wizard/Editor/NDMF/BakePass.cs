@@ -12,6 +12,8 @@ namespace UVWizard.NDMF
     /// Bakes a marked avatar's material slots into one atlas and one Toon Standard material, on mobile builds.
     /// Other builds, and avatars without the UV Wizard component, pass through untouched.
     /// </summary>
+    // Declared rather than activated in Execute, so NDMF writes the controllers back before Avatar Optimizer edits them.
+    [DependsOnContext(typeof(AnimatorServicesContext))]
     internal sealed class BakePass : Pass<BakePass>
     {
         public override string DisplayName => "Bake the atlas";
@@ -23,7 +25,7 @@ namespace UVWizard.NDMF
 
             var shader = ToonStandard.Shader;
             Bake(root, shader != null ? ToonStandard.Options(shader) : null,
-                context.ActivateExtensionContextRecursive<AnimatorServicesContext>());
+                context.Extension<AnimatorServicesContext>());
         }
 
         /// <summary>
@@ -39,9 +41,9 @@ namespace UVWizard.NDMF
             }
 
             var renderers = root.GetComponentsInChildren<Renderer>(true);
-            var animated = animators != null ? MaterialAnimations.Find(animators, renderers) : null;
+            var animated = animators != null ? MaterialAnimations.Find(animators, root, renderers) : null;
             var result = AvatarBaker.Bake(renderers, options, animated);
-            if (animators != null) MaterialAnimations.FollowMovedSlots(animators, result.MovedSlots);
+            if (animators != null) MaterialAnimations.FollowMovedSlots(animators, root, result.MovedSlots);
 
             // A mesh two renderers share is rewritten for each; NDMF tracks the first copy.
             var registered = new HashSet<Mesh>();

@@ -511,6 +511,22 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void EachMaterialSwappedIntoASlotIsListedOnceWithTheFirstAnimationThatSwapsIt()
+        {
+            var eyes = Standard(Gradient(16, 1), Color.white);
+            var red = Standard(Gradient(16, 2), Color.white);
+            var green = Standard(Gradient(16, 3), Color.white);
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), eyes);
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), new Renderer[] { renderer },
+                new AnimatedSlot(renderer, 1, "A", new[] { eyes, red }), new AnimatedSlot(renderer, 1, "B", new[] { red, green }));
+
+            Assert.That(result.Excluded.Select(note => (note.Material, note.Reason)),
+                Is.EqualTo(new[] { (eyes, "A"), (red, "A"), (green, "B") }));
+        }
+
+        [Test]
         public void AnAnimationOnEveryMaterialOfARendererExcludesAllItsSlots()
         {
             var first = Standard(Gradient(16, 0), Color.white);

@@ -415,6 +415,76 @@ namespace UVWizard.NDMF.Tests
             Assert.That(Materials(avatar).Select(m => m.shader.name), Has.All.EqualTo(ToonStandardName));
         }
 
+        [Test]
+        public void SwapsOnTwoSlotsThatBothMoveEachFollowTheirOwnSlot()
+        {
+            // The eyes (slot 2) and mouth (slot 3) move down one when the first two slots merge, the mouth onto the
+            // eyes' old slot. A malformed curve on slot -1 animates nothing, and mustn't stop the build.
+            var avatar = Avatar(withComponent: true);
+            var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
+            body.sharedMesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) },
+                new[] { Quad(4, 0.1f, 0.1f, 0.3f, 0.3f) }, new[] { Quad(5, 0.6f, 0.6f, 0.8f, 0.8f) });
+            body.sharedMaterials = new[]
+                { body.sharedMaterials[0], body.sharedMaterials[1], Standard(Gradient(16, 4)), Standard(Gradient(16, 5)) };
+            var red = Standard(Gradient(16, 6));
+            red.name = "Red";
+            var toggle = Keep(new AnimationClip { name = "Face colours" });
+            foreach (var slot in new[] { 3, 2, -1 })
+                AnimationUtility.SetObjectReferenceCurve(toggle, Slot("Body", slot),
+                    new[] { new ObjectReferenceKeyframe { time = 0, value = red } });
+            WithFx(avatar, toggle);
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, "Standard", "Standard" }));
+            var swaps = FxClips(avatar).SelectMany(AnimationUtility.GetObjectReferenceCurveBindings)
+                .Select(binding => binding.propertyName).Where(name => !name.Contains("-1")).OrderBy(name => name);
+            Assert.That(swaps, Is.EqualTo(new[] { "m_Materials.Array.data[1]", "m_Materials.Array.data[2]" }));
+        }
+        [Test]
+        public void ALaterPassThatEditsTheFxControllerKeepsItsEdits()
+        {
+            // Avatar Optimizer edits the descriptor's controllers directly, after the bake. The bake's animator
+            // services must have written their controllers back by then, or they'd overwrite those edits at the end.
+            var avatar = Avatar(withComponent: true);
+            var hatOff = Keep(new AnimationClip { name = "Hat off" });
+            hatOff.SetCurve("Hat", typeof(GameObject), "m_IsActive", AnimationCurve.Constant(0, 1, 0));
+            WithFx(avatar, hatOff);
+
+            MobileBuild.Override = true;
+            DirectFxEditPlugin.Enabled = true;
+            try { Build(avatar); }
+            finally { DirectFxEditPlugin.Enabled = false; }
+
+            var clip = FxClips(avatar).Single();
+            Assert.That(AnimationUtility.GetCurveBindings(clip).Select(binding => binding.path), Has.Member(DirectFxEditPlugin.Path));
+        }
+
+        [Test]
+        public void ASwapInAChildAnimatorExcludesTheSlotItSwaps()
+        {
+            // The hat has its own Animator, whose clip paths start at the hat: "" is the hat itself.
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat");
+            var original = hat.GetComponent<MeshRenderer>().sharedMaterial;
+            var swap = Keep(new AnimationClip { name = "Hat recolour" });
+            AnimationUtility.SetObjectReferenceCurve(swap,
+                EditorCurveBinding.PPtrCurve("", typeof(MeshRenderer), "m_Materials.Array.data[0]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 6)) } });
+            var controller = Keep(new AnimatorController { name = "Hat" });
+            controller.AddLayer("Recolour");
+            controller.layers[0].stateMachine.AddState(swap.name).motion = swap;
+            hat.gameObject.AddComponent<Animator>().runtimeAnimatorController = controller;
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo("Standard"));
+            Assert.That(Texts(errors), Has.Some.Contain("Hat recolour"));
+        }
+
         static EditorCurveBinding Slot(string path, int slot) =>
             EditorCurveBinding.PPtrCurve(path, typeof(SkinnedMeshRenderer), $"m_Materials.Array.data[{slot}]");
 
