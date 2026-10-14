@@ -80,7 +80,7 @@ namespace UVWizard.Core.Pipeline
             var merged = MergedMaterial(options, atlas, representative, slots.Exists(slot => slot.Reading.UsesVertexColour));
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var replaced = RewriteRenderers(slots, merged);
-            return new BakeResult(true, search.Scale, merged, atlas, representative, replaced, excluded, flagged);
+            return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged);
         }
 
         // Sorts each of the renderer's material slots into merged (a Slot), excluded or skipped.
