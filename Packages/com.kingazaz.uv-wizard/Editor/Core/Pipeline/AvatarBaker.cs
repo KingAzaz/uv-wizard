@@ -77,10 +77,10 @@ namespace UVWizard.Core.Pipeline
             if (options.Compression is { } format) AtlasCompressor.Compress(atlas, format);
 
             var representative = Representative(slots, charts, options.MergedShader);
-            var merged = MergedMaterial(options, atlas, representative, slots.Exists(slot => slot.Reading.UsesVertexColour));
+            var merged = MergedMaterial(options, atlas, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var replaced = RewriteRenderers(slots, merged);
-            return new BakeResult(true, search.Scale, merged, atlas, representative, replaced, excluded, flagged);
+            return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged);
         }
 
         // Sorts each of the renderer's material slots into merged (a Slot), excluded or skipped.
@@ -143,7 +143,7 @@ namespace UVWizard.Core.Pipeline
                     Exclude("Part of it repeats its texture across more than two tiles, more than the atlas can hold.");
                     continue;
                 }
-                if (reading.Verdict == MaterialVerdict.Flagged)
+                if (reading.Verdict == MaterialVerdict.Flagged && triangles.Length > 0)
                     flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? "It may look different after the bake."));
                 slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, triangles, islands, TextureSize(reading)));
             }
@@ -200,7 +200,8 @@ namespace UVWizard.Core.Pipeline
         }
 
         // The source with the merged shader whose charts cover the most texels, first in slot order on a tie. A
-        // chart counts once for each material it holds, so stacked islands don't count twice.
+        // chart counts once for each material it holds, so stacked islands don't count twice. A source on empty
+        // submeshes alone has no charts, draws nothing, and so can't represent.
         static Material? Representative(List<Slot> slots, Chart[] charts, Shader mergedShader)
         {
             var area = new Dictionary<Material, long>();
@@ -213,7 +214,8 @@ namespace UVWizard.Core.Pipeline
             }
             Material? best = null;
             foreach (var slot in slots)
-                if (slot.Material.shader == mergedShader && (best == null || area[slot.Material] > area[best]))
+                if (slot.Material.shader == mergedShader && area.TryGetValue(slot.Material, out var covered)
+                    && (best == null || covered > area[best]))
                     best = slot.Material;
             return best;
         }
@@ -226,6 +228,7 @@ namespace UVWizard.Core.Pipeline
             var colouredVertices = new Dictionary<Mesh, bool[]?>();
             foreach (var slot in slots)
             {
+                if (!slot.Draws) continue;
                 if (merged.HasProperty(culling) && slot.Material.HasProperty(culling)
                     && slot.Material.GetFloat(culling) != merged.GetFloat(culling))
                     flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
@@ -370,6 +373,9 @@ namespace UVWizard.Core.Pipeline
 
             /// <summary>Three vertex indices per triangle, base vertex applied.</summary>
             public int[] Triangles { get; }
+
+            /// <summary>False for an empty submesh: it's merged so it costs no material slot, but shows nothing.</summary>
+            public bool Draws => Triangles.Length > 0;
 
             public Island[] Islands { get; }
             public Vector2Int TextureSize { get; }
