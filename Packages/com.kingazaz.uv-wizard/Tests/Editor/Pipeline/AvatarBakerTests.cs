@@ -383,6 +383,20 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void TheWorldNormalRenderShowsTheNearestSurfaceWhateverTheDrawOrder()
+        {
+            // Guards the render comparisons above: overlapping surfaces mustn't come out by draw order.
+            var near = new[] { Quad(0.2f, 0, 0, 1, 1) };
+            var far = new[] { Quad(0.8f, 0, 0, 1, 1) };
+            var tilted = NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 0), 1);
+            var other = NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 3), 1);
+            var nearFirst = MeshRenderer(WithTangents(Mesh(near, far)), tilted, other);
+            var farFirst = MeshRenderer(WithTangents(Mesh(far, near)), other, tilted);
+
+            AssertSameNormals(WorldNormals(nearFirst), WorldNormals(farFirst), "drawn in either order");
+        }
+
+        [Test]
         public void AnExcludedSlotKeepsItsMaterialAndUv0()
         {
             // The second slot's island spans five tiles, over the repeat limit.
@@ -819,7 +833,7 @@ namespace UVWizard.Core.Tests.Pipeline
             if (shader == null)
                 shader = AssetDatabase.LoadAssetAtPath<Shader>("Packages/com.kingazaz.uv-wizard/Tests/Editor/Pipeline/WorldNormal.shader");
             var material = Keep(new Material(shader));
-            var target = RenderTexture.GetTemporary(new RenderTextureDescriptor(size, size, RenderTextureFormat.ARGBFloat, 0) { sRGB = false });
+            var target = RenderTexture.GetTemporary(new RenderTextureDescriptor(size, size, RenderTextureFormat.ARGBFloat, 24) { sRGB = false });
             var previous = RenderTexture.active;
             try
             {
@@ -936,6 +950,12 @@ namespace UVWizard.Core.Tests.Pipeline
             mesh.subMeshCount = triangles.Count;
             for (var s = 0; s < triangles.Count; s++) mesh.SetTriangles(triangles[s], s);
             mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        static Mesh WithTangents(Mesh mesh)
+        {
+            mesh.RecalculateTangents();
             return mesh;
         }
 

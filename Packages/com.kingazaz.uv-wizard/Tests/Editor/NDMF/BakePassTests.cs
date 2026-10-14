@@ -7,6 +7,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UVWizard.Core.Baking;
 using UVWizard.Core.Pipeline;
 using VRC.SDK3.Avatars.Components;
 using Object = UnityEngine.Object;
@@ -140,27 +141,32 @@ namespace UVWizard.NDMF.Tests
             var avatar = Avatar(withComponent: true);
 
             MobileBuild.Override = true;
-            Build(avatar);
+            var errors = Build(avatar);
 
+            Assert.That(errors, Is.Empty);
             var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
+            Assert.That(merged.shader.name, Is.EqualTo(ToonStandardName), "the bake ran");
             Assert.That(merged.IsKeywordEnabled("USE_NORMAL_MAPS"), Is.False);
             Assert.That(merged.GetTexture("_BumpMap"), Is.Null);
         }
 
-        [Test]
-        public void ANormalMapTiledMoreFinelyThanTheAlbedoKeepsItsDetail()
+        [TestCase(4)]
+        [TestCase(-4)]
+        public void ANormalMapTiledMoreFinelyThanTheAlbedoKeepsItsDetail(float tiling)
         {
             // The 32 px checker's 4-texel cells, tiled 4 times, are 1/32 of a UV apart. Counted at its own size
-            // the chart would get 32 texels per UV, one per cell, smearing neighbouring cells together.
+            // the chart would get 32 texels per UV, one per cell, smearing neighbouring cells together. Tiled -4
+            // times, mirrored, they're as close.
             var avatar = Avatar(withComponent: true);
             var toon = NormalMapped(ToonStandardMaterial(Gradient(16, 4), culling: 2), NormalChecker(32, 4), 1);
-            toon.SetTextureScale("_BumpMap", new Vector2(4, 4));
+            toon.SetTextureScale("_BumpMap", new Vector2(tiling, tiling));
             var hat = avatar.transform.Find("Hat");
             hat.GetComponent<MeshFilter>().sharedMesh = Grid(1, 6, 32);
             hat.GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
-            var before = Centroids(hat.gameObject).Select(c => Decoded(TiledSample((Texture2D)toon.GetTexture("_BumpMap"), c.Uv, 4))).ToArray();
+            var before = Centroids(hat.gameObject).Select(c => Decoded(TiledSample((Texture2D)toon.GetTexture("_BumpMap"), c.Uv, tiling))).ToArray();
 
-            BakePass.Bake(avatar, new BakeOptions(Shader.Find(ToonStandardName)));
+            // The checker is in Unity's XYZ layout, so the atlas is too, whatever the editor's build target.
+            BakePass.Bake(avatar, new BakeOptions(Shader.Find(ToonStandardName), normalEncoding: NormalEncoding.RGorAG));
 
             var normals = (Texture2D)hat.GetComponent<MeshRenderer>().sharedMaterial.GetTexture("_BumpMap");
             var after = Centroids(hat.gameObject).Select(c => Decoded(normals.GetPixelBilinear(c.Uv.x, c.Uv.y))).ToArray();
@@ -191,6 +197,25 @@ namespace UVWizard.NDMF.Tests
             for (var k = 0; k < before.Length; k++)
             for (var channel = 0; channel < 3; channel++)
                 Assert.That(after[k][channel], Is.EqualTo(before[k][channel]).Within(0.08f), $"triangle {k}, channel {channel}");
+        }
+
+        [Test]
+        public void AnAlbedoScaledToZeroStillBakesItsTiledNormalMap()
+        {
+            // The albedo's zero scale squeezes the hat's chart to a point, leaving the tiling ratio nothing to divide by.
+            var avatar = Avatar(withComponent: true);
+            var toon = NormalMapped(ToonStandardMaterial(Gradient(16, 4), culling: 2), NormalChecker(32, 4), 1);
+            toon.mainTextureScale = Vector2.zero;
+            toon.SetTextureScale("_BumpMap", new Vector2(4, 4));
+            avatar.transform.Find("Hat").GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(errors, Is.Empty);
+            var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
+            Assert.That(merged.shader.name, Is.EqualTo(ToonStandardName), "the bake ran");
+            Assert.That(merged.GetTexture("_BumpMap"), Is.Not.Null);
         }
 
         [Test]
