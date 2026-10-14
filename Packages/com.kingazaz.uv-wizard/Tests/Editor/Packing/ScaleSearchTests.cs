@@ -148,15 +148,15 @@ namespace UVWizard.Core.Tests.Packing
         static readonly PackSettings NestingSettings = new PackSettings(atlasSize: 64, padding: 0);
 
         static ScaleSearchResult ShelfOnly(ChartShape[] charts, PackSettings settings) =>
-            ScaleSearch.Search(charts, settings, null, shelfChartCount: 0, timeBudget: System.TimeSpan.MaxValue);
+            ScaleSearch.Search(charts, settings, null, exactPackerChartLimit: 0, timeBudget: System.TimeSpan.MaxValue);
 
         [Test]
         public void AboveTheChartCountThresholdOnlyTheShelfPackerPacks()
         {
             var charts = NestingCharts();
 
-            var shelf = ScaleSearch.Search(charts, NestingSettings, null, shelfChartCount: 7, timeBudget: System.TimeSpan.MaxValue);
-            var exact = ScaleSearch.Search(charts, NestingSettings, null, shelfChartCount: 8, timeBudget: System.TimeSpan.MaxValue);
+            var shelf = ScaleSearch.Search(charts, NestingSettings, null, exactPackerChartLimit: 7, timeBudget: System.TimeSpan.MaxValue);
+            var exact = ScaleSearch.Search(charts, NestingSettings, null, exactPackerChartLimit: 8, timeBudget: System.TimeSpan.MaxValue);
 
             Assert.That(shelf.Packer, Is.EqualTo(Packer.Shelf));
             Assert.That(shelf.Fits, Is.True);
@@ -166,6 +166,7 @@ namespace UVWizard.Core.Tests.Packing
             Assert.That(ShelfPacker.Pack(charts, shelf.FailedScale, NestingSettings).Fits, Is.False);
             Assert.That(exact.Packer, Is.EqualTo(Packer.Exact));
             Assert.That(exact.Scale, Is.GreaterThan(shelf.Scale));
+            Assert.That(exact.RanOutOfTime, Is.False);
         }
 
         [Test]
@@ -173,11 +174,13 @@ namespace UVWizard.Core.Tests.Packing
         {
             var charts = NestingCharts();
 
-            var result = ScaleSearch.Search(charts, NestingSettings, null, shelfChartCount: 100, timeBudget: System.TimeSpan.Zero);
+            var result = ScaleSearch.Search(charts, NestingSettings, null, exactPackerChartLimit: 100, timeBudget: System.TimeSpan.Zero);
 
             Assert.That(result.Packer, Is.EqualTo(Packer.Shelf));
+            Assert.That(result.RanOutOfTime, Is.True);
             Assert.That(result.Fits, Is.True);
             Assert.That(result.Scale, Is.EqualTo(ShelfOnly(charts, NestingSettings).Scale));
+            Assert.That(AtlasCorners(charts, result.Packing), Has.All.Matches<Vector2>(InsideAtlas(64)));
             Assert.That(PixelsCoveredByMoreThanOneChart(charts, result.Packing), Is.Empty);
         }
 
@@ -199,7 +202,7 @@ namespace UVWizard.Core.Tests.Packing
         [Test]
         public void ByDefaultMoreChartsThanTheThresholdGoToTheShelfPacker()
         {
-            var charts = Enumerable.Repeat(Rectangle(4, 4), ScaleSearch.ShelfChartCount + 1).ToArray();
+            var charts = Enumerable.Repeat(Rectangle(4, 4), ScaleSearch.ExactPackerChartLimit + 1).ToArray();
 
             var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 2048, padding: 0));
 

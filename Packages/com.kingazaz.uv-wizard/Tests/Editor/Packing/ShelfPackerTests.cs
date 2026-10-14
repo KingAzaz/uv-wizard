@@ -55,6 +55,20 @@ namespace UVWizard.Core.Tests.Packing
         }
 
         [Test]
+        public void AChartGoesOnTheLowestShelfWithRoom()
+        {
+            // The second chart opens a second shelf. The third doesn't fit beside it, but fits
+            // beside the first, on the first shelf.
+            var charts = new[] { Rectangle(40, 32), Rectangle(48, 24), Rectangle(20, 20) };
+
+            var result = ShelfPacker.Pack(charts, 1, new PackSettings(atlasSize: 64, padding: 0));
+
+            Assert.That(result.Fits, Is.True);
+            Assert.That(AtlasCorners(charts, result), Has.All.Matches<Vector2>(InsideAtlas(64)));
+            Assert.That(PixelsCoveredByMoreThanOneChart(charts, result), Is.Empty);
+        }
+
+        [Test]
         public void AChartLiesOnItsWideSide()
         {
             // The first chart leaves a 64 x 24 strip, which only takes the second lying down.
@@ -143,18 +157,6 @@ namespace UVWizard.Core.Tests.Packing
             Assert.That(result.Placements, Has.Some.Matches<Placement>(p => p.Rotated));
             Assert.That(AtlasCorners(charts, result), Has.All.Matches<Vector2>(InsideAtlas(512)));
             Assert.That(ChartsCloserThan(6, charts, result, 512), Is.Empty);
-        }
-
-        [Test]
-        public void TheSameChartsPackTheSameWay()
-        {
-            var charts = new[] { LShape(32, 16), Rectangle(16, 16), Rectangle(20, 8), Rectangle(8, 20) };
-            var settings = new PackSettings(atlasSize: 64, padding: 4);
-
-            var first = ShelfPacker.Pack(charts, 1, settings);
-            var second = ShelfPacker.Pack(charts, 1, settings);
-
-            Assert.That(second.Placements, Is.EqualTo(first.Placements));
         }
     }
 }

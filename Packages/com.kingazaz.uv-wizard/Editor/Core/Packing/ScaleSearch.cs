@@ -24,7 +24,7 @@ namespace UVWizard.Core.Packing
         /// Above this many charts only the shelf packer runs. The exact search takes about 1.6 s at
         /// 3,000 charts (ADR 0002), and it grows faster than the chart count.
         /// </summary>
-        public const int ShelfChartCount = 4000;
+        public const int ExactPackerChartLimit = 4000;
 
         /// <summary>
         /// Once the search has run this long, it stops refining with the exact packer and keeps the
@@ -35,7 +35,7 @@ namespace UVWizard.Core.Packing
         /// <summary>
         /// Packs with the exact packer, starting from the shelf packer's best scale so the result is
         /// never worse than the shelf's. Falls back to the shelf packer alone above
-        /// <see cref="ShelfChartCount"/> charts, and stops refining once <see cref="TimeBudget"/> runs out.
+        /// <see cref="ExactPackerChartLimit"/> charts, and stops refining once <see cref="TimeBudget"/> runs out.
         /// </summary>
         /// <param name="priorities">
         /// One per chart, positive and finite, multiplying the scale the search tries, so a chart
@@ -43,10 +43,10 @@ namespace UVWizard.Core.Packing
         /// upscaling adds no detail.
         /// </param>
         public static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? priorities = null) =>
-            Search(charts, settings, priorities, ShelfChartCount, TimeBudget);
+            Search(charts, settings, priorities, ExactPackerChartLimit, TimeBudget);
 
         internal static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? priorities,
-            int shelfChartCount, TimeSpan timeBudget)
+            int exactPackerChartLimit, TimeSpan timeBudget)
         {
             if (priorities != null)
             {
@@ -59,53 +59,60 @@ namespace UVWizard.Core.Packing
 
             var clock = Stopwatch.StartNew();
             var attempts = 0;
+            var ranOutOfTime = false;
             var scales = new float[charts.Count];
-            Func<float, PackResult> Using(Packer packer) => scale =>
+            Func<float, PackResult> AttemptWith(Packer packer) => scale =>
             {
                 attempts++;
                 for (var i = 0; i < charts.Count; i++)
                     scales[i] = Math.Min(1, scale * (priorities?[i] ?? 1));
                 return packer == Packer.Shelf ? ShelfPacker.Pack(charts, scales, settings) : ExactPacker.Pack(charts, scales, settings);
             };
-            Bracket Shelf() => Climb(Packer.Shelf, Using(Packer.Shelf), () => null, () => false);
 
-            var found = charts.Count > shelfChartCount
-                ? Shelf()
-                : Climb(Packer.Exact, Using(Packer.Exact), () => Shelf(), () => clock.Elapsed > timeBudget);
-            return new ScaleSearchResult(found.Packing, found.Packer, found.Scale, found.FailedScale, attempts);
-        }
-
-        // The largest scale up to 1 at which the packer fits the charts. It tries 1 first. Below
-        // that it starts from the seed's fit, or else halves until something fits, then bisects
-        // geometrically between the last fit and the last failure until Precision or out of time.
-        static Bracket Climb(Packer packer, Func<float, PackResult> attempt, Func<Bracket?> seed, Func<bool> outOfTime)
-        {
-            var top = attempt(1);
-            if (top.Fits) return new Bracket(top, packer, 1, float.PositiveInfinity);
-
-            Bracket found;
-            if (seed() is { Packing: { Fits: true } } fit) found = new Bracket(fit.Packing, fit.Packer, fit.Scale, 1);
-            else
+            // The largest scale up to 1 at which the packer fits the charts. It tries 1 first. Below
+            // that it starts from the seed's fit, or else halves until something fits, then bisects
+            // geometrically between the last fit and the last failure until Precision or out of time.
+            Bracket Climb(Packer packer, Func<Bracket?> seed, Func<bool> outOfTime)
             {
-                float hi = 1, lo = 0.5f;
-                PackResult best;
-                while (!(best = attempt(lo)).Fits)
+                var attempt = AttemptWith(packer);
+                var top = attempt(1);
+                if (top.Fits) return new Bracket(top, packer, 1, float.PositiveInfinity);
+
+                Bracket found;
+                if (seed() is { Packing: { Fits: true } } fit) found = new Bracket(fit.Packing, fit.Packer, fit.Scale, 1);
+                else
                 {
-                    hi = lo;
-                    lo /= 2;
-                    if (lo < MinScale) return new Bracket(best, packer, 0, hi);
+                    float hi = 1, lo = 0.5f;
+                    PackResult best;
+                    while (!(best = attempt(lo)).Fits)
+                    {
+                        hi = lo;
+                        lo /= 2;
+                        if (lo < MinScale) return new Bracket(best, packer, 0, hi);
+                    }
+                    found = new Bracket(best, packer, lo, hi);
                 }
-                found = new Bracket(best, packer, lo, hi);
+                while (found.FailedScale / found.Scale > Precision)
+                {
+                    if (outOfTime())
+                    {
+                        ranOutOfTime = true;
+                        break;
+                    }
+                    var mid = (float)Math.Sqrt((double)found.Scale * found.FailedScale);
+                    var packing = attempt(mid);
+                    found = packing.Fits
+                        ? new Bracket(packing, packer, mid, found.FailedScale)
+                        : new Bracket(found.Packing, found.Packer, found.Scale, mid);
+                }
+                return found;
             }
-            while (found.FailedScale / found.Scale > Precision && !outOfTime())
-            {
-                var mid = (float)Math.Sqrt((double)found.Scale * found.FailedScale);
-                var packing = attempt(mid);
-                found = packing.Fits
-                    ? new Bracket(packing, packer, mid, found.FailedScale)
-                    : new Bracket(found.Packing, found.Packer, found.Scale, mid);
-            }
-            return found;
+            Bracket Shelf() => Climb(Packer.Shelf, () => null, () => false);
+
+            var result = charts.Count > exactPackerChartLimit
+                ? Shelf()
+                : Climb(Packer.Exact, () => Shelf(), () => clock.Elapsed > timeBudget);
+            return new ScaleSearchResult(result.Packing, result.Packer, result.Scale, result.FailedScale, ranOutOfTime, attempts);
         }
 
         // A packing that fits at Scale (unless Scale is 0), and the smallest scale known not to fit.
@@ -128,10 +135,11 @@ namespace UVWizard.Core.Packing
 
     internal sealed class ScaleSearchResult
     {
-        public ScaleSearchResult(PackResult packing, Packer packer, float scale, float failedScale, int attempts)
+        public ScaleSearchResult(PackResult packing, Packer packer, float scale, float failedScale, bool ranOutOfTime, int attempts)
         {
             Packing = packing;
             Packer = packer;
+            RanOutOfTime = ranOutOfTime;
             Scale = scale;
             FailedScale = failedScale;
             Attempts = attempts;
@@ -139,10 +147,17 @@ namespace UVWizard.Core.Packing
 
         /// <summary>
         /// The packer that placed <see cref="Packing"/>: the shelf packer above
-        /// <see cref="ScaleSearch.ShelfChartCount"/> charts, or when the exact packer did no better.
+        /// <see cref="ScaleSearch.ExactPackerChartLimit"/> charts, or when the exact packer did no better.
         /// The report (#24) shows it.
         /// </summary>
         public Packer Packer { get; }
+
+        /// <summary>
+        /// True when <see cref="ScaleSearch.TimeBudget"/> ran out before the search reached
+        /// <see cref="ScaleSearch.Precision"/>, so a faster machine might keep more detail. The report
+        /// (#24) shows it.
+        /// </summary>
+        public bool RanOutOfTime { get; }
 
         /// <summary>The packing at <see cref="Scale"/>. It doesn't fit when no scale did.</summary>
         public PackResult Packing { get; }
@@ -163,7 +178,7 @@ namespace UVWizard.Core.Packing
 
         /// <summary>
         /// The smallest scale the exact packer tried that didn't fit, or the shelf packer above
-        /// <see cref="ScaleSearch.ShelfChartCount"/> charts. Infinity when nothing failed.
+        /// <see cref="ScaleSearch.ExactPackerChartLimit"/> charts. Infinity when nothing failed.
         /// </summary>
         public float FailedScale { get; }
 
