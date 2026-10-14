@@ -10,9 +10,10 @@ Shader "Hidden/UVWizard/Tests/WorldNormal"
     }
     SubShader
     {
+        // Depth-tested, so overlapping surfaces show the nearest whatever order they're drawn in.
         Cull Off
-        ZWrite Off
-        ZTest Always
+        ZWrite On
+        ZTest LEqual
         Blend Off
 
         Pass
