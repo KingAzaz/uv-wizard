@@ -1,3 +1,5 @@
+#nullable enable
+
 using UnityEditor;
 
 namespace UVWizard.NDMF

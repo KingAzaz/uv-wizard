@@ -1,3 +1,5 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,9 +31,9 @@ namespace UVWizard.NDMF
         };
 
         public static readonly Localizer Localizer = new Localizer("en-US", () =>
-            new List<(string, Func<string, string>)> { ("en-US", Lookup(English)) });
+            new List<(string, Func<string, string>)> { ("en-US", Lookup(English)!) });
 
-        static Func<string, string> Lookup((string Key, string Text)[] strings)
+        static Func<string, string?> Lookup((string Key, string Text)[] strings)
         {
             var texts = strings.ToDictionary(entry => entry.Key, entry => entry.Text);
             return key => texts.TryGetValue(key, out var text) ? text : null;

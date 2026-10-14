@@ -34,7 +34,8 @@ namespace UVWizard.Core.Materials
         {
             var albedo = new ChannelSource(material.GetTexture("_MainTex"), Color.white,
                 MaterialProperties.ScaleOffset(material, "_MainTex"), 0);
-            return new SourceMaterialReading(albedo, null, null, MaterialVerdict.Merged, null);
+            // Toon Lit always multiplies albedo by the vertex colour.
+            return new SourceMaterialReading(albedo, null, null, MaterialVerdict.Merged, null, usesVertexColour: true);
         }
 
         public static SourceMaterialReading ReadToonStandard(Material material)

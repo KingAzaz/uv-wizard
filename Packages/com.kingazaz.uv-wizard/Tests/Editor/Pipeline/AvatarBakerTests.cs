@@ -11,6 +11,7 @@ using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Pipeline
 {
+    [Category("GPU")]
     public class AvatarBakerTests
     {
         readonly List<Object> created = new List<Object>();
@@ -97,6 +98,113 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(second.sharedMaterials, Is.EqualTo(new[] { detailed }));
             Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(new[] { detailed }));
             Assert.That(result.Excluded[0].Reason, Does.Contain("UV1"));
+        }
+
+        [Test]
+        public void ATextureTiledPastTheRepeatLimitIsExcluded()
+        {
+            // The island covers half a UV tile, but the texture is tiled 20 times across it: 10 repeats.
+            var tiled = Standard(Gradient(16, 0), Color.white, scaleOffset: new Vector4(20, 1, 0, 0));
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), tiled);
+
+            var result = Bake(renderer);
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { tiled }));
+            Assert.That(result.Excluded.Select(note => note.Reason), Has.Some.Contains("repeat"));
+        }
+
+        [Test]
+        public void AUv0FormatThatCantHoldAtlasUvsExcludesTheSlotBeforeAnythingChanges()
+        {
+            var merged = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+            var bytes = Keep(new Mesh());
+            bytes.SetVertexBufferParams(3,
+                new VertexAttributeDescriptor(VertexAttribute.Position, stream: 0),
+                new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.UNorm8, 4, stream: 1));
+            bytes.SetVertexBufferData(new[] { Vector3.zero, Vector3.right, Vector3.up }, 0, 0, 3, 0);
+            bytes.SetVertexBufferData(new byte[] { 0, 0, 0, 0, 255, 0, 0, 0, 0, 255, 0, 0 }, 0, 0, 12, 1);
+            bytes.SetIndexBufferParams(3, IndexFormat.UInt16);
+            bytes.SetIndexBufferData(new ushort[] { 0, 1, 2 }, 0, 0, 3);
+            bytes.subMeshCount = 1;
+            bytes.SetSubMesh(0, new SubMeshDescriptor(0, 3));
+            var material = Standard(Gradient(16, 1), Color.white);
+            var unwritable = MeshRenderer(bytes, material);
+
+            var result = Bake(merged, unwritable);
+
+            Assert.That(Filter(unwritable).sharedMesh, Is.SameAs(bytes));
+            Assert.That(unwritable.sharedMaterials, Is.EqualTo(new[] { material }));
+            Assert.That(result.Excluded.Select(note => note.Reason), Has.Some.Contains("UV0"));
+            Assert.That(merged.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
+        }
+
+        [Test]
+        public void ALineSubmeshIsExcluded()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            mesh.SetIndices(new[] { 4, 5 }, MeshTopology.Lines, 1);
+            var lines = Standard(Gradient(16, 1), Color.white);
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), lines);
+
+            var result = Bake(renderer);
+
+            Assert.That(renderer.sharedMaterials[1], Is.SameAs(lines));
+            Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(new[] { lines }));
+        }
+
+        [Test]
+        public void AMeshWithoutUv0IsExcluded()
+        {
+            var mesh = Keep(new Mesh());
+            mesh.SetVertices(new[] { Vector3.zero, Vector3.right, Vector3.up });
+            mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
+            var material = Standard(Gradient(16, 0), Color.white);
+            var renderer = MeshRenderer(mesh, material);
+
+            var result = Bake(renderer);
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { material }));
+            Assert.That(result.Excluded.Select(note => note.Reason), Has.Some.Contains("UV0"));
+        }
+
+        [Test]
+        public void AnEmptySlotIsLeftAlone()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), null!);
+
+            var result = Bake(renderer);
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial, null }));
+            Assert.That(result.Excluded, Is.Empty);
+        }
+
+        [Test]
+        public void AnUntexturedSourceBakesItsTint()
+        {
+            var tint = new Color(0.8f, 0.3f, 0.2f);
+            var plain = Keep(new Material(Shader.Find("Standard")) { color = tint });
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), plain);
+
+            var result = Bake(renderer);
+
+            foreach (var centroid in Centroids(renderer))
+                AssertClose(tint, result.Atlas!.GetPixelBilinear(centroid.Uv.x, centroid.Uv.y), "centroid");
+        }
+
+        [Test]
+        public void TheRepresentativeCountsStackedIslandsOnce()
+        {
+            // The first source stacks two copies of a 0.3 x 0.3 quad: 0.18 of summed triangle area, but one
+            // 0.09 chart. The second covers one 0.4 x 0.4 quad, 0.16, and so is the larger chart.
+            var stacked = Standard(Gradient(16, 0), Color.white);
+            var single = Standard(Gradient(16, 1), Color.white);
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 0.1f, 0.1f, 0.4f, 0.4f) }, new[] { Quad(2, 0.5f, 0.5f, 0.9f, 0.9f) });
+            var renderer = MeshRenderer(mesh, stacked, single);
+
+            var result = Bake(renderer);
+
+            Assert.That(result.Representative, Is.SameAs(single));
         }
 
         [Test]

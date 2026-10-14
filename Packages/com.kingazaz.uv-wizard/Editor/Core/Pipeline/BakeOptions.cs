@@ -15,11 +15,13 @@ namespace UVWizard.Core.Pipeline
         /// <param name="compression">The atlas's compressed format, or null to leave it uncompressed and readable.</param>
         /// <param name="rampProperty">The merged shader's shadow-ramp texture property.</param>
         /// <param name="defaultRamp">The ramp to use when no source has the merged shader to copy one from.</param>
+        /// <param name="cullingProperty">The culling property merged slots are checked against, when both have it.</param>
         /// <param name="representativeProperties">
         /// Properties copied from the representative source: the merged-shader source with the most chart area.
         /// </param>
         public BakeOptions(Shader mergedShader, int atlasSize = 2048, int padding = 8, TextureFormat? compression = null,
-            string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null)
+            string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null,
+            string cullingProperty = "_Culling")
         {
             MergedShader = mergedShader;
             AtlasSize = atlasSize;
@@ -28,6 +30,7 @@ namespace UVWizard.Core.Pipeline
             RampProperty = rampProperty;
             DefaultRamp = defaultRamp;
             RepresentativeProperties = representativeProperties ?? Array.Empty<string>();
+            CullingProperty = cullingProperty;
         }
 
         public Shader MergedShader { get; }
@@ -37,5 +40,6 @@ namespace UVWizard.Core.Pipeline
         public string RampProperty { get; }
         public Texture? DefaultRamp { get; }
         public IReadOnlyList<string> RepresentativeProperties { get; }
+        public string CullingProperty { get; }
     }
 }

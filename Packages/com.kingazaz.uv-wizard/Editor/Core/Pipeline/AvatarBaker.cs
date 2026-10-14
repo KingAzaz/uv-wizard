@@ -32,15 +32,14 @@ namespace UVWizard.Core.Pipeline
             var readings = new Dictionary<Material, SourceMaterialReading>();
             foreach (var renderer in renderers)
                 CollectSlots(renderer, readings, slots, excluded, flagged);
-            if (slots.Count == 0)
-                return new BakeResult(true, 0, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged);
+            if (slots.Count == 0) return BakeResult.Unchanged(true, excluded, flagged);
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
             var keyIds = new Dictionary<SourceKey, int>();
             var surfaces = slots.ConvertAll(slot =>
             {
                 if (!keyIds.TryGetValue(slot.Reading.Key, out var key)) keyIds.Add(slot.Reading.Key, key = keyIds.Count);
-                return new SourceSurface(slot.Uv0, slot.Triangles, slot.Islands, key, slot.TextureSize);
+                return new SourceSurface(slot.Sampled, slot.Triangles, slot.Islands, key, slot.TextureSize);
             });
             var charts = ChartBuilder.Build(surfaces);
             var texelsPerUv = Array.ConvertAll(charts, chart =>
@@ -59,11 +58,9 @@ namespace UVWizard.Core.Pipeline
             }
 
             var search = ScaleSearch.Search(shapes, new PackSettings(options.AtlasSize, options.Padding));
-            if (!search.Fits)
-                return new BakeResult(false, 0, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, Array.Empty<SlotNote>());
+            if (!search.Fits) return BakeResult.Unchanged(false, excluded, Array.Empty<SlotNote>());
 
-            // Every merged corner's place in the atlas, 0 to 1, and how much atlas each source material covers.
-            var area = new Dictionary<Material, float>();
+            // Every merged corner's place in the atlas, 0 to 1.
             for (var c = 0; c < charts.Length; c++)
             {
                 var placement = search.Packing.Placements[c];
@@ -74,15 +71,14 @@ namespace UVWizard.Core.Pipeline
                         (corner, texel) => slot.AtlasUv[corner] = placement.ToAtlas(texel) / options.AtlasSize);
                 }
             }
-            foreach (var slot in slots)
-                area[slot.Material] = (area.TryGetValue(slot.Material, out var sum) ? sum : 0) + AtlasArea(slot, options.AtlasSize);
 
             var atlas = AlbedoBaker.Bake(new BakePlan(options.AtlasSize, slots.ConvertAll(AlbedoSource)));
             atlas.name = "UV Wizard Albedo";
             if (options.Compression is { } format) AtlasCompressor.Compress(atlas, format);
 
-            var representative = Representative(slots, area, options.MergedShader);
+            var representative = Representative(slots, charts, options.MergedShader);
             var merged = MergedMaterial(options, atlas, representative, slots.Exists(slot => slot.Reading.UsesVertexColour));
+            FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var replaced = RewriteRenderers(slots, merged);
             return new BakeResult(true, search.Scale, merged, atlas, representative, replaced, excluded, flagged);
         }
@@ -118,6 +114,12 @@ namespace UVWizard.Core.Pipeline
                     Exclude("Its mesh has no UV0 to remap.");
                     continue;
                 }
+                var uvFormat = data.GetVertexAttributeFormat(VertexAttribute.TexCoord0);
+                if (!Uv0Rewriter.CanHoldAtlasUvs(uvFormat, data.GetVertexAttributeDimension(VertexAttribute.TexCoord0)))
+                {
+                    Exclude($"Its mesh stores UV0 as {uvFormat}, which can't hold atlas positions.");
+                    continue;
+                }
                 if (!readings.TryGetValue(material, out var reading))
                     readings.Add(material, reading = SourceShaderReader.Read(material));
                 if (reading.Verdict == MaterialVerdict.Excluded)
@@ -129,7 +131,11 @@ namespace UVWizard.Core.Pipeline
                 uv0 ??= Uvs(data);
                 var triangles = Indices(data, s);
                 var texture = reading.Albedo?.Texture;
-                var islands = IslandBuilder.Build(uv0, triangles,
+                // Islands and charts live in the texture's own UV space, tiling and offset applied, so a tiled
+                // texture counts its repeats against the limit and its charts are sized by the texels they sample.
+                var st = reading.Albedo?.ScaleOffset ?? new Vector4(1, 1, 0, 0);
+                var sampled = Array.ConvertAll(uv0, uv => new Vector2(uv.x * st.x + st.z, uv.y * st.y + st.w));
+                var islands = IslandBuilder.Build(sampled, triangles,
                     texture != null ? texture.wrapModeU : TextureWrapMode.Repeat,
                     texture != null ? texture.wrapModeV : TextureWrapMode.Repeat);
                 if (Array.Exists(islands, island => island.ExceedsRepeatLimit))
@@ -139,7 +145,7 @@ namespace UVWizard.Core.Pipeline
                 }
                 if (reading.Verdict == MaterialVerdict.Flagged)
                     flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? "It may look different after the bake."));
-                slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, triangles, islands, TextureSize(reading)));
+                slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, triangles, islands, TextureSize(reading)));
             }
         }
 
@@ -164,15 +170,11 @@ namespace UVWizard.Core.Pipeline
             return indices.ToArray();
         }
 
-        // Source texels per UV: the albedo texture's size times its tiling, so a tiled texture gets the atlas
-        // space its repeats need.
+        // Source texels per unit of the texture's own UV space.
         static Vector2Int TextureSize(SourceMaterialReading reading)
         {
-            var albedo = reading.Albedo;
-            if (albedo?.Texture == null) return UntexturedSize;
-            return new Vector2Int(
-                Math.Max(1, Mathf.CeilToInt(albedo.Texture.width * Mathf.Abs(albedo.ScaleOffset.x))),
-                Math.Max(1, Mathf.CeilToInt(albedo.Texture.height * Mathf.Abs(albedo.ScaleOffset.y))));
+            var texture = reading.Albedo?.Texture;
+            return texture == null ? UntexturedSize : new Vector2Int(texture.width, texture.height);
         }
 
         // Calls visit(corner index, position in chart texels) for every corner of the island's triangles,
@@ -182,19 +184,7 @@ namespace UVWizard.Core.Pipeline
             Vector2 shift = island.TileShift;
             foreach (var t in island.Triangles)
                 for (var k = t * 3; k < t * 3 + 3; k++)
-                    visit(k, Vector2.Scale(slot.Uv0[slot.Triangles[k]] + shift, texelsPerUv));
-        }
-
-        static float AtlasArea(Slot slot, int atlasSize)
-        {
-            float area = 0;
-            for (var k = 0; k < slot.AtlasUv.Length; k += 3)
-            {
-                var u = slot.AtlasUv[k + 1] - slot.AtlasUv[k];
-                var v = slot.AtlasUv[k + 2] - slot.AtlasUv[k];
-                area += Mathf.Abs(u.x * v.y - u.y * v.x) / 2;
-            }
-            return area * atlasSize * atlasSize;
+                    visit(k, Vector2.Scale(slot.Sampled[slot.Triangles[k]] + shift, texelsPerUv));
         }
 
         // One bake source per slot, its corners unshared so each carries its own atlas UV.
@@ -209,14 +199,69 @@ namespace UVWizard.Core.Pipeline
                 corners);
         }
 
-        // The source with the merged shader that covers the most atlas, first in slot order on a tie.
-        static Material? Representative(List<Slot> slots, Dictionary<Material, float> area, Shader mergedShader)
+        // The source with the merged shader whose charts cover the most texels, first in slot order on a tie. A
+        // chart counts once for each material it holds, so stacked islands don't count twice.
+        static Material? Representative(List<Slot> slots, Chart[] charts, Shader mergedShader)
         {
+            var area = new Dictionary<Material, long>();
+            foreach (var chart in charts)
+            {
+                var counted = new HashSet<Material>();
+                foreach (var (s, _) in chart.Islands)
+                    if (counted.Add(slots[s].Material))
+                        area[slots[s].Material] = (area.TryGetValue(slots[s].Material, out var sum) ? sum : 0) + chart.FootprintTexels;
+            }
             Material? best = null;
             foreach (var slot in slots)
                 if (slot.Material.shader == mergedShader && (best == null || area[slot.Material] > area[best]))
                     best = slot.Material;
             return best;
+        }
+
+        // Merged slots that will look different because the merged material's shared settings aren't theirs.
+        static void FlagWhatTheMergedMaterialChanges(List<Slot> slots, Material merged, BakeOptions options, List<SlotNote> flagged)
+        {
+            var culling = options.CullingProperty;
+            var vertexColourOn = merged.HasProperty("_VertexColor") && merged.GetFloat("_VertexColor") > 0.5f;
+            var colouredVertices = new Dictionary<Mesh, bool[]?>();
+            foreach (var slot in slots)
+            {
+                if (merged.HasProperty(culling) && slot.Material.HasProperty(culling)
+                    && slot.Material.GetFloat(culling) != merged.GetFloat(culling))
+                    flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
+                        $"It culls {CullingName(slot.Material.GetFloat(culling))}, but the merged material culls " +
+                        $"{CullingName(merged.GetFloat(culling))}, so some of its faces may show or hide."));
+                if (vertexColourOn && !slot.Reading.UsesVertexColour)
+                {
+                    if (!colouredVertices.TryGetValue(slot.Mesh, out var coloured))
+                        colouredVertices.Add(slot.Mesh, coloured = ColouredVertices(slot.Mesh));
+                    if (coloured != null && Array.Exists(slot.Triangles, v => coloured[v]))
+                        flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
+                            "Its mesh carries vertex colours, which the merged material now multiplies in because " +
+                            "another source uses vertex colour."));
+                }
+            }
+        }
+
+        static string CullingName(float value) => value switch
+        {
+            0 => "no faces",
+            1 => "front faces",
+            _ => "back faces",
+        };
+
+        // Which vertices have a colour other than white, or null when the mesh has no vertex colours.
+        static bool[]? ColouredVertices(Mesh mesh)
+        {
+            using var meshes = MeshUtility.AcquireReadOnlyMeshData(mesh);
+            var data = meshes[0];
+            if (!data.HasVertexAttribute(VertexAttribute.Color)) return null;
+            using var colours = new NativeArray<Color>(data.vertexCount, Allocator.Temp);
+            data.GetColors(colours);
+            var coloured = new bool[colours.Length];
+            for (var v = 0; v < colours.Length; v++)
+                coloured[v] = colours[v].r < 0.996f || colours[v].g < 0.996f || colours[v].b < 0.996f;
+            return coloured;
         }
 
         static Material MergedMaterial(BakeOptions options, Texture2D atlas, Material? representative, bool vertexColour)
@@ -255,7 +300,8 @@ namespace UVWizard.Core.Pipeline
         // Gives each renderer with merged slots a rewritten mesh and the merged material on those slots.
         static List<(Mesh Source, Mesh Rewritten)> RewriteRenderers(List<Slot> slots, Material merged)
         {
-            var replaced = new List<(Mesh, Mesh)>();
+            // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was.
+            var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials)>();
             for (var first = 0; first < slots.Count;)
             {
                 var renderer = slots[first].Renderer;
@@ -277,11 +323,17 @@ namespace UVWizard.Core.Pipeline
                 for (var s = mesh.subMeshCount; s < materials.Length; s++)
                     replacement[count + s - mesh.subMeshCount] = materials[s];
 
+                changes.Add((renderer, mesh, rewritten.Mesh, replacement));
+            }
+
+            var replaced = new List<(Mesh Source, Mesh Rewritten)>();
+            foreach (var (renderer, source, rewritten, materials) in changes)
+            {
                 // A skinned renderer keeps its blend-shape weights: the rewritten mesh has the same blend shapes.
-                if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten.Mesh;
-                else renderer.GetComponent<MeshFilter>().sharedMesh = rewritten.Mesh;
-                renderer.sharedMaterials = replacement;
-                replaced.Add((mesh, rewritten.Mesh));
+                if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten;
+                else renderer.GetComponent<MeshFilter>().sharedMesh = rewritten;
+                renderer.sharedMaterials = materials;
+                replaced.Add((source, rewritten));
             }
             return replaced;
         }
@@ -290,7 +342,7 @@ namespace UVWizard.Core.Pipeline
         sealed class Slot
         {
             public Slot(Renderer renderer, Mesh mesh, int submesh, Material material, SourceMaterialReading reading,
-                Vector2[] uv0, int[] triangles, Island[] islands, Vector2Int textureSize)
+                Vector2[] uv0, Vector2[] sampled, int[] triangles, Island[] islands, Vector2Int textureSize)
             {
                 Renderer = renderer;
                 Mesh = mesh;
@@ -298,6 +350,7 @@ namespace UVWizard.Core.Pipeline
                 Material = material;
                 Reading = reading;
                 Uv0 = uv0;
+                Sampled = sampled;
                 Triangles = triangles;
                 Islands = islands;
                 TextureSize = textureSize;
@@ -309,7 +362,11 @@ namespace UVWizard.Core.Pipeline
             public int Submesh { get; }
             public Material Material { get; }
             public SourceMaterialReading Reading { get; }
+            /// <summary>Each vertex's UV0 as the mesh has it.</summary>
             public Vector2[] Uv0 { get; }
+
+            /// <summary>Each vertex's UV0 with the albedo texture's tiling and offset applied: where it samples.</summary>
+            public Vector2[] Sampled { get; }
 
             /// <summary>Three vertex indices per triangle, base vertex applied.</summary>
             public int[] Triangles { get; }

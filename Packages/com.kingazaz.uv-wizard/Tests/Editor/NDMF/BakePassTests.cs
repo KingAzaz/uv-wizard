@@ -13,6 +13,7 @@ using Object = UnityEngine.Object;
 namespace UVWizard.NDMF.Tests
 {
     // NDMF and the VRChat SDK aren't in CI's project, so these run only in the dev project.
+    [Category("GPU")]
     public class BakePassTests
     {
         const string ToonStandardName = "VRChat/Mobile/Toon Standard";
@@ -46,11 +47,14 @@ namespace UVWizard.NDMF.Tests
             var errors = Build(avatar);
 
             Assert.That(errors, Is.Empty);
+            var bodies = avatar.GetComponentsInChildren<SkinnedMeshRenderer>();
+            Assert.That(bodies[1].sharedMesh, Is.Not.SameAs(bodies[0].sharedMesh), "each renderer gets its own rewritten mesh");
             var materials = avatar.GetComponentsInChildren<Renderer>().SelectMany(r => r.sharedMaterials).Distinct().ToArray();
             Assert.That(materials, Has.Length.EqualTo(1));
             var merged = materials[0];
             Assert.That(merged.shader.name, Is.EqualTo(ToonStandardName));
             Assert.That(merged.color, Is.EqualTo(Color.white));
+            Assert.That(merged.GetFloat("_VertexColor"), Is.EqualTo(0), "no Standard source uses vertex colour");
             var atlas = Readable((Texture2D)merged.mainTexture);
             var after = Centroids(avatar).Select(c => atlas.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
             for (var k = 0; k < before.Length; k++)
@@ -109,6 +113,8 @@ namespace UVWizard.NDMF.Tests
             Assert.That(merged.GetFloat("_ShadowBoost"), Is.EqualTo(0.75f));
         }
 
+        // Toon Standard's own default ramp is the same preset, so this checks the outcome; AvatarBakerTests
+        // checks that the default ramp is chosen when no source has the merged shader.
         [Test]
         public void WithoutAToonStandardSourceTheRampIsTheSdksPreset()
         {
@@ -156,6 +162,56 @@ namespace UVWizard.NDMF.Tests
                 Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Excluded) }));
         }
 
+        [Test]
+        public void AMergedSlotCulledUnlikeTheMergedMaterialIsFlagged()
+        {
+            // The body is Toon Standard culling back faces and covers the most area; the hat is double-sided.
+            var avatar = Avatar(withComponent: true);
+            var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
+            body.sharedMaterials = body.sharedMaterials.Select(source => ToonStandardMaterial(source.mainTexture, culling: 2)).ToArray();
+            var hat = avatar.transform.Find("Hat").GetComponent<MeshRenderer>();
+            hat.sharedMaterials = new[] { ToonStandardMaterial(Gradient(16, 4), culling: 0) };
+
+            MobileBuild.Forced = true;
+            var errors = Build(avatar);
+
+            Assert.That(hat.sharedMaterial.GetFloat("_Culling"), Is.EqualTo(2));
+            Assert.That(Reports(errors), Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Flagged) }));
+            Assert.That(Texts(errors).Single(), Does.Contain("cull"));
+        }
+
+        [Test]
+        public void TurningVertexColourOnFlagsSourcesWhoseMeshesCarryVertexColours()
+        {
+            // The hat uses vertex colour, so the merged material turns it on; the body's mesh carries red vertex
+            // colours that its Standard materials never showed.
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat").GetComponent<MeshRenderer>();
+            hat.sharedMaterials = new[] { Keep(new Material(Shader.Find("VRChat/Mobile/Standard Lite")) { mainTexture = Gradient(16, 4) }) };
+            var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
+            body.sharedMesh.colors = Enumerable.Repeat(Color.red, body.sharedMesh.vertexCount).ToArray();
+
+            MobileBuild.Forced = true;
+            var errors = Build(avatar);
+
+            Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Flagged)));
+            Assert.That(Texts(errors), Has.Count.EqualTo(4), "two body slots on each of the two skinned renderers");
+            Assert.That(Texts(errors), Has.All.Contain("vertex colour"));
+        }
+
+        static IEnumerable<(ErrorSeverity, string?)> Reports(List<ErrorContext> errors) =>
+            errors.Select(e => (e.TheError.Severity, (e.TheError as SimpleError)?.TitleKey)).ToArray();
+
+        static List<string> Texts(List<ErrorContext> errors) =>
+            errors.Select(e => (e.TheError as SimpleError)?.ToMessage() ?? "").ToList();
+
+        Material ToonStandardMaterial(Texture texture, float culling)
+        {
+            var material = Keep(new Material(Shader.Find(ToonStandardName)) { mainTexture = texture });
+            material.SetFloat("_Culling", culling);
+            return material;
+        }
+
         // Processes the avatar in place, on the ambient platform, which is VRChat's in a VRChat project.
         static List<ErrorContext> Build(GameObject avatar) =>
             ErrorReport.CaptureErrors(() => AvatarProcessor.ProcessAvatar(avatar));
@@ -171,6 +227,12 @@ namespace UVWizard.NDMF.Tests
             body.transform.SetParent(root.transform);
             body.sharedMesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
             body.sharedMaterials = new[] { Standard(Gradient(16, 0)), Standard(Gradient(32, 1)) };
+
+            // A second skinned renderer drawing the same mesh, as an outfit variant might.
+            var copy = new GameObject("BodyCopy").AddComponent<SkinnedMeshRenderer>();
+            copy.transform.SetParent(root.transform);
+            copy.sharedMesh = body.sharedMesh;
+            copy.sharedMaterials = body.sharedMaterials;
 
             var hat = new GameObject("Hat");
             hat.transform.SetParent(root.transform);

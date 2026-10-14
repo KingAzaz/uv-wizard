@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -21,6 +22,10 @@ namespace UVWizard.Core.Pipeline
             Excluded = excluded;
             Flagged = flagged;
         }
+
+        /// <summary>A bake that merged nothing and left every renderer as it was.</summary>
+        public static BakeResult Unchanged(bool fits, IReadOnlyList<SlotNote> excluded, IReadOnlyList<SlotNote> flagged) =>
+            new BakeResult(fits, 0, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged);
 
         /// <summary>False when the charts fit the atlas at no scale. Nothing is merged then.</summary>
         public bool Fits { get; }

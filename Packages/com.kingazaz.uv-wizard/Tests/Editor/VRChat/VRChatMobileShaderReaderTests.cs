@@ -319,6 +319,12 @@ namespace UVWizard.Core.Tests.VRChat
         }
 
         [Test]
+        public void ToonLitAlwaysUsesVertexColour()
+        {
+            Assert.That(SourceShaderReader.Read(Material(ToonLit)).UsesVertexColour, Is.True);
+        }
+
+        [Test]
         public void AnExcludedReadingKeepsItsVertexColour()
         {
             var material = Material(StandardLite);
