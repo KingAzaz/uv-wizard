@@ -36,6 +36,8 @@ Both stand down while another session in this repo is running or the checkout is
   - In Unity, **Window → MCP for Unity** uses the **stdio** transport. Edit the agent config files by hand: the window's **"Configure"** buttons overwrite them with unpinned entries.
   - MCP servers load only when a session starts.
   - After a script recompile, the bridge (port 6400) drops for a few seconds.
+  - `refresh_unity` can report the editor ready before the recompile starts. After editing scripts, wait for the bridge to drop and come back, call `set_active_instance` again, and only then run tests. Otherwise they fail with "No Unity Editor instances found" or run against the old code.
+  - A file restored from a copy (a mutation-check backup, `git stash pop`, `cp -p`) can keep a timestamp Unity's refresh skips. `touch` it before `refresh_unity`, or the tests run the old compiled code.
   - If a tool reports "No Unity Editor instances found" while Unity is running, read `mcpforunity://instances` and call `set_active_instance` again.
   - Only the `core` tool group is on by default. Use `execute_code` for reads.
 - **Compile-check without the editor:** run Unity's own Roslyn (`<Editor>/Data/NetCoreRuntime/dotnet.exe <Editor>/Data/DotNetSdkRoslyn/csc.dll`) against:
