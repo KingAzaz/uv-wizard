@@ -120,7 +120,7 @@ namespace UVWizard.Core.Tests.Packing
         // A random lopsided chart, 12 to 60 texels across: a right triangle, or an L with arms of
         // different lengths and thicknesses. Each triangle's corners start at a random one of the
         // three, as a mesh's would.
-        static ChartShape Irregular(System.Random rng)
+        internal static ChartShape Irregular(System.Random rng)
         {
             float Size() => 12 + (float)rng.NextDouble() * 48;
             float w = Size(), h = Size();
@@ -145,7 +145,7 @@ namespace UVWizard.Core.Tests.Packing
 
         // Pairs of charts with pixels fewer than `padding` empty pixels apart, by any of x, y or a
         // diagonal, as "i-j".
-        static HashSet<string> ChartsCloserThan(int padding, IReadOnlyList<ChartShape> charts, PackResult result, int atlasSize)
+        internal static HashSet<string> ChartsCloserThan(int padding, IReadOnlyList<ChartShape> charts, PackResult result, int atlasSize)
         {
             var label = Enumerable.Repeat(-1, atlasSize * atlasSize).ToArray();
             var pixels = Enumerable.Range(0, charts.Count).Select(i => CoveredPixels(charts[i], result.Placements[i])).ToArray();
@@ -289,7 +289,7 @@ namespace UVWizard.Core.Tests.Packing
         }
 
         // The fewest empty pixels, along x, y or a diagonal, between pixels of two different charts.
-        static int SmallestGapBetweenCharts(IReadOnlyList<ChartShape> charts, PackResult result)
+        internal static int SmallestGapBetweenCharts(IReadOnlyList<ChartShape> charts, PackResult result)
         {
             var pixels = Enumerable.Range(0, charts.Count).Select(i => CoveredPixels(charts[i], result.Placements[i])).ToArray();
             var smallest = int.MaxValue;
@@ -302,7 +302,7 @@ namespace UVWizard.Core.Tests.Packing
         }
 
         // An L inside a size x size square, missing its top-right arm x arm corner.
-        static ChartShape LShape(float size, float arm)
+        internal static ChartShape LShape(float size, float arm)
         {
             var bottom = Rectangle(size, size - arm).Corners;
             var left = Rectangle(size - arm, arm).Corners.Select(c => c + new Vector2(0, size - arm));

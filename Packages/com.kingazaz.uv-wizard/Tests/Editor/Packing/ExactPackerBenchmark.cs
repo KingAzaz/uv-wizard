@@ -50,7 +50,7 @@ namespace UVWizard.Core.Tests.Packing
             var result = ScaleSearch.Search(charts, Settings);
             var outcome = !result.Fits ? "doesn't fit at any scale" : result.FitsAtFullDetail ? "fits at full detail" : "fits";
             Debug.Log($"[UV Wizard bench] {name}: {charts.Count} charts {outcome}, scale {result.Scale:0.000} ({result.Scale * result.Scale:P0} texels), " +
-                      $"{result.Attempts} attempts, {clock.Elapsed.TotalMilliseconds:0} ms total");
+                      $"{result.Attempts} attempts, {result.Packer} packer, {clock.Elapsed.TotalMilliseconds:0} ms total");
             if (result.Fits) CompareRowScans(name, charts, result.Scale);
         }
 
