@@ -1,0 +1,43 @@
+{
+    "name": "UVWizard.NDMF.Editor.Tests",
+    "rootNamespace": "UVWizard.NDMF.Tests",
+    "references": [
+        "UVWizard.Core.Editor",
+        "UVWizard.NDMF.Editor",
+        "UVWizard.Runtime",
+        "nadena.dev.ndmf",
+        "nadena.dev.ndmf.runtime",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "VRCSDK3A.dll",
+        "VRCSDKBase.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "UVWIZARD_NDMF",
+        "UVWIZARD_VRCHAT_SDK"
+    ],
+    "versionDefines": [
+        {
+            "name": "nadena.dev.ndmf",
+            "expression": "",
+            "define": "UVWIZARD_NDMF"
+        },
+        {
+            "name": "com.vrchat.base",
+            "expression": "",
+            "define": "UVWIZARD_VRCHAT_SDK"
+        }
+    ],
+    "noEngineReferences": false
+}

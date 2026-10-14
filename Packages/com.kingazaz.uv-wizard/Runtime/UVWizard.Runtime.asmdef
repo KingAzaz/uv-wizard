@@ -1,0 +1,24 @@
+{
+    "name": "UVWizard.Runtime",
+    "rootNamespace": "UVWizard",
+    "references": [
+        "nadena.dev.ndmf.runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "UVWIZARD_NDMF"
+    ],
+    "versionDefines": [
+        {
+            "name": "nadena.dev.ndmf",
+            "expression": "",
+            "define": "UVWIZARD_NDMF"
+        }
+    ],
+    "noEngineReferences": false
+}

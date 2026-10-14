@@ -297,5 +297,44 @@ namespace UVWizard.Core.Tests.VRChat
 
             Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }
+
+        [Test]
+        public void StandardLiteUsesVertexColourUnlessItIsTurnedOff()
+        {
+            var material = Material(StandardLite);
+            Assert.That(SourceShaderReader.Read(material).UsesVertexColour, Is.True);
+
+            material.EnableKeyword("DISABLE_VERTEX_COLORING");
+            Assert.That(SourceShaderReader.Read(material).UsesVertexColour, Is.False);
+        }
+
+        [Test]
+        public void ToonStandardUsesVertexColourWhenItsToggleIsOn()
+        {
+            var material = Material(ToonStandard);
+            Assert.That(SourceShaderReader.Read(material).UsesVertexColour, Is.False);
+
+            material.SetFloat("_VertexColor", 1);
+            Assert.That(SourceShaderReader.Read(material).UsesVertexColour, Is.True);
+        }
+
+        [Test]
+        public void ToonLitAlwaysUsesVertexColour()
+        {
+            Assert.That(SourceShaderReader.Read(Material(ToonLit)).UsesVertexColour, Is.True);
+        }
+
+        [Test]
+        public void AnExcludedReadingKeepsItsVertexColour()
+        {
+            var material = Material(StandardLite);
+            material.EnableKeyword("_DETAIL");
+            material.SetFloat("_UVSec", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
+            Assert.That(reading.UsesVertexColour, Is.True);
+        }
     }
 }

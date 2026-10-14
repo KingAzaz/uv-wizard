@@ -67,7 +67,7 @@ namespace UVWizard.Core.Materials
     internal sealed class SourceMaterialReading
     {
         public SourceMaterialReading(ChannelSource? albedo, ChannelSource? emission, ChannelSource? normal,
-            MaterialVerdict verdict, string? reason)
+            MaterialVerdict verdict, string? reason, bool usesVertexColour = false)
         {
             Albedo = albedo;
             Emission = emission;
@@ -75,6 +75,7 @@ namespace UVWizard.Core.Materials
             Key = new SourceKey(albedo, emission, normal);
             Verdict = verdict;
             Reason = reason;
+            UsesVertexColour = usesVertexColour;
         }
 
         public ChannelSource? Albedo { get; }
@@ -96,9 +97,12 @@ namespace UVWizard.Core.Materials
         /// <summary>Why the material is flagged or excluded; null when it is merged.</summary>
         public string? Reason { get; }
 
+        /// <summary>True when the source shader multiplies albedo by the mesh's vertex colours.</summary>
+        public bool UsesVertexColour { get; }
+
         /// <summary>The same reading, excluded for the given reason.</summary>
         public SourceMaterialReading Excluded(string reason) =>
-            new SourceMaterialReading(Albedo, Emission, Normal, MaterialVerdict.Excluded, reason);
+            new SourceMaterialReading(Albedo, Emission, Normal, MaterialVerdict.Excluded, reason, UsesVertexColour);
     }
 
     /// <summary>What decides the texels a source material bakes to: every channel's source.</summary>

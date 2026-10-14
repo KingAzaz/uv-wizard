@@ -11,6 +11,10 @@
     "com.unity.collections": "2.1.4",
     "com.unity.mathematics": "1.2.6"
   },
+  "vpmDependencies": {
+    "nadena.dev.ndmf": ">=1.14.8 <2.0.0-a",
+    "com.anatawa12.avatar-optimizer": ">=1.9.20 <2.0.0-a"
+  },
   "author": {
     "name": "KingAzaz",
     "email": "clnelson888@gmail.com",

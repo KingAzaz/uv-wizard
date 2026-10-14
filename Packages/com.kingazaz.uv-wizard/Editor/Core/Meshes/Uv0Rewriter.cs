@@ -56,7 +56,7 @@ namespace UVWizard.Core.Meshes
                 if (uvs.Length != indices[s].Length)
                     throw new ArgumentException($"Submesh {s} has {indices[s].Length} corners but {uvs.Length} atlas UVs.", nameof(atlasUvs));
                 var format = data.GetVertexAttributeFormat(VertexAttribute.TexCoord0);
-                if (Array.IndexOf(WritableUvFormats, format) < 0 || data.GetVertexAttributeDimension(VertexAttribute.TexCoord0) < 2)
+                if (!CanHoldAtlasUvs(format, data.GetVertexAttributeDimension(VertexAttribute.TexCoord0)))
                     throw new NotSupportedException(
                         $"UV0 stored as {format} x{data.GetVertexAttributeDimension(VertexAttribute.TexCoord0)} can't hold atlas UVs.");
             }
@@ -105,6 +105,10 @@ namespace UVWizard.Core.Meshes
             if (merged != null && AllTriangles(mesh)) mesh.RecalculateUVDistributionMetric(0);
             return new RewrittenMesh(mesh, submeshOf, merged);
         }
+
+        /// <summary>True when UV0 stored this way can be rewritten to atlas positions.</summary>
+        public static bool CanHoldAtlasUvs(VertexAttributeFormat format, int dimension) =>
+            Array.IndexOf(WritableUvFormats, format) >= 0 && dimension >= 2;
 
         static bool AllTriangles(Mesh mesh)
         {
