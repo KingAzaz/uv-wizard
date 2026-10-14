@@ -200,7 +200,8 @@ namespace UVWizard.Core.Pipeline
         }
 
         // The source with the merged shader whose charts cover the most texels, first in slot order on a tie. A
-        // chart counts once for each material it holds, so stacked islands don't count twice.
+        // chart counts once for each material it holds, so stacked islands don't count twice. A source on empty
+        // submeshes alone has no charts, draws nothing, and so can't represent.
         static Material? Representative(List<Slot> slots, Chart[] charts, Shader mergedShader)
         {
             var area = new Dictionary<Material, long>();
@@ -213,7 +214,8 @@ namespace UVWizard.Core.Pipeline
             }
             Material? best = null;
             foreach (var slot in slots)
-                if (slot.Material.shader == mergedShader && (best == null || area[slot.Material] > area[best]))
+                if (slot.Material.shader == mergedShader && area.TryGetValue(slot.Material, out var covered)
+                    && (best == null || covered > area[best]))
                     best = slot.Material;
             return best;
         }

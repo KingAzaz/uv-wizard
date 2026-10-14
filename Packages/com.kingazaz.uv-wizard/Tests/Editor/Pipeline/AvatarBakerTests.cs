@@ -208,6 +208,38 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AnEmptySubmeshBesideAnotherMergedShaderSourceStillBakes()
+        {
+            // Both sources use the merged shader, but the first slot's submesh has no triangles, so it has no charts.
+            var empty = Standard(Gradient(16, 0), Color.white);
+            var drawn = Standard(Gradient(16, 1), Color.white);
+            var mesh = Mesh(Array.Empty<(Vector3[], Vector2[])>(), new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) });
+            var renderer = MeshRenderer(mesh, empty, drawn);
+
+            BakeResult? result = null;
+            Assert.That(() => result = Bake(renderer), Throws.Nothing);
+            Assert.That(result!.Representative, Is.SameAs(drawn));
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
+        }
+
+        [Test]
+        public void AMergedShaderSourceThatDrawsNothingDoesntRepresent()
+        {
+            // The only Standard source sits on an empty submesh; the drawn one uses Unlit/Texture.
+            var ramp = Gradient(8, 3);
+            var empty = Standard(Gradient(16, 0), Color.white);
+            var unlit = Keep(new Material(Shader.Find("Unlit/Texture")) { mainTexture = Gradient(16, 1) });
+            var mesh = Mesh(Array.Empty<(Vector3[], Vector2[])>(), new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) });
+            var renderer = MeshRenderer(mesh, empty, unlit);
+            var options = new BakeOptions(Shader.Find("Standard"), rampProperty: "_DetailAlbedoMap", defaultRamp: ramp);
+
+            var result = Bake(options, renderer);
+
+            Assert.That(result.Representative, Is.Null);
+            Assert.That(result.MergedMaterial!.GetTexture("_DetailAlbedoMap"), Is.SameAs(ramp));
+        }
+
+        [Test]
         public void AFlaggedMaterialIsMergedAndListed()
         {
             var transparent = Standard(Gradient(16, 0), Color.white);
