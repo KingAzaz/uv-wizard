@@ -5,6 +5,7 @@ using System.Linq;
 using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Baking;
@@ -440,6 +441,182 @@ namespace UVWizard.NDMF.Tests
             Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Flagged)));
             Assert.That(Texts(errors), Has.Count.EqualTo(4), "two body slots on each of the two skinned renderers");
             Assert.That(Texts(errors), Has.All.Contain("vertex colour"));
+        }
+
+        [Test]
+        public void AToggleThatSwapsAMaterialExcludesItAndTheSlotsOriginalAndTheRestMerge()
+        {
+            // The body's third slot is the eyes, which an FX toggle swaps to red. Its first two slots merge into
+            // one, so the eyes move from slot 2 to slot 1, and the toggle has to follow them.
+            var avatar = Avatar(withComponent: true);
+            var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
+            body.sharedMesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) },
+                new[] { Quad(4, 0.1f, 0.1f, 0.3f, 0.3f) });
+            var eyes = Standard(Gradient(16, 4));
+            eyes.name = "Eyes blue";
+            var red = Standard(Gradient(16, 5));
+            red.name = "Eyes red";
+            body.sharedMaterials = new[] { body.sharedMaterials[0], body.sharedMaterials[1], eyes };
+            var toggle = Keep(new AnimationClip { name = "Red eyes on" });
+            AnimationUtility.SetObjectReferenceCurve(toggle, Slot("Body", 2),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = red } });
+            WithFx(avatar, toggle);
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, "Standard" }));
+            Assert.That(body.sharedMaterials[1].name, Is.EqualTo("Eyes blue"));
+            foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
+                Assert.That(avatar.transform.Find(other).GetComponent<Renderer>().sharedMaterials.Select(m => m.shader.name),
+                    Has.All.EqualTo(ToonStandardName), other);
+            Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            Assert.That(Texts(errors), Has.Count.EqualTo(2));
+            Assert.That(Texts(errors), Has.Some.Contain("Eyes blue").And.Some.Contain("Eyes red"));
+            Assert.That(Texts(errors), Has.All.Contain("Red eyes on"));
+            var swaps = FxClips(avatar).SelectMany(clip => AnimationUtility.GetObjectReferenceCurveBindings(clip)
+                .Select(binding => (binding.path, binding.propertyName,
+                    AnimationUtility.GetObjectReferenceCurve(clip, binding)[0].value.name)));
+            Assert.That(swaps, Is.EqualTo(new[] { ("Body", "m_Materials.Array.data[1]", "Eyes red") }));
+        }
+
+        [Test]
+        public void AnAnimatedEmissionColourExcludesThatRenderersMaterials()
+        {
+            // A glow toggle on the body changes its materials' emission, which would change every merged material.
+            var avatar = Avatar(withComponent: true);
+            var glow = Keep(new AnimationClip { name = "Body glow" });
+            glow.SetCurve("Body", typeof(SkinnedMeshRenderer), "material._EmissionColor.r", AnimationCurve.Constant(0, 1, 1));
+            glow.SetCurve("Tail", typeof(GameObject), "m_IsActive", AnimationCurve.Constant(0, 1, 0));
+            WithFx(avatar, glow);
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
+            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { "Standard", "Standard" }));
+            foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
+                Assert.That(avatar.transform.Find(other).GetComponent<Renderer>().sharedMaterials.Select(m => m.shader.name),
+                    Has.All.EqualTo(ToonStandardName), other);
+            Assert.That(Reports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)));
+            Assert.That(Texts(errors), Has.All.Contain("Body glow").And.All.Contain("_EmissionColor"));
+        }
+
+        [Test]
+        public void AnAvatarWhoseAnimationsDontTouchMaterialsHasNoExclusions()
+        {
+            // A hat toggle turns the hat off and on; it changes no material. Its stray colour curve names a skinned
+            // renderer, which the hat doesn't have, so it animates nothing.
+            var avatar = Avatar(withComponent: true);
+            var hatOff = Keep(new AnimationClip { name = "Hat off" });
+            hatOff.SetCurve("Hat", typeof(GameObject), "m_IsActive", AnimationCurve.Constant(0, 1, 0));
+            hatOff.SetCurve("Hat", typeof(SkinnedMeshRenderer), "material._Color.r", AnimationCurve.Constant(0, 1, 0));
+            WithFx(avatar, hatOff);
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(errors, Is.Empty);
+            Assert.That(Materials(avatar).Select(m => m.shader.name), Has.All.EqualTo(ToonStandardName));
+        }
+
+        [Test]
+        public void SwapsOnTwoSlotsThatBothMoveEachFollowTheirOwnSlot()
+        {
+            // The eyes (slot 2) and mouth (slot 3) move down one when the first two slots merge, the mouth onto the
+            // eyes' old slot. A malformed curve on slot -1 animates nothing, and mustn't stop the build.
+            var avatar = Avatar(withComponent: true);
+            var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
+            body.sharedMesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) },
+                new[] { Quad(4, 0.1f, 0.1f, 0.3f, 0.3f) }, new[] { Quad(5, 0.6f, 0.6f, 0.8f, 0.8f) });
+            body.sharedMaterials = new[]
+                { body.sharedMaterials[0], body.sharedMaterials[1], Standard(Gradient(16, 4)), Standard(Gradient(16, 5)) };
+            var red = Standard(Gradient(16, 6));
+            red.name = "Red";
+            var toggle = Keep(new AnimationClip { name = "Face colours" });
+            foreach (var slot in new[] { 3, 2, -1 })
+                AnimationUtility.SetObjectReferenceCurve(toggle, Slot("Body", slot),
+                    new[] { new ObjectReferenceKeyframe { time = 0, value = red } });
+            WithFx(avatar, toggle);
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, "Standard", "Standard" }));
+            var swaps = FxClips(avatar).SelectMany(AnimationUtility.GetObjectReferenceCurveBindings)
+                .Select(binding => binding.propertyName).Where(name => !name.Contains("-1")).OrderBy(name => name);
+            Assert.That(swaps, Is.EqualTo(new[] { "m_Materials.Array.data[1]", "m_Materials.Array.data[2]" }));
+        }
+        [Test]
+        public void ALaterPassThatEditsTheFxControllerKeepsItsEdits()
+        {
+            // Avatar Optimizer edits the descriptor's controllers directly, after the bake. The bake's animator
+            // services must have written their controllers back by then, or they'd overwrite those edits at the end.
+            var avatar = Avatar(withComponent: true);
+            var hatOff = Keep(new AnimationClip { name = "Hat off" });
+            hatOff.SetCurve("Hat", typeof(GameObject), "m_IsActive", AnimationCurve.Constant(0, 1, 0));
+            WithFx(avatar, hatOff);
+
+            MobileBuild.Override = true;
+            DirectFxEditPlugin.Enabled = true;
+            try { Build(avatar); }
+            finally { DirectFxEditPlugin.Enabled = false; }
+
+            var clip = FxClips(avatar).Single();
+            Assert.That(AnimationUtility.GetCurveBindings(clip).Select(binding => binding.path), Has.Member(DirectFxEditPlugin.Path));
+        }
+
+        [Test]
+        public void ASwapInAChildAnimatorExcludesTheSlotItSwaps()
+        {
+            // The hat has its own Animator, whose clip paths start at the hat: "" is the hat itself.
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat");
+            var original = hat.GetComponent<MeshRenderer>().sharedMaterial;
+            var swap = Keep(new AnimationClip { name = "Hat recolour" });
+            AnimationUtility.SetObjectReferenceCurve(swap,
+                EditorCurveBinding.PPtrCurve("", typeof(MeshRenderer), "m_Materials.Array.data[0]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 6)) } });
+            var controller = Keep(new AnimatorController { name = "Hat" });
+            controller.AddLayer("Recolour");
+            controller.layers[0].stateMachine.AddState(swap.name).motion = swap;
+            hat.gameObject.AddComponent<Animator>().runtimeAnimatorController = controller;
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo("Standard"));
+            Assert.That(Texts(errors), Has.Some.Contain("Hat recolour"));
+        }
+
+        static EditorCurveBinding Slot(string path, int slot) =>
+            EditorCurveBinding.PPtrCurve(path, typeof(SkinnedMeshRenderer), $"m_Materials.Array.data[{slot}]");
+
+        // Gives the avatar an FX controller with one layer holding a state for each clip.
+        void WithFx(GameObject avatar, params AnimationClip[] clips)
+        {
+            var controller = Keep(new AnimatorController { name = "FX" });
+            controller.AddLayer("Toggles");
+            foreach (var clip in clips) controller.layers[0].stateMachine.AddState(clip.name).motion = clip;
+            var descriptor = avatar.GetComponent<VRCAvatarDescriptor>();
+            descriptor.customizeAnimationLayers = true;
+            // Only the FX layer: a default layer would need the SDK's fallback controllers, which a test can't rely on.
+            descriptor.baseAnimationLayers = new[]
+            {
+                new VRCAvatarDescriptor.CustomAnimLayer
+                {
+                    type = VRCAvatarDescriptor.AnimLayerType.FX, isEnabled = true, animatorController = controller,
+                },
+            };
+            descriptor.specialAnimationLayers = new VRCAvatarDescriptor.CustomAnimLayer[0];
+        }
+
+        // The clips of the avatar's FX controller as the build left it.
+        static IEnumerable<AnimationClip> FxClips(GameObject avatar)
+        {
+            var fx = avatar.GetComponent<VRCAvatarDescriptor>().baseAnimationLayers
+                .Single(layer => layer.type == VRCAvatarDescriptor.AnimLayerType.FX).animatorController;
+            return fx.animationClips;
         }
 
         static IEnumerable<(ErrorSeverity, string?)> Reports(List<ErrorContext> errors) =>

@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using nadena.dev.ndmf;
+using nadena.dev.ndmf.animator;
 using UnityEngine;
 using UVWizard.Core.Pipeline;
 
@@ -11,6 +12,8 @@ namespace UVWizard.NDMF
     /// Bakes a marked avatar's material slots into one atlas and one Toon Standard material, on mobile builds.
     /// Other builds, and avatars without the UV Wizard component, pass through untouched.
     /// </summary>
+    // Declared rather than activated in Execute, so NDMF writes the controllers back before Avatar Optimizer edits them.
+    [DependsOnContext(typeof(AnimatorServicesContext))]
     internal sealed class BakePass : Pass<BakePass>
     {
         public override string DisplayName => "Bake the atlas";
@@ -21,7 +24,8 @@ namespace UVWizard.NDMF
             if (root.GetComponentInChildren<UVWizardAvatar>(true) == null || !MobileBuild.IsActive) return;
 
             var shader = ToonStandard.Shader;
-            Bake(root, shader != null ? ToonStandard.Options(shader) : null);
+            Bake(root, shader != null ? ToonStandard.Options(shader) : null,
+                context.Extension<AnimatorServicesContext>());
         }
 
         // Avatar Optimizer runs after the bake and edits the meshes it rewrites.
@@ -32,8 +36,11 @@ namespace UVWizard.NDMF
             null;
 #endif
 
-        /// <summary>Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing.</summary>
-        internal static void Bake(GameObject root, BakeOptions? options)
+        /// <summary>
+        /// Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing. Without animator
+        /// services, no slot counts as animated.
+        /// </summary>
+        internal static void Bake(GameObject root, BakeOptions? options, AnimatorServicesContext? animators = null)
         {
             if (options == null)
             {
@@ -41,7 +48,10 @@ namespace UVWizard.NDMF
                 return;
             }
 
-            var result = AvatarBaker.Bake(root.GetComponentsInChildren<Renderer>(true), options, LaterMeshEdits());
+            var renderers = root.GetComponentsInChildren<Renderer>(true);
+            var animated = animators != null ? MaterialAnimations.Find(animators, root, renderers) : null;
+            var result = AvatarBaker.Bake(renderers, options, LaterMeshEdits(), animated);
+            if (animators != null) MaterialAnimations.FollowMovedSlots(animators, root, result.MovedSlots);
 
             // A mesh two renderers share is rewritten for each; NDMF tracks the first copy.
             var registered = new HashSet<Mesh>();

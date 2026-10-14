@@ -28,7 +28,9 @@ namespace UVWizard.Core.Pipeline
         const float MaxEmissionStrength = 2;
 
         /// <param name="laterEdits">What a tool after the bake will do to the rewritten meshes, or null for none.</param>
-        public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options, ILaterMeshEdits? laterEdits = null)
+        /// <param name="animated">Slots that animations swap or change, which stay out of the atlas.</param>
+        public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options,
+            ILaterMeshEdits? laterEdits = null, IReadOnlyList<AnimatedSlot>? animated = null)
         {
             var excluded = new List<SlotNote>();
             var flagged = new List<SlotNote>();
@@ -36,7 +38,8 @@ namespace UVWizard.Core.Pipeline
             var needs = new Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)>();
             var readings = new Dictionary<Material, SourceMaterialReading>();
             foreach (var renderer in renderers)
-                CollectSlots(renderer, readings, slots, excluded, flagged, laterEdits, needs);
+                CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
+                    laterEdits, needs);
             if (slots.Count == 0) return BakeResult.Unchanged(true, excluded, flagged);
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -85,14 +88,15 @@ namespace UVWizard.Core.Pipeline
             var merged = MergedMaterial(options, atlas, emissionAtlas, emissionStrength, normalAtlas, representative,
                 slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
-            var replaced = RewriteRenderers(slots, merged, laterEdits, needs);
+            var (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged, emissionAtlas,
-                emissionStrength, normalAtlas);
+                emissionStrength, normalAtlas, moved);
         }
 
         // Sorts each of the renderer's material slots into merged (a Slot), excluded or skipped.
-        static void CollectSlots(Renderer renderer, Dictionary<Material, SourceMaterialReading> readings, List<Slot> slots,
-            List<SlotNote> excluded, List<SlotNote> flagged, ILaterMeshEdits? laterEdits,
+        static void CollectSlots(Renderer renderer, IReadOnlyList<AnimatedSlot> animated,
+            Dictionary<Material, SourceMaterialReading> readings, List<Slot> slots, List<SlotNote> excluded,
+            List<SlotNote> flagged, ILaterMeshEdits? laterEdits,
             Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs)
         {
             var mesh = MeshOf(renderer);
@@ -117,6 +121,17 @@ namespace UVWizard.Core.Pipeline
                 var material = materials[s];
                 if (material == null) continue;
                 void Exclude(string reason) => excluded.Add(new SlotNote(renderer, s, material, reason));
+
+                var animations = AnimationsOf(animated, renderer, s);
+                if (animations.Count > 0)
+                {
+                    Exclude(animations[0].Reason);
+                    var listed = new HashSet<Material> { material };
+                    foreach (var animation in animations)
+                    foreach (var swapped in animation.SwappedIn)
+                        if (listed.Add(swapped)) excluded.Add(new SlotNote(renderer, s, swapped, animation.Reason));
+                    continue;
+                }
 
                 if (materials.Length > data.subMeshCount && s == data.subMeshCount - 1)
                 {
@@ -170,6 +185,16 @@ namespace UVWizard.Core.Pipeline
                 slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, corners, removed, triangles,
                     islands, TextureSize(reading)));
             }
+        }
+
+        // The animations that swap or change the renderer's slot.
+        static List<AnimatedSlot> AnimationsOf(IReadOnlyList<AnimatedSlot> animated, Renderer renderer, int slot)
+        {
+            var animations = new List<AnimatedSlot>();
+            foreach (var animation in animated)
+                if (animation.Renderer == renderer && (animation.Slot == null || animation.Slot == slot))
+                    animations.Add(animation);
+            return animations;
         }
 
         static Mesh? MeshOf(Renderer renderer) => renderer switch
@@ -445,12 +470,15 @@ namespace UVWizard.Core.Pipeline
             }
         }
 
-        // Gives each renderer with merged slots a rewritten mesh and the merged material on those slots.
-        static List<(Mesh Source, Mesh Rewritten)> RewriteRenderers(List<Slot> slots, Material merged,
-            ILaterMeshEdits? laterEdits, Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs)
+        // Gives each renderer with merged slots a rewritten mesh and the merged material on those slots, and says
+        // where each of its slots went.
+        static (List<(Mesh Source, Mesh Rewritten)> Replaced, List<(Renderer Renderer, int[] SlotOf)> Moved)
+            RewriteRenderers(List<Slot> slots, Material merged, ILaterMeshEdits? laterEdits,
+                Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs)
         {
             // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was.
-            var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)>();
+            var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials, int[] SlotOf,
+                int? KeptIn)>();
             for (var first = 0; first < slots.Count;)
             {
                 var renderer = slots[first].Renderer;
@@ -468,26 +496,29 @@ namespace UVWizard.Core.Pipeline
                 var count = 0;
                 for (var s = 0; s < drawn; s++) count = Math.Max(count, rewritten.SubmeshOf[s] + 1);
                 var replacement = new Material[count + Math.Max(0, materials.Length - mesh.subMeshCount)];
+                var slotOf = new int[materials.Length];
                 for (var s = 0; s < drawn; s++)
-                    replacement[rewritten.SubmeshOf[s]] = atlasUvs[s] != null ? merged : materials[s];
+                    replacement[slotOf[s] = rewritten.SubmeshOf[s]] = atlasUvs[s] != null ? merged : materials[s];
                 for (var s = mesh.subMeshCount; s < materials.Length; s++)
-                    replacement[count + s - mesh.subMeshCount] = materials[s];
+                    replacement[slotOf[s] = count + s - mesh.subMeshCount] = materials[s];
 
-                changes.Add((renderer, mesh, rewritten.Mesh, replacement, keptIn));
+                changes.Add((renderer, mesh, rewritten.Mesh, replacement, slotOf, keptIn));
             }
 
             var replaced = new List<(Mesh Source, Mesh Rewritten)>();
-            foreach (var (renderer, source, rewritten, materials, _) in changes)
+            var moved = new List<(Renderer Renderer, int[] SlotOf)>();
+            foreach (var (renderer, source, rewritten, materials, slotOf, _) in changes)
             {
                 // A skinned renderer keeps its blend-shape weights: the rewritten mesh has the same blend shapes.
                 if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten;
                 else renderer.GetComponent<MeshFilter>().sharedMesh = rewritten;
                 renderer.sharedMaterials = materials;
                 replaced.Add((source, rewritten));
+                moved.Add((renderer, slotOf));
             }
-            foreach (var (renderer, _, _, _, keptIn) in changes)
+            foreach (var (renderer, _, _, _, _, keptIn) in changes)
                 if (keptIn is { } channel) laterEdits!.KeptSourceUv0(renderer, channel);
-            return replaced;
+            return (replaced, moved);
         }
 
         // An atlas UV for every corner of the slot's submesh. A corner of a triangle a later tool deletes takes its
