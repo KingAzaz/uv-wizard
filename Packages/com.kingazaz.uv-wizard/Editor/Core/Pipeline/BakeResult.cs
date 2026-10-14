@@ -69,14 +69,16 @@ namespace UVWizard.Core.Pipeline
         public IReadOnlyList<(Renderer Renderer, int[] SlotOf)> MovedSlots { get; }
 
         /// <summary>
-        /// The texture memory, in bytes, of everything on the renderers after the bake, counted the way the VRChat
-        /// SDK counts it.
+        /// The texture memory, in bytes, of everything on the renderers right after the bake, counted the way the
+        /// VRChat SDK counts it. Tools that run later, such as Avatar Optimizer repacking the atlas, can only lower
+        /// it, so the uploaded avatar's figure, which the SDK reports, is at most this.
         /// </summary>
         public long TextureBytes { get; private set; }
 
         /// <summary>
-        /// The material slots the avatar will have once Avatar Optimizer merges its meshes: one per distinct material
-        /// on the renderers after the bake, since merging joins slots that share a material.
+        /// The material slots the avatar will have once Avatar Optimizer merges its meshes into one (ADR 0001): one
+        /// per distinct material on the renderers after the bake, since merging joins slots that share a material.
+        /// The SDK counts submeshes, so before that merge, or for renderers it leaves apart, it counts more.
         /// </summary>
         public int MaterialSlots { get; private set; }
 

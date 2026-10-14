@@ -1,9 +1,11 @@
 #nullable enable
 
 using System.Linq;
+using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Budgets;
+using UVWizard.Core.Pipeline;
 using VRC.SDKBase.Validation.Performance;
 using VRC.SDKBase.Validation.Performance.Stats;
 
@@ -42,6 +44,69 @@ namespace UVWizard.NDMF.Tests
             var merged = Materials(avatar).Distinct().Single();
             Assert.That(merged.GetTexture("_BumpMap"), Is.Not.Null);
             Assert.That(merged.GetTexture("_EmissionMap"), Is.Null);
+        }
+
+        [Test]
+        public void ABakeLeftOverItsBudgetSaysSo()
+        {
+            // A kept 16 MB texture can't fit Excellent's 10 MB however small the atlas gets.
+            var avatar = Avatar(withComponent: true);
+            Kept(avatar, Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)));
+
+            var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
+
+            Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudget)));
+        }
+
+        [Test]
+        public void ABakeWithMoreSlotsThanItsPresetAllowsSaysSo()
+        {
+            var avatar = Avatar(withComponent: true);
+            Kept(avatar, Gradient(16, 9));
+
+            var good = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Good)));
+
+            Assert.That(Reports(good), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)));
+            Assert.That(Reports(good), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudget)));
+        }
+
+        [Test]
+        public void MediumAllowsTheKeptMaterialsSlot()
+        {
+            var avatar = Avatar(withComponent: true);
+            Kept(avatar, Gradient(16, 9));
+
+            var medium = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Medium)));
+
+            Assert.That(Reports(medium), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)));
+        }
+
+        [TestCase(UVWizardAvatar.Preset.Excellent, 10, 1)]
+        [TestCase(UVWizardAvatar.Preset.Good, 18, 1)]
+        [TestCase(UVWizardAvatar.Preset.Medium, 25, 2)]
+        public void EachPresetSetsItsBudgetAndSlots(UVWizardAvatar.Preset preset, float megabytes, int slots)
+        {
+            var budget = Options(preset).Budget!;
+
+            Assert.That((budget.Megabytes, budget.MaterialSlots), Is.EqualTo((megabytes, slots)));
+        }
+
+        BakeOptions Options(UVWizardAvatar.Preset preset)
+        {
+            var component = Keep(new GameObject("settings")).AddComponent<UVWizardAvatar>();
+            component.preset = preset;
+            return ToonStandard.Options(Shader.Find(ToonStandardName), component);
+        }
+
+        // Adds a renderer the bake excludes, since its mesh has no UV0, with a material on the texture.
+        void Kept(GameObject avatar, Texture2D texture)
+        {
+            var mesh = Mesh(new[] { Quad(4, 0.1f, 0.1f, 0.6f, 0.7f) });
+            mesh.uv = null;
+            var kept = new GameObject("Kept");
+            kept.transform.SetParent(avatar.transform);
+            kept.AddComponent<MeshFilter>().sharedMesh = mesh;
+            kept.AddComponent<MeshRenderer>().sharedMaterials = new[] { Standard(texture) };
         }
 
         // Gives the hat 4096 albedo, emission and normal textures, which it samples across half their width: more

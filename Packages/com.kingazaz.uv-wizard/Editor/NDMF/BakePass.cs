@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using UnityEngine;
+using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
 
 namespace UVWizard.NDMF
@@ -66,6 +67,15 @@ namespace UVWizard.NDMF
             foreach (var note in result.Flagged)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Flagged,
                     note.Material, note.Renderer, note.Reason);
+            if (result.Budget is { } budget)
+            {
+                if (result.TextureBytes > budget.Bytes)
+                    ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudget,
+                        $"{result.TextureBytes / (double)TextureMemory.BytesPerMegabyte:0.##}", $"{budget.Megabytes:0.##}");
+                if (!result.WithinMaterialSlots)
+                    ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.TooManySlots,
+                        result.MaterialSlots, budget.MaterialSlots);
+            }
         }
     }
 }

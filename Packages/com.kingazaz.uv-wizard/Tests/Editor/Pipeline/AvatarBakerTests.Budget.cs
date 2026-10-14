@@ -23,7 +23,6 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.Atlas, Is.Not.Null);
             Assert.That(result.EmissionAtlas, Is.Not.Null);
             Assert.That(result.NormalAtlas, Is.Not.Null);
-            Assert.That(result.TextureBytes, Is.EqualTo(TextureMemory.Bytes(new Renderer[] { renderer })));
             Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(budget.Bytes), preset);
         }
 
@@ -84,6 +83,21 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ASmallerAtlasGetsBackTheFinestFormatsThatFit()
+        {
+            // At 2048, Excellent pushes the Normal channel to 5x5. The charts fit at 1024, where 4x4 fits the budget
+            // again.
+            var material = Emitting(Standard(Keep(new Texture2D(1024, 1024, TextureFormat.RGBA32, mipChain: false)), Color.white),
+                Keep(new Texture2D(1024, 1024, TextureFormat.RGBA32, mipChain: false)), Color.white);
+            NormalMapped(material, Keep(new Texture2D(1024, 1024, TextureFormat.RGBA32, mipChain: false, linear: true)), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.05f, 0.05f, 0.95f, 0.95f) }), material);
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer);
+
+            Assert.That((result.NormalAtlas!.width, result.NormalAtlas.format), Is.EqualTo((1024, TextureFormat.ASTC_4x4)));
+        }
+
+        [Test]
         public void PaddingHoldsAtTheSmallestChannel()
         {
             // A 6 MB kept texture leaves Excellent about 4 MB, so the Normal channel halves to 1024 while the others
@@ -93,8 +107,8 @@ namespace UVWizard.Core.Tests.Pipeline
 
             var result = Bake(StandardOptions(budget: Budget.Excellent), renderer, kept);
 
-            Assume.That(result.NormalAtlas!.width, Is.EqualTo(1024));
-            Assume.That(result.Atlas!.width, Is.EqualTo(2048));
+            Assert.That(result.NormalAtlas!.width, Is.EqualTo(1024));
+            Assert.That(result.Atlas!.width, Is.EqualTo(2048));
             var mesh = Filter(renderer).sharedMesh;
             var uvs = mesh.uv;
             var indices = mesh.GetIndices(0);

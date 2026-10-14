@@ -23,8 +23,9 @@ namespace UVWizard.Core.Budgets
             Texture2D flat => Bytes(flat.width, flat.height, flat.mipmapCount, flat.format),
             // A cubemap counts as one face.
             Cubemap cube => Bytes(cube.width, cube.height, cube.mipmapCount, cube.format),
-            Texture2DArray array => (long)array.width * array.height * array.depth * (long)BytesPerTexel(array.format),
-            Texture3D volume => (long)volume.width * volume.height * volume.depth * (long)BytesPerTexel(volume.format),
+            // Arrays and 3D textures count their base level's texels only.
+            Texture2DArray array => Mathf.RoundToInt(array.width * array.height * array.depth * BytesPerTexel(array.format)),
+            Texture3D volume => Mathf.RoundToInt(volume.width * volume.height * volume.depth * BytesPerTexel(volume.format)),
             _ => 0,
         };
 

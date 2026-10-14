@@ -403,7 +403,8 @@ namespace UVWizard.NDMF.Tests
             Assert.That(kept.shader.name, Is.EqualTo("Standard"));
             Assert.That(body.shader.name, Is.EqualTo(ToonStandardName));
             Assert.That(errors.Select(e => (e.TheError.Severity, (e.TheError as SimpleError)?.TitleKey)),
-                Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Excluded) }));
+                Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Excluded), (ErrorSeverity.NonFatal, Messages.TooManySlots) }),
+                "the kept material takes a second slot, which Good doesn't allow");
         }
 
         [Test]
@@ -463,7 +464,7 @@ namespace UVWizard.NDMF.Tests
             WithFx(avatar, toggle);
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
             Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, "Standard" }));
             Assert.That(body.sharedMaterials[1].name, Is.EqualTo("Eyes blue"));
             foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
@@ -490,7 +491,7 @@ namespace UVWizard.NDMF.Tests
             WithFx(avatar, glow);
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
             Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { "Standard", "Standard" }));
@@ -539,7 +540,7 @@ namespace UVWizard.NDMF.Tests
             WithFx(avatar, toggle);
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
             Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, "Standard", "Standard" }));
@@ -621,6 +622,10 @@ namespace UVWizard.NDMF.Tests
 
         static IEnumerable<(ErrorSeverity, string?)> Reports(List<ErrorContext> errors) =>
             errors.Select(e => (e.TheError.Severity, (e.TheError as SimpleError)?.TitleKey)).ToArray();
+
+        // Leaves out the material-slot warning, which every kept material adds on a one-slot preset such as Good.
+        static List<ErrorContext> BesidesSlots(List<ErrorContext> errors) =>
+            errors.Where(e => (e.TheError as SimpleError)?.TitleKey != Messages.TooManySlots).ToList();
 
         static List<string> Texts(List<ErrorContext> errors) =>
             errors.Select(e => (e.TheError as SimpleError)?.ToMessage() ?? "").ToList();

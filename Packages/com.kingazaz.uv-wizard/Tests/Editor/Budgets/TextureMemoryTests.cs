@@ -53,6 +53,28 @@ namespace UVWizard.Core.Tests.Budgets
             Assert.That(TextureMemory.Bytes(texture), Is.EqualTo((256 + 64 + 16 + 4 + 1) * 4));
         }
 
+        // The VRChat SDK 3.10.5's own figures. It counts a cubemap as one face with its mips, and a texture array or
+        // 3D texture as every texel of its base level, without mips.
+        [Test]
+        public void ACubemapCountsOneFace()
+        {
+            Assert.That(TextureMemory.Bytes(Keep(new Cubemap(64, TextureFormat.RGBA32, mipChain: true))), Is.EqualTo(21844));
+        }
+
+        [Test]
+        public void ATextureArrayCountsItsLayersWithoutMips()
+        {
+            Assert.That(TextureMemory.Bytes(Keep(new Texture2DArray(64, 64, 3, TextureFormat.ASTC_6x6, mipChain: true))),
+                Is.EqualTo(5468));
+        }
+
+        [Test]
+        public void A3DTextureCountsItsDepthWithoutMips()
+        {
+            Assert.That(TextureMemory.Bytes(Keep(new Texture3D(32, 32, 4, TextureFormat.ASTC_6x6, mipChain: true))),
+                Is.EqualTo(1823));
+        }
+
         [Test]
         public void ARenderTextureCountsNothing()
         {

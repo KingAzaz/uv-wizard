@@ -134,14 +134,5 @@ namespace UVWizard.Core.Budgets
                 return smallest;
             }
         }
-
-        /// <summary>Every channel at half its size in the same format, or null when one would drop below the minimum.</summary>
-        public AtlasSizes? Halved()
-        {
-            if (Smallest / 2 < AtlasSizing.MinSize) return null;
-            var textures = new Dictionary<Channels, ChannelTexture>();
-            foreach (var (channel, texture) in Textures) textures.Add(channel, new ChannelTexture(texture.Size / 2, texture.Format));
-            return new AtlasSizes(textures, noChannelSize / 2);
-        }
     }
 }
