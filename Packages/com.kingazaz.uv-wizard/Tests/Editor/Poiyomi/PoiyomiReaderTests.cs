@@ -57,12 +57,12 @@ namespace UVWizard.Core.Tests.Poiyomi
         {
             var material = Material(PoiyomiToon);
             material.SetFloat("_EnableEmission", 1);
-            material.SetColor("_EmissionColor", new Color(1f, 1f, 1f, 0.5f));
-            material.SetFloat("_EmissionStrength", 1);
+            material.SetColor("_EmissionColor", new Color(1f, 1f, 1f, 0.25f));
+            material.SetFloat("_EmissionStrength", 2);
 
             var emission = SourceShaderReader.Read(material).Emission;
 
-            // Linear 1 x alpha 0.5 = linear 0.5, which is sRGB 0.7354.
+            // Linear 1 x strength 2 x alpha 0.25 = linear 0.5, which is sRGB 0.7354.
             Assert.That(emission, Is.Not.Null);
             AssertColour(new Color(0.7354f, 0.7354f, 0.7354f, 1f), emission!.Tint, tolerance: 1e-3f);
         }
