@@ -1,28 +1,41 @@
 name: Merge gate
 
-# A required check on main. It fails while a PR carries a label that holds its merge, so GitHub
-# auto-merge waits until tests pass and those labels are gone. It runs again whenever labels change.
+# A required check on main. It fails while something should hold a PR's merge: a hold label, or a
+# changes-requested review from someone with write access. See .github/scripts/merge_gate.py. It
+# reads the PR's state live, so it runs again on every label or review change.
 on:
   pull_request:
     types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
 
-permissions: {}
+permissions:
+  contents: read
+  pull-requests: read
+
+# One run at a time per PR, in order, so the last run to finish read the latest state.
+concurrency:
+  group: merge-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   gate:
     name: Merge gate
     runs-on: ubuntu-latest
     steps:
-      - name: Check for labels that hold the merge
-        shell: python
-        env:
-          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-        run: |
-          import json, os, sys
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
 
-          holding = {"needs-unity", "unity-failed", "do-not-merge", "ready-for-human"}
-          held = sorted(holding & set(json.loads(os.environ["LABELS"])))
-          if held:
-              print(f"::error::Waiting for these labels to go: {', '.join(held)}")
-              sys.exit(1)
-          print("No label holds this merge.")
+      - name: Test the gate
+        working-directory: .github/scripts
+        run: python -m unittest test_merge_gate
+
+      - name: Check what holds the merge
+        working-directory: .github/scripts
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: python merge_gate.py

@@ -20,7 +20,7 @@ The cloud project-owner routine cannot run Unity, so this is the local check. It
 3. Call `refresh_unity`, wait for the compile, then `read_console` for errors. Compile errors fail the target. Report them and skip the tests.
 4. `run_tests` with mode EditMode and every test assembly: `UVWizard.Core.Editor.Tests`, plus the SDK-gated ones that CI compiles out (`UVWizard.Core.Editor.Tests.VRChat`). Poll `get_test_job` until it finishes.
 5. Post the result:
-   - For a PR, use `gh pr comment <n>`. Start with `> *Local Unity check (unity-verify).*`, then: commit SHA, Unity version, pass/fail counts, each failing test with its message, and any console errors. Remove the `needs-unity` label (`gh pr edit <n> --remove-label needs-unity`). On failure, add `unity-failed` (create it with `gh label create unity-failed --force` if missing).
+   - For a PR, use `gh pr comment <n>`. Start with `> *Local Unity check (unity-verify).*`, then: commit SHA, Unity version, pass/fail counts, each failing test with its message, and any console errors. On failure, first add `unity-failed` (`gh pr edit <n> --add-label unity-failed`; create it with `gh label create unity-failed --force` if missing). Then, in a separate command, remove `needs-unity` (`gh pr edit <n> --remove-label needs-unity`). Adding before removing keeps a hold label on the PR throughout, so the Merge gate never passes a PR that just failed. On success, only remove `needs-unity`.
    - For `main`, comment only on failure: open an issue titled `main fails in Unity: <short cause>` with labels `bug` and `needs-triage`.
 
 ## Afterwards
