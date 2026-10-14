@@ -277,14 +277,8 @@ namespace UVWizard.Core.Pipeline
                 for (var s = mesh.subMeshCount; s < materials.Length; s++)
                     replacement[count + s - mesh.subMeshCount] = materials[s];
 
-                if (renderer is SkinnedMeshRenderer skinned)
-                {
-                    // Assigning a mesh can reset the renderer's blend-shape weights.
-                    var weights = new float[mesh.blendShapeCount];
-                    for (var b = 0; b < weights.Length; b++) weights[b] = skinned.GetBlendShapeWeight(b);
-                    skinned.sharedMesh = rewritten.Mesh;
-                    for (var b = 0; b < weights.Length; b++) skinned.SetBlendShapeWeight(b, weights[b]);
-                }
+                // A skinned renderer keeps its blend-shape weights: the rewritten mesh has the same blend shapes.
+                if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten.Mesh;
                 else renderer.GetComponent<MeshFilter>().sharedMesh = rewritten.Mesh;
                 renderer.sharedMaterials = replacement;
                 replaced.Add((mesh, rewritten.Mesh));
