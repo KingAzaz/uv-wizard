@@ -7,6 +7,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UVWizard.Core.Pipeline;
 using VRC.SDK3.Avatars.Components;
 using Object = UnityEngine.Object;
 
@@ -24,13 +25,13 @@ namespace UVWizard.NDMF.Tests
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
                 Assert.Ignore("Baking renders on the GPU, and this editor has no graphics device (-nographics).");
-            MobileBuild.Forced = false;
+            MobileBuild.Override = null;
         }
 
         [TearDown]
         public void TearDown()
         {
-            MobileBuild.Forced = false;
+            MobileBuild.Override = null;
             // NDMF saves what a build references into its own temporary assets, which it cleans up itself.
             foreach (var o in created)
                 if (o != null && !EditorUtility.IsPersistent(o)) Object.DestroyImmediate(o);
@@ -42,13 +43,16 @@ namespace UVWizard.NDMF.Tests
         {
             var avatar = Avatar(withComponent: true);
             var before = Centroids(avatar).Select(SourceColour).ToArray();
+            var skinned = avatar.GetComponentsInChildren<SkinnedMeshRenderer>();
+            var sources = skinned.Select(renderer => renderer.sharedMesh).ToArray();
 
-            MobileBuild.Forced = true;
+            MobileBuild.Override = true;
             var errors = Build(avatar);
 
             Assert.That(errors, Is.Empty);
-            var bodies = avatar.GetComponentsInChildren<SkinnedMeshRenderer>();
-            Assert.That(bodies[1].sharedMesh, Is.Not.SameAs(bodies[0].sharedMesh), "each renderer gets its own rewritten mesh");
+            Assert.That(skinned[1].sharedMesh, Is.Not.SameAs(skinned[0].sharedMesh), "each renderer gets its own rewritten mesh");
+            for (var r = 0; r < skinned.Length; r++)
+                Assert.That(skinned[r].sharedMesh, Is.Not.SameAs(sources[r]), $"{skinned[r].name} is rewritten");
             var materials = avatar.GetComponentsInChildren<Renderer>().SelectMany(r => r.sharedMaterials).Distinct().ToArray();
             Assert.That(materials, Has.Length.EqualTo(1));
             var merged = materials[0];
@@ -63,9 +67,21 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void OnlyMobileTargetsBakeUnlessOverridden()
+        {
+            Assert.That(MobileBuild.For(BuildTarget.Android), Is.True);
+            Assert.That(MobileBuild.For(BuildTarget.iOS), Is.True);
+            Assert.That(MobileBuild.For(BuildTarget.StandaloneWindows64), Is.False);
+            MobileBuild.Override = true;
+            Assert.That(MobileBuild.For(BuildTarget.StandaloneWindows64), Is.True, "a manual bake's mobile preview");
+            MobileBuild.Override = false;
+            Assert.That(MobileBuild.For(BuildTarget.Android), Is.False, "forced to PC");
+        }
+
+        [Test]
         public void APcBuildLeavesTheAvatarUnchanged()
         {
-            Assume.That(EditorUserBuildSettings.activeBuildTarget, Is.Not.EqualTo(BuildTarget.Android).And.Not.EqualTo(BuildTarget.iOS));
+            MobileBuild.Override = false;
             var avatar = Avatar(withComponent: true);
             var meshes = Meshes(avatar);
             var materials = Materials(avatar);
@@ -83,9 +99,44 @@ namespace UVWizard.NDMF.Tests
             var meshes = Meshes(avatar);
             var materials = Materials(avatar);
 
-            MobileBuild.Forced = true;
+            MobileBuild.Override = true;
             Build(avatar);
 
+            Assert.That(Meshes(avatar), Is.EqualTo(meshes));
+            Assert.That(Materials(avatar), Is.EqualTo(materials));
+        }
+
+        [Test]
+        public void WithoutToonStandardTheBakeIsAnErrorAndChangesNothing()
+        {
+            var avatar = Avatar(withComponent: true);
+            var meshes = Meshes(avatar);
+            var materials = Materials(avatar);
+
+            var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, null));
+
+            Assert.That(Reports(errors), Is.EqualTo(new[] { (ErrorSeverity.Error, (string?)Messages.NoToonStandard) }));
+            Assert.That(Meshes(avatar), Is.EqualTo(meshes));
+            Assert.That(Materials(avatar), Is.EqualTo(materials));
+        }
+
+        [Test]
+        public void ChartsThatFitAtNoScaleAreReportedAndChangeNothing()
+        {
+            // The hat becomes 320 separate quads on a 1024 px texture, each its own chart: no scale fits them
+            // in a 64 px atlas.
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshFilter>().sharedMesh = Mesh(Enumerable.Range(0, 320)
+                .Select(i => Quad(2, (i % 20) / 20f, (i / 20) / 16f, (i % 20 + 0.4f) / 20f, (i / 20 + 0.4f) / 16f)).ToArray());
+            hat.GetComponent<MeshRenderer>().sharedMaterials = new[] { Standard(Gradient(1024, 2)) };
+            var meshes = Meshes(avatar);
+            var materials = Materials(avatar);
+
+            var errors = ErrorReport.CaptureErrors(() =>
+                BakePass.Bake(avatar, new BakeOptions(Shader.Find(ToonStandardName), atlasSize: 64, padding: 0)));
+
+            Assert.That(Reports(errors), Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.NoFit) }));
             Assert.That(Meshes(avatar), Is.EqualTo(meshes));
             Assert.That(Materials(avatar), Is.EqualTo(materials));
         }
@@ -104,7 +155,7 @@ namespace UVWizard.NDMF.Tests
             var hat = avatar.transform.Find("Hat").GetComponent<MeshRenderer>();
             hat.sharedMaterials = new[] { toon };
 
-            MobileBuild.Forced = true;
+            MobileBuild.Override = true;
             Build(avatar);
 
             var merged = hat.sharedMaterial;
@@ -120,7 +171,7 @@ namespace UVWizard.NDMF.Tests
         {
             var avatar = Avatar(withComponent: true);
 
-            MobileBuild.Forced = true;
+            MobileBuild.Override = true;
             Build(avatar);
 
             var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
@@ -135,7 +186,7 @@ namespace UVWizard.NDMF.Tests
             var hat = avatar.transform.Find("Hat").GetComponent<MeshRenderer>();
             hat.sharedMaterials = new[] { Keep(new Material(Shader.Find("VRChat/Mobile/Standard Lite")) { mainTexture = Gradient(16, 4) }) };
 
-            MobileBuild.Forced = true;
+            MobileBuild.Override = true;
             Build(avatar);
 
             Assert.That(hat.sharedMaterial.GetFloat("_VertexColor"), Is.EqualTo(1));
@@ -150,7 +201,7 @@ namespace UVWizard.NDMF.Tests
             var hat = avatar.transform.Find("Hat");
             hat.GetComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(2, 0, 0, 5, 1) });
 
-            MobileBuild.Forced = true;
+            MobileBuild.Override = true;
             var errors = Build(avatar);
 
             // The build saves in-memory materials as new objects, so compare the shader, not the reference.
@@ -172,7 +223,7 @@ namespace UVWizard.NDMF.Tests
             var hat = avatar.transform.Find("Hat").GetComponent<MeshRenderer>();
             hat.sharedMaterials = new[] { ToonStandardMaterial(Gradient(16, 4), culling: 0) };
 
-            MobileBuild.Forced = true;
+            MobileBuild.Override = true;
             var errors = Build(avatar);
 
             Assert.That(hat.sharedMaterial.GetFloat("_Culling"), Is.EqualTo(2));
@@ -191,7 +242,7 @@ namespace UVWizard.NDMF.Tests
             var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
             body.sharedMesh.colors = Enumerable.Repeat(Color.red, body.sharedMesh.vertexCount).ToArray();
 
-            MobileBuild.Forced = true;
+            MobileBuild.Override = true;
             var errors = Build(avatar);
 
             Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Flagged)));
@@ -216,7 +267,7 @@ namespace UVWizard.NDMF.Tests
         static List<ErrorContext> Build(GameObject avatar) =>
             ErrorReport.CaptureErrors(() => AvatarProcessor.ProcessAvatar(avatar));
 
-        // An avatar root with a skinned body of two submeshes and a hat, on Standard materials.
+        // An avatar root with a skinned body of two submeshes, a hat and a skinned tail, on Standard materials.
         GameObject Avatar(bool withComponent)
         {
             var root = Keep(new GameObject("Avatar"));
@@ -238,6 +289,12 @@ namespace UVWizard.NDMF.Tests
             hat.transform.SetParent(root.transform);
             hat.AddComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(2, 0.05f, 0.4f, 0.55f, 0.95f) });
             hat.AddComponent<MeshRenderer>().sharedMaterials = new[] { Standard(Gradient(16, 2)) };
+
+            // A second skinned mesh of its own, so two distinct skinned meshes bake together.
+            var tail = new GameObject("Tail").AddComponent<SkinnedMeshRenderer>();
+            tail.transform.SetParent(root.transform);
+            tail.sharedMesh = Mesh(new[] { Quad(3, 0.6f, 0.05f, 0.95f, 0.35f) });
+            tail.sharedMaterials = new[] { Standard(Gradient(16, 3)) };
             return root;
         }
 

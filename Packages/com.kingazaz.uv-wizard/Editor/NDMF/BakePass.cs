@@ -21,13 +21,19 @@ namespace UVWizard.NDMF
             if (root.GetComponentInChildren<UVWizardAvatar>(true) == null || !MobileBuild.IsActive) return;
 
             var shader = ToonStandard.Shader;
-            if (shader == null)
+            Bake(root, shader != null ? ToonStandard.Options(shader) : null);
+        }
+
+        /// <summary>Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing.</summary>
+        internal static void Bake(GameObject root, BakeOptions? options)
+        {
+            if (options == null)
             {
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.Error, Messages.NoToonStandard);
                 return;
             }
 
-            var result = AvatarBaker.Bake(root.GetComponentsInChildren<Renderer>(true), ToonStandard.Options(shader));
+            var result = AvatarBaker.Bake(root.GetComponentsInChildren<Renderer>(true), options);
 
             // A mesh two renderers share is rewritten for each; NDMF tracks the first copy.
             var registered = new HashSet<Mesh>();
