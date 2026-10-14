@@ -175,11 +175,15 @@ namespace UVWizard.Core.Pipeline
             return indices.ToArray();
         }
 
-        // Source texels per unit of the texture's own UV space.
+        // Source texels per unit of the texture's own UV space: the larger of the albedo and emission textures, so
+        // neither channel is baked below its own detail.
         static Vector2Int TextureSize(SourceMaterialReading reading)
         {
-            var texture = reading.Albedo?.Texture;
-            return texture == null ? UntexturedSize : new Vector2Int(texture.width, texture.height);
+            Vector2Int? size = null;
+            foreach (var texture in new[] { reading.Albedo?.Texture, reading.Emission?.Texture })
+                if (texture != null)
+                    size = Vector2Int.Max(size ?? Vector2Int.zero, new Vector2Int(texture.width, texture.height));
+            return size ?? UntexturedSize;
         }
 
         // Calls visit(corner index, position in chart texels) for every corner of the island's triangles,
@@ -199,7 +203,8 @@ namespace UVWizard.Core.Pipeline
         static (Texture2D? Atlas, float Strength) EmissionAtlas(List<Slot> slots, BakeOptions options,
             List<SlotNote> flagged)
         {
-            var emitting = slots.FindAll(slot => slot.Draws && slot.Reading.Emission != null);
+            var emitting = slots.FindAll(slot =>
+                slot.Draws && slot.Reading.Emission != null && Intensity(slot.Reading.Emission.Tint) > 0);
             if (emitting.Count == 0) return (null, 1);
             var strength = 1f;
             foreach (var slot in emitting) strength = Mathf.Max(strength, Intensity(slot.Reading.Emission!.Tint));
@@ -318,13 +323,18 @@ namespace UVWizard.Core.Pipeline
         {
             var material = new Material(options.MergedShader) { name = "UV Wizard merged" };
             material.mainTexture = atlas;
-            // The emission colour defaults to black, so without these the atlas wouldn't glow. A new material
-            // already samples its emission map from UV0.
+            // The emission colour defaults to black, so without these the atlas wouldn't glow. A shader with no
+            // emission strength gets it on its emission colour instead, which is linearized before use.
             if (emissionAtlas != null)
             {
                 material.SetTexture("_EmissionMap", emissionAtlas);
-                material.SetColor("_EmissionColor", Color.white);
-                if (material.HasFloat("_EmissionStrength")) material.SetFloat("_EmissionStrength", emissionStrength);
+                if (material.HasFloat("_EmissionStrength"))
+                {
+                    material.SetColor("_EmissionColor", Color.white);
+                    material.SetFloat("_EmissionStrength", emissionStrength);
+                }
+                else material.SetColor("_EmissionColor", new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
+                if (material.HasProperty("_EmissionUV")) material.SetFloat("_EmissionUV", 0);
             }
             if (material.HasColor("_Color")) material.SetColor("_Color", Color.white);
             if (material.HasFloat("_VertexColor")) material.SetFloat("_VertexColor", vertexColour ? 1 : 0);

@@ -158,6 +158,48 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AnEmissionMapSharperThanTheAlbedoKeepsItsDetail()
+        {
+            // The albedo is untextured, so on its own it would size the chart at 8 texels per UV, smearing the
+            // emission checker's 4-texel cells into grey. Each grid cell lies inside one checker cell.
+            var glowing = Emitting(Keep(new Material(Shader.Find("Standard"))), Checker(32, 4), Color.white);
+            var renderer = MeshRenderer(Grid(1, 6, 8), glowing);
+            var before = Centroids(renderer).Select(EmissionColour).ToArray();
+
+            var result = Bake(renderer);
+
+            var after = Centroids(renderer).Select(c => result.EmissionAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void AShaderWithoutAnEmissionStrengthCarriesItOnTheEmissionColour()
+        {
+            // Standard has no _EmissionStrength, but its emission colour is HDR, so the strength goes there.
+            var bright = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(1.5f, 0.75f, 0.3f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
+
+            var result = Bake(renderer);
+
+            var colour = result.MergedMaterial!.GetColor("_EmissionColor").linear;
+            for (var channel = 0; channel < 3; channel++)
+                Assert.That(colour[channel], Is.EqualTo(1.5f).Within(1e-3f), $"channel {channel}");
+        }
+
+        [Test]
+        public void AnEmissionSwitchedOnButBlackLeavesTheEmissionChannelOff()
+        {
+            // A script can turn Standard's emission keyword on with the colour left black: nothing glows.
+            var dark = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.black);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), dark);
+
+            var result = Bake(renderer);
+
+            Assert.That(result.EmissionAtlas, Is.Null);
+        }
+
+        [Test]
         public void AnExcludedSlotKeepsItsMaterialAndUv0()
         {
             // The second slot's island spans five tiles, over the repeat limit.
@@ -518,6 +560,48 @@ namespace UVWizard.Core.Tests.Pipeline
         {
             var uvs = new[] { new Vector2(uMin, vMin), new Vector2(uMax, vMin), new Vector2(uMin, vMax), new Vector2(uMax, vMax) };
             return (uvs.Select(uv => new Vector3(uv.x, uv.y, z)).ToArray(), uvs);
+        }
+
+        // One connected island: a cells x cells grid of quads, sharing their corners, from UV first/per to
+        // (first + cells)/per on each axis.
+        Mesh Grid(int first, int cells, int per)
+        {
+            var positions = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            for (var y = 0; y <= cells; y++)
+            for (var x = 0; x <= cells; x++)
+            {
+                var uv = new Vector2(first + x, first + y) / per;
+                uvs.Add(uv);
+                positions.Add(uv);
+            }
+            var triangles = new List<int>();
+            for (var y = 0; y < cells; y++)
+            for (var x = 0; x < cells; x++)
+            {
+                var i = y * (cells + 1) + x;
+                triangles.AddRange(new[] { i, i + cells + 1, i + 1, i + 1, i + cells + 1, i + cells + 2 });
+            }
+            var mesh = Keep(new Mesh());
+            mesh.SetVertices(positions);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            return mesh;
+        }
+
+        // A point-filtered black and white checker whose cells are cell texels wide.
+        Texture2D Checker(int size, int cell)
+        {
+            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: false)
+                { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point });
+            var texels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            for (var x = 0; x < size; x++)
+                texels[y * size + x] = (x / cell + y / cell) % 2 == 0 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255);
+            texture.SetPixels32(texels);
+            texture.Apply();
+            return texture;
         }
 
         // One submesh per array of quads, two triangles each.
