@@ -1,12 +1,13 @@
 #nullable enable
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UVWizard.Core.Materials
 {
     /// <summary>
-    /// Reads VRChat's mobile shaders. All three are opaque only, so their materials are merged unless
-    /// something they sample needs a UV channel other than UV0.
+    /// Reads VRChat's mobile shaders. All of them are opaque only, so their materials are merged unless they use
+    /// a feature the bake drops, which flags them, or sample something off UV0, which excludes them.
     /// </summary>
     internal static class VRChatMobileReaders
     {
@@ -24,8 +25,12 @@ namespace UVWizard.Core.Materials
             var normal = normalMap != null
                 ? new ChannelSource(normalMap, Color.white, scaleOffset, 0, material.GetFloat("_BumpScale"))
                 : null;
-            var reading = new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null,
-                usesVertexColour: !material.IsKeywordEnabled("DISABLE_VERTEX_COLORING"));
+            // Vertex colouring isn't flagged: the merged material multiplies it in too whenever a source uses it.
+            var reasons = new List<string>();
+            if (MaterialProperties.DetailOnUv0(material, "_DETAIL", "_UVSec"))
+                reasons.Add(MaterialProperties.DetailMapsDropped);
+            var reading = Reading(albedo, emission, normal, reasons,
+                !material.IsKeywordEnabled("DISABLE_VERTEX_COLORING"));
             var detail = MaterialProperties.DetailOffUv0(material, "_DETAIL", "_UVSec");
             return detail == null ? reading : reading.Excluded(detail);
         }
@@ -38,7 +43,14 @@ namespace UVWizard.Core.Materials
             return new SourceMaterialReading(albedo, null, null, MaterialVerdict.Merged, null, usesVertexColour: true);
         }
 
-        public static SourceMaterialReading ReadToonStandard(Material material)
+        public static SourceMaterialReading ReadToonStandard(Material material) =>
+            ReadToonStandard(material, outline: false);
+
+        /// <summary>Toon Standard with an outline pass: the same surface, with an outline the bake drops.</summary>
+        public static SourceMaterialReading ReadToonStandardOutline(Material material) =>
+            ReadToonStandard(material, outline: true);
+
+        static SourceMaterialReading ReadToonStandard(Material material, bool outline)
         {
             // Every Toon Standard map has its own _ST.
             var albedo = new ChannelSource(material.GetTexture("_MainTex"), material.GetColor("_Color"),
@@ -65,10 +77,36 @@ namespace UVWizard.Core.Materials
                 ? new ChannelSource(normalMap, Color.white, MaterialProperties.ScaleOffset(material, "_BumpMap"), 0,
                     material.GetFloat("_BumpScale"))
                 : null;
-            var reading = new SourceMaterialReading(albedo, emission, normal, MaterialVerdict.Merged, null,
-                usesVertexColour: material.GetFloat("_VertexColor") > 0.5f);
+            var reading = Reading(albedo, emission, normal, ToonStandardDropped(material, outline),
+                material.GetFloat("_VertexColor") > 0.5f);
             var detail = MaterialProperties.DetailOffUv0(material, "USE_DETAIL_MAPS", "_DetailUV");
             return detail == null ? reading : reading.Excluded(detail);
         }
+
+        // What Toon Standard draws that the bake drops, checked against VRChat SDK 3.10.5's shader. Rim light and
+        // AudioLink aren't listed: the merged Toon Standard material can turn them back on for the whole avatar.
+        static List<string> ToonStandardDropped(Material material, bool outline)
+        {
+            var reasons = new List<string>();
+            // Hue shift is a float per layer; the shader has no keyword for it.
+            if (material.GetFloat("_HueShift") != 0 || material.GetFloat("_EmissionHueShift") != 0 ||
+                material.GetFloat("_DetailHueShift") != 0)
+                reasons.Add("Hue shift isn't baked: colours keep their unshifted hue.");
+            // _ColorMask defaults to black, which has no effect. Its emission glows even with a black _EmissionColor.
+            if (material.GetTexture("_ColorMask") != null)
+                reasons.Add("Colour mask isn't baked: its colours and glow are dropped.");
+            if (material.IsKeywordEnabled("USE_MATCAP"))
+                reasons.Add("Matcap isn't baked: its reflections are dropped.");
+            if (MaterialProperties.DetailOnUv0(material, "USE_DETAIL_MAPS", "_DetailUV"))
+                reasons.Add(MaterialProperties.DetailMapsDropped);
+            if (outline) reasons.Add("Outline is dropped: the merged material has no outline.");
+            return reasons;
+        }
+
+        static SourceMaterialReading Reading(ChannelSource albedo, ChannelSource? emission, ChannelSource? normal,
+            List<string> reasons, bool usesVertexColour) =>
+            new SourceMaterialReading(albedo, emission, normal,
+                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged,
+                reasons.Count == 0 ? null : string.Join(" ", reasons), usesVertexColour);
     }
 }

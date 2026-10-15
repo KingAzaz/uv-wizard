@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UVWizard.Core.Materials
@@ -29,15 +30,17 @@ namespace UVWizard.Core.Materials
             // The inspector keeps _Mode and the blend keywords in step, but a script can set the keywords
             // alone, and the shader follows the keywords.
             var mode = material.GetFloat("_Mode");
-            var reason =
-                mode == Cutout || material.IsKeywordEnabled("_ALPHATEST_ON")
-                    ? "Cutout becomes opaque: Toon Standard has no alpha cutoff."
-                    : mode >= Fade || material.IsKeywordEnabled("_ALPHABLEND_ON") ||
-                      material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON")
-                        ? "Transparent becomes opaque: Toon Standard has no transparency."
-                        : null;
+            var reasons = new List<string>();
+            if (mode == Cutout || material.IsKeywordEnabled("_ALPHATEST_ON"))
+                reasons.Add("Cutout becomes opaque: Toon Standard has no alpha cutoff.");
+            else if (mode >= Fade || material.IsKeywordEnabled("_ALPHABLEND_ON") ||
+                     material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON"))
+                reasons.Add("Transparent becomes opaque: Toon Standard has no transparency.");
+            if (MaterialProperties.DetailOnUv0(material, "_DETAIL_MULX2", "_UVSec"))
+                reasons.Add(MaterialProperties.DetailMapsDropped);
             var reading = new SourceMaterialReading(albedo, emission, normal,
-                reason == null ? MaterialVerdict.Merged : MaterialVerdict.Flagged, reason);
+                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged,
+                reasons.Count == 0 ? null : string.Join(" ", reasons));
             var detail = MaterialProperties.DetailOffUv0(material, "_DETAIL_MULX2", "_UVSec");
             return detail == null ? reading : reading.Excluded(detail);
         }

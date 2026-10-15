@@ -20,6 +20,7 @@ namespace UVWizard.Core.Materials
                 ["VRChat/Mobile/Standard Lite"] = VRChatMobileReaders.ReadStandardLite,
                 ["VRChat/Mobile/Toon Lit"] = VRChatMobileReaders.ReadToonLit,
                 ["VRChat/Mobile/Toon Standard"] = VRChatMobileReaders.ReadToonStandard,
+                ["VRChat/Mobile/Toon Standard (Outline)"] = VRChatMobileReaders.ReadToonStandardOutline,
             };
 
         public static SourceMaterialReading Read(Material material)

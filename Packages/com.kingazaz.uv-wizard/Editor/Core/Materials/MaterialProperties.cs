@@ -24,6 +24,13 @@ namespace UVWizard.Core.Materials
             return new Color(linear.r * strength, linear.g * strength, linear.b * strength, 1).gamma;
         }
 
+        /// <summary>Why a material whose detail maps are sampled from UV0 is flagged.</summary>
+        public const string DetailMapsDropped = "Detail maps aren't baked: only the main maps are.";
+
+        /// <summary>True when the material's detail maps are on and sampled from UV0.</summary>
+        public static bool DetailOnUv0(Material material, string detailKeyword, string uvProperty) =>
+            material.IsKeywordEnabled(detailKeyword) && (int)material.GetFloat(uvProperty) == 0;
+
         /// <summary>
         /// Why the material must be excluded when its detail maps are on and sampled from a UV channel other
         /// than UV0, or null when they aren't.
