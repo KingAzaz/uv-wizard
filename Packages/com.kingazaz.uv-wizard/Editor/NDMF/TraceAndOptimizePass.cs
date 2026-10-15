@@ -3,6 +3,7 @@
 #if UVWIZARD_AAO
 using Anatawa12.AvatarOptimizer;
 using nadena.dev.ndmf;
+using UnityEditor;
 
 namespace UVWizard.NDMF
 {
@@ -19,11 +20,20 @@ namespace UVWizard.NDMF
         {
             var root = context.AvatarRootObject;
             var avatar = root.GetComponentInChildren<UVWizardAvatar>(true);
-            if (avatar == null || !avatar.addTraceAndOptimize || !MobileBuild.IsActive) return;
-            // AAO reads it from the root alone, and allows one.
-            if (root.GetComponent<TraceAndOptimize>() != null) return;
+            if (avatar == null || !MobileBuild.IsActive) return;
+            var draft = context.GetState<ReportDraft>();
+            // AAO reads it from the root alone, and allows one. It doesn't expose its settings to code, but they're
+            // serialized.
+            if (root.TryGetComponent<TraceAndOptimize>(out var own))
+            {
+                draft.MmdWorldCompatibility =
+                    new SerializedObject(own).FindProperty("mmdWorldCompatibility")?.boolValue ?? true;
+                return;
+            }
+            if (!avatar.addTraceAndOptimize) return;
 
             root.AddComponent<TraceAndOptimize>();
+            draft.MmdWorldCompatibility = true;
             ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.Information, Messages.AddedTraceAndOptimize);
         }
     }

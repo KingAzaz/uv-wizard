@@ -93,10 +93,12 @@ namespace UVWizard.Core.Pipeline
 
             AtlasSizes sizes;
             IReadOnlyList<Placement> placements;
+            PackingOutcome packing;
             if (cached != null)
             {
                 sizes = cached.Sizes;
                 placements = cached.Placements;
+                packing = cached.Packing;
             }
             else
             {
@@ -121,6 +123,7 @@ namespace UVWizard.Core.Pipeline
                         conversions.Made, conversions.Unconverted).Measured(renderers, options.Budget);
                 }
                 placements = search.Packing.Placements;
+                packing = new PackingOutcome(search.Packer, search.Scale, search.RanOutOfTime);
             }
 
             // Every merged corner's place in the atlas, 0 to 1.
@@ -149,14 +152,14 @@ namespace UVWizard.Core.Pipeline
                 BakeChannel(new BakePlan(albedo.Size, slots.ConvertAll(AlbedoSource)), albedo, options));
             var emissionAtlas = Atlas(Channels.Emission, emission => EmissionAtlas(slots, emission, emissionStrength, options));
             var normalAtlas = Atlas(Channels.Normal, normal => NormalAtlas(slots, normal, options));
-            if (key is { } storeKey && cached == null) cache!.Store(storeKey, new CachedBake(sizes, placements, atlases));
+            if (key is { } storeKey && cached == null) cache!.Store(storeKey, new CachedBake(sizes, placements, atlases, packing));
 
             UseAtlases(merged, options, atlas, emissionAtlas, emissionStrength, normalAtlas);
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
             conversions.Apply(renderers, merged);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
-                emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, conversions.Made,
+                emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, packing, conversions.Made,
                 conversions.Unconverted).Measured(renderers, options.Budget);
         }
 

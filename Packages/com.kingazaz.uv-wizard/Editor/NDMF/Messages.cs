@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using nadena.dev.ndmf.localization;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.NDMF
 {
@@ -48,7 +49,57 @@ namespace UVWizard.NDMF
             (Unconverted + ":description", "{2} It stays on {1} as it is, and the VRChat SDK won't upload the avatar " +
                 "for mobile until it's replaced with one of VRChat's mobile shaders."),
             (NoToonStandard + ":description", "UV Wizard bakes into Toon Standard, which comes with the VRChat SDK. Update the VRChat SDK."),
+
+            (ReportText.MobileBuildHeading, "{0}: mobile build"),
+            (ReportText.MobilePreviewHeading, "{0}: mobile preview (estimated)"),
+            (ReportText.PreviewNote, "This project builds for PC, so UV Wizard baked as it would for Android or iOS. " +
+                "Other tools and the source textures keep their PC settings, so the figures are an estimate. Switch " +
+                "the project to Android or iOS for exact ones."),
+            (ReportText.ExactPacker, "The atlas kept {0}% of the source textures' detail."),
+            (ReportText.ShelfPacker, "The atlas kept {0}% of the source textures' detail. The avatar's textures " +
+                "are split into so many parts that UV Wizard packed them as rectangles, which leaves more space unused."),
+            (ReportText.RanOutOfTime, "UV Wizard stopped looking for a tighter fit when its time ran out. A faster " +
+                "computer may keep more detail."),
+            (ReportText.NothingMerged, "Nothing was merged, so the avatar's materials are as they were."),
+            (ReportText.LeftoverMmdBody, "{0} stays a mesh of its own because Trace and Optimize keeps a mesh named " +
+                "Body under the avatar for MMD worlds, which animate its blend shapes. If you don't use MMD worlds, " +
+                "add Trace and Optimize to the avatar yourself and turn off its MMD World Compatibility."),
+            (ReportText.LeftoverToggle, "{0} stays a mesh of its own because an animation turns it, or an object " +
+                "above it, on or off."),
+            (ReportText.LeftoverStaticMesh, "{0} stays a mesh of its own because it isn't skinned to the avatar's " +
+                "bones. Static meshes can't be merged with skinned ones."),
+            (ReportText.LeftoverBoundsOrRootBone, "{0} stays a mesh of its own because its bounds or root bone " +
+                "differ from the main mesh's."),
+            (ReportText.LeftoverOther, "{0} stays a mesh of its own, and UV Wizard can't tell why."),
+            (ReportText.WindowTitle, "UV Wizard report"),
+            (ReportText.NoReport, "No bake yet. Bake the avatar from the UV Wizard component, or build it for mobile."),
+            (ReportText.ManualBakeButton, "Bake for mobile now"),
+            (ReportText.OpenReportButton, "Open the last report"),
+            (ReportText.NotAnAvatar, "Put the UV Wizard component on a VRChat avatar to bake it."),
+            (ReportText.FiguresHeader, "VRChat's mobile performance stats"),
+            (ReportText.BeforeColumn, "Before"),
+            (ReportText.AfterColumn, "After"),
+            (ReportText.MaterialSlotsRow, "Material slots"),
+            (ReportText.SkinnedMeshesRow, "Skinned meshes"),
+            (ReportText.MeshesRow, "Meshes"),
+            (ReportText.TextureMemoryRow, "Texture memory"),
+            (ReportText.RankRow, "Rank"),
+            (ReportText.Megabytes, "{0:0.##} MB"),
+            (ReportText.NotMeasured, "–"),
+            (ReportText.Target, "The preset aims for {0}."),
+            (ReportText.PackingHeader, "Atlas"),
+            (ReportText.ExcludedHeader, "Kept out of the atlas"),
+            (ReportText.FlaggedHeader, "May look different"),
+            (ReportText.LeftoversHeader, "Why the avatar has more than one mesh"),
+            (ReportText.Rank(PerformanceRank.Excellent), "Excellent"),
+            (ReportText.Rank(PerformanceRank.Good), "Good"),
+            (ReportText.Rank(PerformanceRank.Medium), "Medium"),
+            (ReportText.Rank(PerformanceRank.Poor), "Poor"),
+            (ReportText.Rank(PerformanceRank.VeryPoor), "Very Poor"),
         };
+
+        /// <summary>The text for a key in the editor's language.</summary>
+        public static string Text(string key) => Localizer.GetLocalizedString(key);
 
         public static readonly Localizer Localizer = new Localizer("en-US", () =>
             new List<(string, Func<string, string>)> { ("en-US", Lookup(English)!) });
