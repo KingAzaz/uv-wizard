@@ -72,29 +72,44 @@ namespace UVWizard.Core.Pipeline
             var merged = MergedMaterial(options, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             var channels = Needed(slots, options.Channels);
             var share = options.Budget is { } budget ? budget.Bytes - OutsideBytes(renderers, slots, merged) : (long?)null;
-            AtlasSizes SizesUpTo(int largest) =>
-                share is { } bytes ? AtlasSizing.Fit(channels, largest, bytes) : AtlasSizing.Finest(channels, largest);
-            var sizes = SizesUpTo(options.AtlasSize);
-            var search = Pack(shapes, sizes, options.Padding);
-            // Charts that fit at full detail would only be upscaled, so the atlas shrinks while they still do. Each
-            // smaller size gets the finest formats that fit it.
-            while (share != null && search.FitsAtFullDetail && sizes.Largest / 2 >= AtlasSizing.MinSize
-                   && SizesUpTo(sizes.Largest / 2) is var halved
-                   && Pack(shapes, halved, options.Padding) is { FitsAtFullDetail: true } smaller)
+            var cache = options.CacheDirectory is { } directory ? new BakeCache(directory, options.CacheEntries) : null;
+            var key = cache != null ? Key(slots, surfaces, channels, share, options) : null;
+            var cached = key is { } hash ? cache!.Load(hash, options.Compress) : null;
+
+            AtlasSizes sizes;
+            IReadOnlyList<Placement> placements;
+            if (cached != null)
             {
-                sizes = halved;
-                search = smaller;
+                sizes = cached.Sizes;
+                placements = cached.Placements;
             }
-            if (!search.Fits)
+            else
             {
-                Object.DestroyImmediate(merged);
-                return BakeResult.Unchanged(false, excluded, Array.Empty<SlotNote>()).Measured(renderers, options.Budget);
+                AtlasSizes SizesUpTo(int largest) =>
+                    share is { } bytes ? AtlasSizing.Fit(channels, largest, bytes) : AtlasSizing.Finest(channels, largest);
+                sizes = SizesUpTo(options.AtlasSize);
+                var search = Pack(shapes, sizes, options.Padding);
+                // Charts that fit at full detail would only be upscaled, so the atlas shrinks while they still do. Each
+                // smaller size gets the finest formats that fit it.
+                while (share != null && search.FitsAtFullDetail && sizes.Largest / 2 >= AtlasSizing.MinSize
+                       && SizesUpTo(sizes.Largest / 2) is var halved
+                       && Pack(shapes, halved, options.Padding) is { FitsAtFullDetail: true } smaller)
+                {
+                    sizes = halved;
+                    search = smaller;
+                }
+                if (!search.Fits)
+                {
+                    Object.DestroyImmediate(merged);
+                    return BakeResult.Unchanged(false, excluded, Array.Empty<SlotNote>()).Measured(renderers, options.Budget);
+                }
+                placements = search.Packing.Placements;
             }
 
             // Every merged corner's place in the atlas, 0 to 1.
             for (var c = 0; c < charts.Length; c++)
             {
-                var placement = search.Packing.Placements[c];
+                var placement = placements[c];
                 foreach (var (s, i) in charts[c].Islands)
                 {
                     var slot = slots[s];
@@ -103,19 +118,62 @@ namespace UVWizard.Core.Pipeline
                 }
             }
 
-            var atlas = sizes[Channels.Albedo] is { } albedo
-                ? BakeChannel(new BakePlan(albedo.Size, slots.ConvertAll(AlbedoSource)), "UV Wizard Albedo", albedo, options)
-                : null;
-            var (emissionAtlas, emissionStrength) = sizes[Channels.Emission] is { } emission
-                ? EmissionAtlas(slots, emission, options, flagged)
-                : ((Texture2D?)null, 1f);
-            var normalAtlas = sizes[Channels.Normal] is { } normal ? NormalAtlas(slots, normal, options) : null;
+            var emissionStrength = sizes[Channels.Emission] != null ? EmissionStrength(slots, flagged) : 1f;
+            var atlases = new Dictionary<Channels, Texture2D>();
+            Texture2D? Atlas(Channels channel, Func<ChannelTexture, Texture2D> bake)
+            {
+                if (sizes[channel] is not { } texture) return null;
+                var made = cached?.Atlases[channel] ?? bake(texture);
+                made.name = $"UV Wizard {channel}";
+                atlases.Add(channel, made);
+                return made;
+            }
+            var atlas = Atlas(Channels.Albedo, albedo =>
+                BakeChannel(new BakePlan(albedo.Size, slots.ConvertAll(AlbedoSource)), albedo, options));
+            var emissionAtlas = Atlas(Channels.Emission, emission => EmissionAtlas(slots, emission, emissionStrength, options));
+            var normalAtlas = Atlas(Channels.Normal, normal => NormalAtlas(slots, normal, options));
+            if (key is { } storeKey && cached == null) cache!.Store(storeKey, new CachedBake(sizes, placements, atlases));
 
             UseAtlases(merged, options, atlas, emissionAtlas, emissionStrength, normalAtlas);
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged, emissionAtlas,
-                emissionStrength, normalAtlas, moved).Measured(renderers, options.Budget);
+                emissionStrength, normalAtlas, moved, cached != null).Measured(renderers, options.Budget);
+        }
+
+        // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.
+        static Hash128? Key(List<Slot> slots, List<SourceSurface> surfaces, Channels channels, long? share, BakeOptions options)
+        {
+            var key = new BakeKey();
+            key.Add(options.AtlasSize);
+            key.Add(options.Padding);
+            key.Add(options.Compress ? 1 : 0);
+            key.Add((int)options.NormalEncoding);
+            key.Add((int)channels);
+            key.Add(share ?? -1);
+            for (var s = 0; s < slots.Count; s++)
+            {
+                var slot = slots[s];
+                // Everything else a slot's charts and texels come from follows from these: where it samples
+                // follows from its UV0 and its albedo's scale and offset, and its texture size from its textures.
+                key.Add(surfaces[s].SourceKey);
+                key.Add(slot.Triangles);
+                key.Add(Array.ConvertAll(slot.Triangles, v => slot.Uv0[v]));
+                foreach (var channel in new[] { slot.Reading.Albedo, slot.Reading.Emission, BakedNormal(slot.Reading) })
+                {
+                    if (channel == null)
+                    {
+                        key.Add(0);
+                        continue;
+                    }
+                    key.Add(1);
+                    key.Add(channel.Texture);
+                    key.Add(channel.Tint);
+                    key.Add(channel.ScaleOffset);
+                    key.Add(channel.Strength);
+                }
+            }
+            return key.Hash;
         }
 
         // The channels the atlas carries: those turned on that some merged slot that draws has.
@@ -338,12 +396,11 @@ namespace UVWizard.Core.Pipeline
                     visit(k, Vector2.Scale(slot.Sampled[slot.Triangles[k]] + shift, texelsPerUv));
         }
 
-        // The Emission channel and the strength the merged material multiplies it by, for slots of which some emit.
-        // An 8-bit atlas holds intensities up to 1, so when the brightest emission is above
-        // that, its intensity becomes the strength and every emission is divided by it. The strength stops at
-        // MaxEmissionStrength: an emission brighter than that is dimmed to it, keeping its hue, and flagged.
-        static (Texture2D Atlas, float Strength) EmissionAtlas(List<Slot> slots, ChannelTexture texture,
-            BakeOptions options, List<SlotNote> flagged)
+        // What the merged material multiplies the Emission atlas by, for slots of which some emit. An 8-bit atlas holds
+        // intensities up to 1, so when the brightest emission is above that, its intensity becomes the strength and
+        // every emission is divided by it. The strength stops at MaxEmissionStrength: an emission brighter than that
+        // is dimmed to it, keeping its hue, and flagged.
+        static float EmissionStrength(List<Slot> slots, List<SlotNote> flagged)
         {
             var emitting = slots.FindAll(slot => slot.Draws && BakedEmission(slot.Reading) != null);
             var strength = 1f;
@@ -357,9 +414,13 @@ namespace UVWizard.Core.Pipeline
                         $"Its emission is {intensity:0.##} times full brightness, but the merged material's emission " +
                         $"goes up to {MaxEmissionStrength}, so it glows less."));
             }
+            return strength;
+        }
 
-            // Slots that don't emit bake black, so the gutter fill can't spread a glow over their charts.
-            var atlas = BakeChannel(new BakePlan(texture.Size, slots.ConvertAll(slot =>
+        // The Emission channel: each slot's emission divided by the strength, or by its own intensity when it's
+        // brighter than that. Slots that don't emit bake black, so the gutter fill can't spread a glow over their charts.
+        static Texture2D EmissionAtlas(List<Slot> slots, ChannelTexture texture, float strength, BakeOptions options) =>
+            BakeChannel(new BakePlan(texture.Size, slots.ConvertAll(slot =>
             {
                 var emission = slot.Reading.Emission;
                 if (emission == null) return Source(slot, null, Color.black);
@@ -367,9 +428,7 @@ namespace UVWizard.Core.Pipeline
                 var divisor = Mathf.Max(strength, Intensity(emission.Tint));
                 var tint = new Color(linear.r / divisor, linear.g / divisor, linear.b / divisor, linear.a).gamma;
                 return Source(slot, new ChannelSource(emission.Texture, tint, emission.ScaleOffset, emission.UvChannel), Color.black);
-            })), "UV Wizard Emission", texture, options);
-            return (atlas, strength);
-        }
+            })), texture, options);
 
         // The Normal channel, for slots of which some that draw have a normal map. Slots without one bake flat,
         // so the gutter fill can't spread another chart's bumps over theirs.
@@ -379,12 +438,11 @@ namespace UVWizard.Core.Pipeline
                 var normal = BakedNormal(slot.Reading);
                 var encoding = normal != null ? NormalMaps.EncodingOf(normal.Texture!, options.NormalEncoding) : NormalEncoding.RGorAG;
                 return Source(slot, normal, Color.white, normal?.Strength ?? 0, encoding);
-            }), options.NormalEncoding), "UV Wizard Normal", texture, options);
+            }), options.NormalEncoding), texture, options);
 
-        static Texture2D BakeChannel(BakePlan plan, string name, ChannelTexture texture, BakeOptions options)
+        static Texture2D BakeChannel(BakePlan plan, ChannelTexture texture, BakeOptions options)
         {
             var atlas = ChannelBaker.Bake(plan);
-            atlas.name = name;
             if (options.Compress) AtlasCompressor.Compress(atlas, texture.Format);
             return atlas;
         }

@@ -12,7 +12,7 @@ namespace UVWizard.Core.Baking
     internal static class ChannelBaker
     {
         const string ShaderName = "Hidden/UVWizard/BakeChannel";
-        const string ShaderPath = "Packages/com.kingazaz.uv-wizard/Editor/Core/Baking/BakeChannel.shader";
+        internal const string ShaderPath = "Packages/com.kingazaz.uv-wizard/Editor/Core/Baking/BakeChannel.shader";
 
         static readonly int MainTex = Shader.PropertyToID("_MainTex");
         static readonly int Tint = Shader.PropertyToID("_Color");
@@ -62,8 +62,7 @@ namespace UVWizard.Core.Baking
                 GL.PopMatrix();
 
                 // Atlas UVs stay inside 0..1, so a chart at one edge mustn't be filtered with the opposite edge.
-                var atlas = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: true, linear: normals)
-                    { wrapMode = TextureWrapMode.Clamp };
+                var atlas = Atlas(size, TextureFormat.RGBA32, -1, normals);
                 atlas.ReadPixels(new Rect(0, 0, size, size), 0, 0, recalculateMipMaps: false);
                 var texels = atlas.GetPixels32(0);
                 FillGutters(texels, size);
@@ -80,6 +79,13 @@ namespace UVWizard.Core.Baking
                 UnityEngine.Object.DestroyImmediate(material);
             }
         }
+
+        /// <summary>
+        /// An empty atlas texture of the given size, format and mip count (-1 for a full chain), linear for normals.
+        /// </summary>
+        public static Texture2D Atlas(int size, TextureFormat format, int mipCount, bool linear) =>
+            // Atlas UVs stay inside 0..1, so a chart at one edge mustn't be filtered with the opposite edge.
+            new Texture2D(size, size, format, mipCount, linear) { wrapMode = TextureWrapMode.Clamp };
 
         static Shader LoadShader()
         {

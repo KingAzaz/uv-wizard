@@ -16,7 +16,12 @@ namespace UVWizard.Core.Baking
         public static void Compress(Texture2D atlas, TextureFormat format)
         {
             EditorUtility.CompressTexture(atlas, format, TextureCompressionQuality.Normal);
+            StreamMips(atlas);
+        }
 
+        /// <summary>Turns on mip streaming, which VRChat expects on avatar textures.</summary>
+        public static void StreamMips(Texture2D atlas)
+        {
             // Texture2D has no setter for this; importers set it, and a generated texture has none.
             using var serialized = new SerializedObject(atlas);
             var streaming = serialized.FindProperty("m_StreamingMipmaps")

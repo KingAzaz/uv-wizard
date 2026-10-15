@@ -13,8 +13,10 @@ namespace UVWizard.Core.Pipeline
         public BakeResult(bool fits, Material? mergedMaterial, Texture2D? atlas, Material? representative,
             IReadOnlyList<(Mesh Source, Mesh Rewritten)> replacedMeshes, IReadOnlyList<SlotNote> excluded,
             IReadOnlyList<SlotNote> flagged, Texture2D? emissionAtlas = null, float emissionStrength = 1,
-            Texture2D? normalAtlas = null, IReadOnlyList<(Renderer Renderer, int[] SlotOf)>? movedSlots = null)
+            Texture2D? normalAtlas = null, IReadOnlyList<(Renderer Renderer, int[] SlotOf)>? movedSlots = null,
+            bool fromCache = false)
         {
+            FromCache = fromCache;
             NormalAtlas = normalAtlas;
             MovedSlots = movedSlots ?? Array.Empty<(Renderer, int[])>();
             EmissionAtlas = emissionAtlas;
@@ -31,6 +33,9 @@ namespace UVWizard.Core.Pipeline
         /// <summary>A bake that merged nothing and left every renderer as it was.</summary>
         public static BakeResult Unchanged(bool fits, IReadOnlyList<SlotNote> excluded, IReadOnlyList<SlotNote> flagged) =>
             new BakeResult(fits, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged);
+
+        /// <summary>True when the packing and atlas came from the cache rather than a fresh bake.</summary>
+        public bool FromCache { get; }
 
         /// <summary>False when the charts fit the atlas at no scale. Nothing is merged then.</summary>
         public bool Fits { get; }
