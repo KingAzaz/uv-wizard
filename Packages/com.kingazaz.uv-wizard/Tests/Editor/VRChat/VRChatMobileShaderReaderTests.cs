@@ -344,7 +344,7 @@ namespace UVWizard.Core.Tests.VRChat
         [TestCase(ToonStandardOutline, "_HueShift")]
         public void ToonStandardWithAHueShiftIsFlagged(string shader, string hueShift)
         {
-            var material = Material(shader);
+            var material = HueShifted(shader);
             material.SetFloat(hueShift, 1.5f);
 
             var reading = SourceShaderReader.Read(material);
@@ -353,17 +353,74 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That(reading.Reason, Does.Contain("Hue shift"));
         }
 
+        [TestCase("_HueShift")]
+        [TestCase("_EmissionHueShift")]
+        [TestCase("_DetailHueShift")]
+        public void AHueShiftWithHueShiftTurnedOffLeavesToonStandardMerged(string hueShift)
+        {
+            // The inspector's Hue Shift toggle only sets the keyword, so a turned-off shift keeps its value.
+            var material = HueShifted(ToonStandard);
+            material.DisableKeyword("USE_HUE_SHIFT");
+            material.SetFloat(hueShift, 1.5f);
+
+            Assert.That(SourceShaderReader.Read(material).Reason ?? "", Does.Not.Contain("Hue shift"));
+        }
+
+        [Test]
+        public void AnEmissionHueShiftOnAMaterialThatDoesntEmitIsntFlagged()
+        {
+            var material = HueShifted(ToonStandard);
+            material.SetColor("_EmissionColor", Color.black);
+            material.SetFloat("_EmissionHueShift", 1.5f);
+
+            Assert.That(SourceShaderReader.Read(material).Reason ?? "", Does.Not.Contain("Hue shift"));
+        }
+
+        [Test]
+        public void ADetailHueShiftWithDetailMapsOffLeavesToonStandardMerged()
+        {
+            var material = HueShifted(ToonStandard);
+            material.DisableKeyword("USE_DETAIL_MAPS");
+            material.SetFloat("_DetailHueShift", 1.5f);
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        // A Toon Standard material with hue shift on, emission and detail maps, so every hue shift shows. Its detail
+        // maps sample UV0, which flags them on their own.
+        Material HueShifted(string shader)
+        {
+            var material = Material(shader);
+            material.EnableKeyword("USE_HUE_SHIFT");
+            material.SetColor("_EmissionColor", Color.white);
+            material.SetFloat("_EmissionStrength", 1);
+            material.EnableKeyword("USE_DETAIL_MAPS");
+            material.SetFloat("_DetailUV", 0);
+            return material;
+        }
+
         [TestCase(ToonStandard)]
         [TestCase(ToonStandardOutline)]
         public void ToonStandardWithAColourMaskIsFlagged(string shader)
         {
             var material = Material(shader);
+            material.EnableKeyword("USE_COLOR_MASK");
             material.SetTexture("_ColorMask", Texture());
 
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
             Assert.That(reading.Reason, Does.Contain("Colour mask"));
+        }
+
+        [Test]
+        public void AColourMaskWithColourMaskTurnedOffLeavesToonStandardMerged()
+        {
+            var material = Material(ToonStandard);
+            material.DisableKeyword("USE_COLOR_MASK");
+            material.SetTexture("_ColorMask", Texture());
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }
 
         [TestCase(ToonStandard)]
@@ -439,7 +496,9 @@ namespace UVWizard.Core.Tests.VRChat
         public void EveryFlaggedFeatureIsNamedInOneReason()
         {
             var material = Material(ToonStandard);
+            material.EnableKeyword("USE_HUE_SHIFT");
             material.SetFloat("_HueShift", 1);
+            material.EnableKeyword("USE_COLOR_MASK");
             material.SetTexture("_ColorMask", Texture());
             material.EnableKeyword("USE_MATCAP");
 
@@ -452,6 +511,7 @@ namespace UVWizard.Core.Tests.VRChat
         public void DetailMapsOnUv1StillExcludeAndKeepTheFlaggedFeatures()
         {
             var material = Material(ToonStandard);
+            material.EnableKeyword("USE_HUE_SHIFT");
             material.SetFloat("_HueShift", 1);
             material.EnableKeyword("USE_DETAIL_MAPS");
             material.SetFloat("_DetailUV", 1);
@@ -463,6 +523,15 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That(reading.FlaggedReason, Does.Contain("Hue shift"),
                 "a conversion drops the hue shift the same way");
             Assert.That(reading.FlaggedReason, Does.Not.Contain("Detail maps"), "the exclusion already names them");
+        }
+
+        [Test]
+        public void ToonStandardOutlineWithZeroThicknessIsMerged()
+        {
+            var material = Material(ToonStandardOutline);
+            material.SetFloat("_OutlineThickness", 0);
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }
 
         [Test]

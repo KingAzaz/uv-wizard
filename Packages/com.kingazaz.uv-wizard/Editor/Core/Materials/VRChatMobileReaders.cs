@@ -77,7 +77,7 @@ namespace UVWizard.Core.Materials
                 ? new ChannelSource(normalMap, Color.white, MaterialProperties.ScaleOffset(material, "_BumpMap"), 0,
                     material.GetFloat("_BumpScale"))
                 : null;
-            var reading = Reading(albedo, emission, normal, ToonStandardDropped(material, outline),
+            var reading = Reading(albedo, emission, normal, ToonStandardDropped(material, emission != null, outline),
                 material.GetFloat("_VertexColor") > 0.5f);
             var detail = MaterialProperties.DetailOffUv0(material, "USE_DETAIL_MAPS", "_DetailUV");
             return detail == null ? reading : reading.Excluded(detail);
@@ -85,21 +85,26 @@ namespace UVWizard.Core.Materials
 
         // What Toon Standard draws that the bake drops, checked against VRChat SDK 3.10.5's shader. Rim light and
         // AudioLink aren't listed: the merged Toon Standard material can turn them back on for the whole avatar.
-        static List<string> ToonStandardDropped(Material material, bool outline)
+        // Hue shift and colour mask are dynamic-branch keywords; the inspector turns a group off by clearing its
+        // keyword alone, so a turned-off group keeps its values.
+        static List<string> ToonStandardDropped(Material material, bool emits, bool outline)
         {
             var reasons = new List<string>();
-            // Hue shift is a float per layer; the shader has no keyword for it.
-            if (material.GetFloat("_HueShift") != 0 || material.GetFloat("_EmissionHueShift") != 0 ||
-                material.GetFloat("_DetailHueShift") != 0)
+            var detailMaps = material.IsKeywordEnabled("USE_DETAIL_MAPS");
+            // Each layer's shift shows only where the layer does: emission that glows, detail maps that are on.
+            if (material.IsKeywordEnabled("USE_HUE_SHIFT") &&
+                (material.GetFloat("_HueShift") != 0 || emits && material.GetFloat("_EmissionHueShift") != 0 ||
+                 detailMaps && material.GetFloat("_DetailHueShift") != 0))
                 reasons.Add("Hue shift isn't baked: colours keep their unshifted hue.");
             // _ColorMask defaults to black, which has no effect. Its emission glows even with a black _EmissionColor.
-            if (material.GetTexture("_ColorMask") != null)
+            if (material.IsKeywordEnabled("USE_COLOR_MASK") && material.GetTexture("_ColorMask") != null)
                 reasons.Add("Colour mask isn't baked: its colours and glow are dropped.");
             if (material.IsKeywordEnabled("USE_MATCAP"))
                 reasons.Add("Matcap isn't baked: its reflections are dropped.");
             if (MaterialProperties.DetailOnUv0(material, "USE_DETAIL_MAPS", "_DetailUV"))
                 reasons.Add(MaterialProperties.DetailMapsDropped);
-            if (outline) reasons.Add("Outline is dropped: the merged material has no outline.");
+            if (outline && material.GetFloat("_OutlineThickness") > 0)
+                reasons.Add("Outline is dropped: the merged material has no outline.");
             return reasons;
         }
 
