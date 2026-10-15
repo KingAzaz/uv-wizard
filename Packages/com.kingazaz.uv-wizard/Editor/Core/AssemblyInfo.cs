@@ -6,3 +6,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("UVWizard.Core.Editor.Tests.Poiyomi")]
 [assembly: InternalsVisibleTo("UVWizard.Core.Editor.Tests.LilToon")]
 [assembly: InternalsVisibleTo("UVWizard.NDMF.Editor.Tests")]
+[assembly: InternalsVisibleTo("UVWizard.VRChat.Editor")]

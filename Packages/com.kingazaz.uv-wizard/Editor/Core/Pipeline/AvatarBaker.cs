@@ -86,10 +86,12 @@ namespace UVWizard.Core.Pipeline
 
             AtlasSizes sizes;
             IReadOnlyList<Placement> placements;
+            PackingOutcome packing;
             if (cached != null)
             {
                 sizes = cached.Sizes;
                 placements = cached.Placements;
+                packing = cached.Packing;
             }
             else
             {
@@ -112,6 +114,7 @@ namespace UVWizard.Core.Pipeline
                     return BakeResult.Unchanged(false, excluded, Array.Empty<SlotNote>()).Measured(renderers, options.Budget);
                 }
                 placements = search.Packing.Placements;
+                packing = new PackingOutcome(search.Packer, search.Scale, search.RanOutOfTime);
             }
 
             // Every merged corner's place in the atlas, 0 to 1.
@@ -140,13 +143,13 @@ namespace UVWizard.Core.Pipeline
                 BakeChannel(new BakePlan(albedo.Size, slots.ConvertAll(AlbedoSource)), albedo, options));
             var emissionAtlas = Atlas(Channels.Emission, emission => EmissionAtlas(slots, emission, emissionStrength, options));
             var normalAtlas = Atlas(Channels.Normal, normal => NormalAtlas(slots, normal, options));
-            if (key is { } storeKey && cached == null) cache!.Store(storeKey, new CachedBake(sizes, placements, atlases));
+            if (key is { } storeKey && cached == null) cache!.Store(storeKey, new CachedBake(sizes, placements, atlases, packing));
 
             UseAtlases(merged, options, atlas, emissionAtlas, emissionStrength, normalAtlas);
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged, emissionAtlas,
-                emissionStrength, normalAtlas, moved, cached != null).Measured(renderers, options.Budget);
+                emissionStrength, normalAtlas, moved, cached != null, packing).Measured(renderers, options.Budget);
         }
 
         // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.

@@ -60,6 +60,21 @@ namespace UVWizard.NDMF
             return animated;
         }
 
+        /// <summary>
+        /// The objects the avatar's animations turn on or off. Avatar Optimizer keeps renderers on or under them out of
+        /// the merge (ADR 0001). It does merge a renderer whose enabled flag is animated, so those don't count.
+        /// </summary>
+        public static HashSet<GameObject> Toggled(AnimatorServicesContext animators, GameObject root)
+        {
+            var toggled = new HashSet<GameObject>();
+            foreach (var (clip, resolve) in Clips(animators, root))
+                foreach (var binding in clip.GetFloatCurveBindings())
+                    if (binding.type == typeof(GameObject) && binding.propertyName == "m_IsActive"
+                        && resolve(binding.path) is { } target)
+                        toggled.Add(target);
+            return toggled;
+        }
+
         /// <summary>Moves each material swap on a renderer whose slots moved to the slot's new index.</summary>
         public static void FollowMovedSlots(AnimatorServicesContext animators, GameObject root,
             IEnumerable<(Renderer Renderer, int[] SlotOf)> moved)

@@ -20,7 +20,7 @@ namespace UVWizard.Core.Pipeline
     internal sealed class BakeCache
     {
         // Bumped whenever an entry's layout changes.
-        const int Format = 1;
+        const int Format = 2;
         const string Extension = ".bake";
 
         readonly string directory;
@@ -57,6 +57,7 @@ namespace UVWizard.Core.Pipeline
                 for (var count = reader.ReadInt32(); count > 0; count--)
                     textures.Add((Channels)reader.ReadInt32(), new ChannelTexture(reader.ReadInt32(), (TextureFormat)reader.ReadInt32()));
                 var sizes = new AtlasSizes(textures, reader.ReadInt32());
+                var packing = new PackingOutcome((Packer)reader.ReadInt32(), reader.ReadSingle(), reader.ReadBoolean());
                 var placements = new Placement[reader.ReadInt32()];
                 for (var c = 0; c < placements.Length; c++)
                     placements[c] = new Placement(new Vector2(reader.ReadSingle(), reader.ReadSingle()), reader.ReadBoolean(),
@@ -64,7 +65,7 @@ namespace UVWizard.Core.Pipeline
                 foreach (var (channel, texture) in textures)
                     atlases.Add(channel, ReadAtlas(reader, channel, texture, compressed));
                 MarkUsed(path);
-                return new CachedBake(sizes, placements, atlases);
+                return new CachedBake(sizes, placements, atlases, packing);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
                                                   or InvalidDataException or UnityException or ArgumentException
@@ -92,6 +93,9 @@ namespace UVWizard.Core.Pipeline
                     writer.Write((int)texture.Format);
                 }
                 writer.Write(bake.Sizes.Largest);
+                writer.Write((int)bake.Packing.Packer);
+                writer.Write(bake.Packing.Scale);
+                writer.Write(bake.Packing.RanOutOfTime);
                 writer.Write(bake.Placements.Count);
                 foreach (var placement in bake.Placements)
                 {
@@ -172,17 +176,24 @@ namespace UVWizard.Core.Pipeline
         }
     }
 
-    /// <summary>What a cached bake keeps: each channel's size and format, every chart's placement, and the atlas.</summary>
+    /// <summary>
+    /// What a cached bake keeps: each channel's size and format, how the charts were packed, every chart's placement,
+    /// and the atlas.
+    /// </summary>
     internal sealed class CachedBake
     {
-        public CachedBake(AtlasSizes sizes, IReadOnlyList<Placement> placements, IReadOnlyDictionary<Channels, Texture2D> atlases)
+        public CachedBake(AtlasSizes sizes, IReadOnlyList<Placement> placements, IReadOnlyDictionary<Channels, Texture2D> atlases,
+            PackingOutcome packing)
         {
+            Packing = packing;
             Sizes = sizes;
             Placements = placements;
             Atlases = atlases;
         }
 
         public AtlasSizes Sizes { get; }
+
+        public PackingOutcome Packing { get; }
 
         /// <summary>One placement per chart, in chart order.</summary>
         public IReadOnlyList<Placement> Placements { get; }

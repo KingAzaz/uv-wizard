@@ -26,8 +26,14 @@ namespace UVWizard.NDMF
             if (avatar == null || !MobileBuild.IsActive) return;
 
             var shader = ToonStandard.Shader;
-            Bake(root, shader != null ? ToonStandard.Options(shader, avatar) : null,
-                context.Extension<AnimatorServicesContext>());
+            var animators = context.Extension<AnimatorServicesContext>();
+            var result = Bake(root, shader != null ? ToonStandard.Options(shader, avatar) : null, animators);
+
+            var draft = context.GetState<ReportDraft>();
+            draft.Baked = true;
+            draft.Result = result;
+            draft.Target = ReportDraft.RankOf(avatar.preset);
+            draft.Publish(root);
         }
 
         // Avatar Optimizer runs after the bake and edits the meshes it rewrites.
