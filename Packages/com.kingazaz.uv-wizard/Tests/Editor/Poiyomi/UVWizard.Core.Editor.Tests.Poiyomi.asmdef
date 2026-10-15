@@ -1,0 +1,33 @@
+{
+    "name": "UVWizard.Core.Editor.Tests.Poiyomi",
+    "rootNamespace": "UVWizard.Core.Tests",
+    "references": [
+        "UVWizard.Core.Editor",
+        "UVWizard.Core.Editor.Tests",
+        "ThryAssemblyDefinition",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
+        "UVWIZARD_POIYOMI"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.poiyomi.toon",
+            "expression": "",
+            "define": "UVWIZARD_POIYOMI"
+        }
+    ],
+    "noEngineReferences": false
+}

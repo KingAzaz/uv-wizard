@@ -24,15 +24,24 @@ namespace UVWizard.Core.Materials
 
         public static SourceMaterialReading Read(Material material)
         {
-            var reading = ReadersByShader.TryGetValue(material.shader.name, out var read)
-                ? read(material)
-                : ReadUnknown(material);
-            return ExcludeIfOffUv0(reading);
+            return ExcludeIfOffUv0(ReadByShader(material));
         }
 
-        // The atlas remaps UV0 only, so a channel sampled from any other UV channel can't be baked.
+        static SourceMaterialReading ReadByShader(Material material)
+        {
+            if (ReadersByShader.TryGetValue(material.shader.name, out var read)) return read(material);
+#if UVWIZARD_POIYOMI
+            // Locking a Poiyomi material gives it a shader of its own, so Poiyomi is matched by name prefix.
+            if (PoiyomiReader.Reads(material.shader)) return PoiyomiReader.Read(material);
+#endif
+            return ReadUnknown(material);
+        }
+
+        // The atlas remaps UV0 only, so a channel sampled from any other UV channel can't be baked. A reader
+        // that already excluded the material keeps its own reason.
         static SourceMaterialReading ExcludeIfOffUv0(SourceMaterialReading reading)
         {
+            if (reading.Verdict == MaterialVerdict.Excluded) return reading;
             foreach (var (channel, source) in new[]
                          { (Channel.Albedo, reading.Albedo), (Channel.Emission, reading.Emission),
                            (Channel.Normal, reading.Normal) })
