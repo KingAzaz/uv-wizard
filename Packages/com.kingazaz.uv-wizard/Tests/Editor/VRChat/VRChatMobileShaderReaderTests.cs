@@ -462,6 +462,7 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That(reading.Reason, Does.Contain("UV1"));
             Assert.That(reading.FlaggedReason, Does.Contain("Hue shift"),
                 "a conversion drops the hue shift the same way");
+            Assert.That(reading.FlaggedReason, Does.Not.Contain("Detail maps"), "the exclusion already names them");
         }
 
         [Test]
