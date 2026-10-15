@@ -220,7 +220,7 @@ namespace UVWizard.Core.Pipeline
             Texture2D Texture(Material source, Channels channel, Texture? texture, Color tint, ChannelSource? normal = null)
             {
                 var size = texture != null ? Mathf.Min(Mathf.Max(texture.width, texture.height), options.AtlasSize) : UntexturedSize.x;
-                var encoding = normal != null ? NormalMaps.EncodingOf(texture!, options.NormalEncoding) : NormalEncoding.RGorAG;
+                var encoding = normal != null ? options.NormalEncoding : NormalEncoding.RGorAG;
                 var whole = new BakeSource(texture != null ? texture : Texture2D.whiteTexture, tint, Identity, Whole, Whole,
                     WholeTriangles, normal?.Strength ?? 1, encoding);
                 var baked = ChannelBaker.Bake(new BakePlan(size, new[] { whole },

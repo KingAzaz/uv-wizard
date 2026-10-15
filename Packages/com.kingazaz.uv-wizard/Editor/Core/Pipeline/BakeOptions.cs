@@ -43,8 +43,9 @@ namespace UVWizard.Core.Pipeline
         /// </param>
         /// <param name="normalMapKeyword">The merged shader's keyword that turns its normal map on.</param>
         /// <param name="normalEncoding">
-        /// How the build's normal maps are encoded, which the merged shader decodes: source textures imported as
-        /// normal maps are read this way, and the Normal atlas is written this way. The active build target's when null.
+        /// How the build's normal maps are encoded, which the merged shader decodes: every source normal map is read
+        /// this way, as the device's shader reads it whatever its importer says, and the Normal atlas is written this
+        /// way. The active build target's when null.
         /// </param>
         public BakeOptions(Shader mergedShader, int atlasSize = 2048, int padding = 8, bool compress = false,
             string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null,
