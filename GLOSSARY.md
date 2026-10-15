@@ -29,7 +29,7 @@ How many whole UV tiles an island may move by and still sample the same texels i
 _Avoid_: Wrap period, repeat
 
 **Chart**:
-One or more islands that would bake to identical atlas texels (same source texture, same tint, overlapping UVs), so they share one place in the atlas. Mirrored and stacked islands form one chart.
+One or more islands that would bake to identical atlas texels (same source texture, same tint, overlapping UVs), so they share one place in the atlas. Mirrored and stacked islands form one chart. So do islands of one mesh that meet only at a shared vertex, since apart they would give that vertex two atlas UVs.
 _Avoid_: Cluster, island group. xatlas uses "chart" to mean a single island, but this project does not.
 
 **Priority**:

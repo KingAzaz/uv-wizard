@@ -72,6 +72,46 @@ namespace UVWizard.Core.Tests.Meshes
             Assert.That(SkinOfCorners(result.Mesh), Is.EqualTo(expected));
         }
 
+        [Test]
+        public void SplitVerticesThatNoBlendShapeMovesAreAppendedWithoutAddingTheFramesAgain()
+        {
+            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }), still: new[] { 1, 2 });
+            var expected = SkinOfCorners(source);
+
+            var result = Rewrite(source, TwoCharts);
+
+            Assert.That(result.Path, Is.EqualTo(RewritePath.Appended));
+            Assert.That(result.Mesh.vertexCount, Is.EqualTo(6));
+            Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(TwoCharts));
+            Assert.That(Corners(result.Mesh, 0, result.Mesh.vertices), Is.EqualTo(Corners(source, 0, source.vertices)));
+            Assert.That(CornerUvs(result.Mesh, 0, 1), Is.EqualTo(CornerUvs(source, 0, 1)));
+            Assert.That(result.Mesh.bindposes, Is.EqualTo(source.bindposes));
+            Assert.That(result.Mesh.GetBlendShapeName(0), Is.EqualTo("smile"));
+            Assert.That(result.Mesh.GetBlendShapeFrameWeight(0, 1), Is.EqualTo(100));
+            Assert.That(SkinOfCorners(result.Mesh), Is.EqualTo(expected));
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        public void ASplitVertexThatOnlyALaterFrameMovesKeepsItsDeltaOnEveryCopy(int attribute)
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+            var none = new Vector3[4];
+            var moved = new Vector3[4];
+            moved[2] = new Vector3(0.5f, 0.25f, 0.125f);
+            source.AddBlendShapeFrame("still", 100, none, none, none);
+            source.AddBlendShapeFrame("blink", 50, none, none, none);
+            source.AddBlendShapeFrame("blink", 100, attribute == 0 ? moved : none, attribute == 1 ? moved : none,
+                attribute == 2 ? moved : none);
+            var expected = DeltasOfCorners(source, 1, 1);
+
+            var result = Rewrite(source, TwoCharts);
+
+            Assert.That(result.Path, Is.EqualTo(RewritePath.Rebuilt));
+            Assert.That(DeltasOfCorners(result.Mesh, 1, 1), Is.EqualTo(expected));
+        }
+
         [TestCase(true)]
         [TestCase(false)]
         public void BindposesSurviveWithoutBoneWeights(bool split)
@@ -122,11 +162,12 @@ namespace UVWizard.Core.Tests.Meshes
                 Assert.That(CornerUvs(result.Mesh, 0, channel), Is.EqualTo(CornerUvs(source, 0, channel)), $"UV{channel}");
         }
 
-        [TestCase(true)]
-        [TestCase(false)]
-        public void AMeshWithReadWriteOffWorks(bool split)
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        [TestCase(false, false)]
+        public void AMeshWithReadWriteOffWorks(bool split, bool splitVerticesStill)
         {
-            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }));
+            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }), splitVerticesStill ? new[] { 1, 2 } : new int[0]);
             var uv1 = CornerUvs(source, 0, 1);
             var skin = SkinOfCorners(source);
             source.UploadMeshData(markNoLongerReadable: true);
@@ -134,6 +175,7 @@ namespace UVWizard.Core.Tests.Meshes
 
             var result = Rewrite(source, split ? TwoCharts : OneChart);
 
+            Assert.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
             Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(split ? TwoCharts : OneChart));
             Assert.That(CornerUvs(result.Mesh, 0, 1), Is.EqualTo(uv1));
             Assert.That(SkinOfCorners(result.Mesh), Is.EqualTo(skin));
@@ -387,8 +429,9 @@ namespace UVWizard.Core.Tests.Meshes
         }
 
         // Bone weights (vertex 1 has six bones, more than a vertex stream holds), nine bindposes,
-        // and a blend shape with two frames whose deltas differ per vertex.
-        static Mesh Skinned(Mesh mesh)
+        // and a blend shape with two frames whose deltas differ per vertex, except on the still
+        // vertices, which no frame moves.
+        static Mesh Skinned(Mesh mesh, params int[] still)
         {
             var bonesPerVertex = new byte[] { 1, 6, 2, 1 };
             var weights = new List<BoneWeight1>();
@@ -399,8 +442,8 @@ namespace UVWizard.Core.Tests.Meshes
             using (var all = new NativeArray<BoneWeight1>(weights.ToArray(), Allocator.Temp))
                 mesh.SetBoneWeights(perVertex, all);
             mesh.bindposes = Enumerable.Range(0, 9).Select(i => Matrix4x4.Translate(Vector3.one * i)).ToArray();
-            mesh.AddBlendShapeFrame("smile", 50, Deltas(1), Deltas(2), Deltas(3));
-            mesh.AddBlendShapeFrame("smile", 100, Deltas(4), Deltas(5), Deltas(6));
+            mesh.AddBlendShapeFrame("smile", 50, Deltas(1, still), Deltas(2, still), Deltas(3, still));
+            mesh.AddBlendShapeFrame("smile", 100, Deltas(4, still), Deltas(5, still), Deltas(6, still));
             return mesh;
         }
 
@@ -436,8 +479,18 @@ namespace UVWizard.Core.Tests.Meshes
         static IEnumerable<Vector2> CornerUvs(Mesh mesh, int submesh, int channel) =>
             Corners(mesh, submesh, Uvs(mesh, channel));
 
-        static Vector3[] Deltas(int seed) =>
-            Enumerable.Range(0, 4).Select(i => new Vector3(seed, i, seed * i)).ToArray();
+        static Vector3[] Deltas(int seed, int[] still) =>
+            Enumerable.Range(0, 4).Select(i => still.Contains(i) ? Vector3.zero : new Vector3(seed, i, seed * i)).ToArray();
+
+        // Each corner of submesh 0's deltas in one blend-shape frame, as text to compare.
+        static string[] DeltasOfCorners(Mesh mesh, int shape, int frame)
+        {
+            var dv = new Vector3[mesh.vertexCount];
+            var dn = new Vector3[mesh.vertexCount];
+            var dt = new Vector3[mesh.vertexCount];
+            mesh.GetBlendShapeFrameVertices(shape, frame, dv, dn, dt);
+            return mesh.GetIndices(0).Select(v => $"{dv[v]:R} {dn[v]:R} {dt[v]:R}").ToArray();
+        }
 
         // Each corner of submesh 0's bone weights and blend-shape deltas, as text to compare.
         static string[] SkinOfCorners(Mesh mesh)
