@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UVWizard.Core.Budgets;
+using UVWizard.Core.Packing;
 
 namespace UVWizard.Core.Pipeline
 {
@@ -14,8 +15,9 @@ namespace UVWizard.Core.Pipeline
             IReadOnlyList<(Mesh Source, Mesh Rewritten)> replacedMeshes, IReadOnlyList<SlotNote> excluded,
             IReadOnlyList<SlotNote> flagged, Texture2D? emissionAtlas = null, float emissionStrength = 1,
             Texture2D? normalAtlas = null, IReadOnlyList<(Renderer Renderer, int[] SlotOf)>? movedSlots = null,
-            bool fromCache = false)
+            bool fromCache = false, PackingOutcome? packing = null)
         {
+            Packing = packing;
             FromCache = fromCache;
             NormalAtlas = normalAtlas;
             MovedSlots = movedSlots ?? Array.Empty<(Renderer, int[])>();
@@ -105,11 +107,40 @@ namespace UVWizard.Core.Pipeline
             return this;
         }
 
+        /// <summary>How the charts were packed, or null when nothing was merged.</summary>
+        public PackingOutcome? Packing { get; }
+
         /// <summary>Slots kept out of the atlas: they keep their source material and UV0.</summary>
         public IReadOnlyList<SlotNote> Excluded { get; }
 
         /// <summary>Slots merged, but which may look different afterwards.</summary>
         public IReadOnlyList<SlotNote> Flagged { get; }
+    }
+
+    /// <summary>How a bake packed its charts: by which packer, and how much detail it kept.</summary>
+    internal readonly struct PackingOutcome : IEquatable<PackingOutcome>
+    {
+        public PackingOutcome(Packer packer, float scale, bool ranOutOfTime)
+        {
+            Packer = packer;
+            Scale = scale;
+            RanOutOfTime = ranOutOfTime;
+        }
+
+        /// <summary>The packer that placed the charts.</summary>
+        public Packer Packer { get; }
+
+        /// <summary>The detail kept: atlas pixels per source texel, before each chart's priority.</summary>
+        public float Scale { get; }
+
+        /// <summary>True when the search's time ran out, so a faster machine might keep more detail.</summary>
+        public bool RanOutOfTime { get; }
+
+        public bool Equals(PackingOutcome other) =>
+            Packer == other.Packer && Scale.Equals(other.Scale) && RanOutOfTime == other.RanOutOfTime;
+
+        public override bool Equals(object? obj) => obj is PackingOutcome other && Equals(other);
+        public override int GetHashCode() => HashCode.Combine(Packer, Scale, RanOutOfTime);
     }
 
     /// <summary>One material slot of one renderer, and why it's excluded or flagged.</summary>
