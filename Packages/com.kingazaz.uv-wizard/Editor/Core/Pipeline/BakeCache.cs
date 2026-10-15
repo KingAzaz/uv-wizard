@@ -34,7 +34,8 @@ namespace UVWizard.Core.Pipeline
         }
 
         /// <summary>
-        /// The bake stored under the key, or null when there's none. A damaged entry is deleted and reads as none.
+        /// The bake stored under the key, or null when there's none. A damaged entry reads as none, and the fresh bake
+        /// that follows replaces it.
         /// </summary>
         public CachedBake? Load(Hash128 key, bool compressed)
         {
@@ -69,7 +70,6 @@ namespace UVWizard.Core.Pipeline
                                                   or ArgumentException or FormatException)
             {
                 foreach (var atlas in atlases.Values) Object.DestroyImmediate(atlas);
-                File.Delete(path);
                 return null;
             }
         }
@@ -237,12 +237,10 @@ namespace UVWizard.Core.Pipeline
             var known = false;
             if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(texture, out var guid, out long file))
             {
-                Add(guid);
+                // One file can hold several textures.
                 Add(file);
                 var dependencies = AssetDatabase.GetAssetDependencyHash(AssetDatabase.GUIDToAssetPath(guid));
                 hash.Append(ref dependencies);
-                var contents = texture.imageContentsHash;
-                hash.Append(ref contents);
                 known = true;
             }
             if (texture is Texture2D { isReadable: true } readable)

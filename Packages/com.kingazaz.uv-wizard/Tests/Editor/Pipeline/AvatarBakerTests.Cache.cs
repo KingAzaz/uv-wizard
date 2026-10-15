@@ -253,6 +253,50 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AnotherUnreadableTextureInTheSameAssetFileBakesAfresh()
+        {
+            const string folder = "Assets/UVWizardCacheTests";
+            const string path = folder + "/textures.asset";
+            Directory.CreateDirectory(folder);
+            try
+            {
+                // Made outside the test's list of objects to destroy: deleting the asset destroys them.
+                Texture2D Filled(byte value)
+                {
+                    var texture = new Texture2D(64, 64, TextureFormat.RGBA32, mipChain: false);
+                    texture.LoadRawTextureData(Enumerable.Repeat(value, 64 * 64 * 4).ToArray());
+                    texture.Apply();
+                    return texture;
+                }
+                AssetDatabase.CreateAsset(Filled(60), path);
+                AssetDatabase.AddObjectToAsset(Filled(200), path);
+                var textures = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Texture2D>().ToArray();
+                foreach (var texture in textures)
+                {
+                    using var serialized = new SerializedObject(texture);
+                    serialized.FindProperty("m_IsReadable").boolValue = false;
+                    serialized.ApplyModifiedPropertiesWithoutUndo();
+                }
+                AssetDatabase.SaveAssets();
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+                textures = AssetDatabase.LoadAllAssetsAtPath(path).OfType<Texture2D>().ToArray();
+                Assume.That(textures, Has.Length.EqualTo(2));
+                Assume.That(textures.Select(texture => texture.isReadable), Has.All.False);
+
+                Bake(CachedOptions(), Plain(textures[0]));
+                var same = Bake(CachedOptions(), Plain(textures[0]));
+                var other = Bake(CachedOptions(), Plain(textures[1]));
+
+                Assert.That(same.FromCache, Is.True, "the same texture");
+                Assert.That(other.FromCache, Is.False, "the other texture");
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(folder);
+            }
+        }
+
+        [Test]
         public void TheCacheKeepsOnlyTheNewestEntries()
         {
             BakeOptions Options() => StandardOptions(atlasSize: 256, cacheDirectory: CacheDirectory, cacheEntries: 2);
@@ -300,7 +344,8 @@ namespace UVWizard.Core.Tests.Pipeline
                      })
             {
                 Assert.That(a, Is.Not.Null, name);
-                Assert.That((a!.width, a.format, a.mipmapCount), Is.EqualTo((e!.width, e.format, e.mipmapCount)), name);
+                Assert.That((a!.width, a.graphicsFormat, a.mipmapCount), Is.EqualTo((e!.width, e.graphicsFormat, e.mipmapCount)), name);
+                Assert.That(a.streamingMipmaps, Is.EqualTo(e.streamingMipmaps), $"{name} streams its mips");
                 Assert.That(a.GetRawTextureData<byte>().ToArray().SequenceEqual(e.GetRawTextureData<byte>().ToArray()),
                     Is.True, $"{name} texels");
                 Assert.That(a.name, Is.EqualTo(e.name), name);
