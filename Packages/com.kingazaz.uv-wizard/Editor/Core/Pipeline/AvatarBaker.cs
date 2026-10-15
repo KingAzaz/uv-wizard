@@ -529,7 +529,7 @@ namespace UVWizard.Core.Pipeline
             BakeChannel(new BakePlan(texture.Size, slots.ConvertAll(slot =>
             {
                 var normal = BakedNormal(slot.Reading);
-                var encoding = normal != null ? NormalMaps.EncodingOf(normal.Texture!, options.NormalEncoding) : NormalEncoding.RGorAG;
+                var encoding = normal != null ? options.NormalEncoding : NormalEncoding.RGorAG;
                 return Source(slot, normal, Color.white, normal?.Strength ?? 0, encoding);
             }), options.NormalEncoding), texture, options);
 

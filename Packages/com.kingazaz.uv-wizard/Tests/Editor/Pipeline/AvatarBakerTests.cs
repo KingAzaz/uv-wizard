@@ -392,12 +392,13 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
-        public void OnAPlatformThatReadsNormalsFromAlphaAndGreenTheAtlasIsWrittenThatWay()
+        public void OnAPlatformThatReadsNormalsFromAlphaAndGreenASourceWithNoImporterIsReadAndWrittenThatWay()
         {
-            // The source is made in code, not imported as a normal map, so it's read as it is, with x in red.
-            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            // The source is made in code, like another plugin's output, so it has no importer. It holds the
+            // platform's texels, which the device decodes from alpha and green.
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), InAgLayout(NormalGradient(16, 0)), 1);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
-            var before = Centroids(renderer).Select(SourceNormal).ToArray();
+            var before = Centroids(renderer).Select(c => DecodedAg(BumpTexel(c))).ToArray();
 
             var result = Bake(StandardOptions(normalEncoding: NormalEncoding.AG), renderer);
 
@@ -1016,6 +1017,14 @@ namespace UVWizard.Core.Tests.Pipeline
         Texture2D NormalGradient(int size, int seed) => NormalMap(size, (u, v) =>
             new Vector3(0.6f * (u - 0.3f) + 0.1f * seed, 0.5f * (v - 0.6f), 1).normalized, FilterMode.Bilinear);
 
+        // The XYZ normal map rewritten in place in Unity's mobile DXT5nm-style layout, (y, y, y, x).
+        static Texture2D InAgLayout(Texture2D map)
+        {
+            map.SetPixels(map.GetPixels().Select(t => new Color(t.g, t.g, t.g, t.r)).ToArray());
+            map.Apply();
+            return map;
+        }
+
         // A point-filtered normal map whose cells, cell texels wide, tilt left and right in turn.
         Texture2D NormalChecker(int size, int cell) => NormalMap(size, (u, v) =>
         {
@@ -1249,11 +1258,14 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         // The normal Standard reads at the centroid from the normal map, in Unity's XYZ layout.
-        static Vector3 SourceNormal((Vector2 Uv, Material Material) centroid)
+        static Vector3 SourceNormal((Vector2 Uv, Material Material) centroid) => Decoded(BumpTexel(centroid));
+
+        // The normal map's texel at the centroid, as Standard samples it.
+        static Color BumpTexel((Vector2 Uv, Material Material) centroid)
         {
             var material = centroid.Material;
             var uv = Vector2.Scale(centroid.Uv, material.mainTextureScale) + material.mainTextureOffset;
-            return Decoded(((Texture2D)material.GetTexture("_BumpMap")).GetPixelBilinear(uv.x, uv.y));
+            return ((Texture2D)material.GetTexture("_BumpMap")).GetPixelBilinear(uv.x, uv.y);
         }
 
         // A texel in Unity's XYZ layout: x, y and z in red, green and blue.

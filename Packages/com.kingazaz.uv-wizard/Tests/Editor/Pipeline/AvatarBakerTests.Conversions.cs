@@ -219,6 +219,21 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void OnAPlatformThatReadsNormalsFromAlphaAndGreenAConvertedSourceWithNoImporterKeepsItsBumpAfterTheBake()
+        {
+            // The source is made in code, so it has no importer, and holds the platform's (y, y, y, x) texels.
+            var source = NormalMapped(Standard(Gradient(16, 1), Color.white), InAgLayout(NormalGradient(16, 1)), 1);
+            var renderer = MeshRenderer(WithTangents(Mesh(new[] { Quad(1, 0, 0, 5, 1) })), source);
+            var normals = Centroids(renderer).Select(c => DecodedAg(BumpTexel(c))).ToArray();
+
+            Bake(Converting(normalEncoding: NormalEncoding.AG), renderer);
+
+            var centroids = Centroids(renderer).ToArray();
+            for (var k = 0; k < centroids.Length; k++)
+                AssertNormalClose(normals[k], DecodedAg(BumpTexel(centroids[k])), $"triangle {k}");
+        }
+
+        [Test]
         public void AnEmissionBrighterThanTheMergedMaterialCanGlowIsDimmedAndFlagged()
         {
             // Linear intensity 3: the converted material's strength stops at 2, so its map holds the colour over 3.
@@ -255,9 +270,10 @@ namespace UVWizard.Core.Tests.Pipeline
 
         // Standard as the merged shader, converting every material whose shader isn't one of the given ones.
         static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Budget? budget = null,
-            string[]? mobileShaders = null, Channels channels = Channels.All, string[]? representativeProperties = null) =>
+            string[]? mobileShaders = null, Channels channels = Channels.All, string[]? representativeProperties = null,
+            NormalEncoding normalEncoding = NormalEncoding.RGorAG) =>
             new BakeOptions(Shader.Find("Standard"), atlasSize, padding: 0, compress, normalMapKeyword: "_NORMALMAP",
-                normalEncoding: NormalEncoding.RGorAG, budget: budget, channels: channels, representativeProperties: representativeProperties,
+                normalEncoding: normalEncoding, budget: budget, channels: channels, representativeProperties: representativeProperties,
                 mobileShaders: mobileShaders ?? System.Array.Empty<string>());
     }
 }

@@ -1,7 +1,6 @@
 #nullable enable
 
 using UnityEditor;
-using UnityEngine;
 
 namespace UVWizard.Core.Baking
 {
@@ -25,16 +24,6 @@ namespace UVWizard.Core.Baking
         public static NormalEncoding EncodingFor(BuildTargetGroup group, NormalMapEncoding setting) =>
             group is BuildTargetGroup.Android or BuildTargetGroup.iOS && setting == NormalMapEncoding.DXT5nm
                 ? NormalEncoding.AG
-                : NormalEncoding.RGorAG;
-
-        /// <summary>
-        /// The encoding a source texture's texels are in. A texture imported as a normal map holds the platform's;
-        /// any other texture is read as it is, with x in red.
-        /// </summary>
-        public static NormalEncoding EncodingOf(Texture texture, NormalEncoding platform) =>
-            AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(texture)) is TextureImporter
-                { textureType: TextureImporterType.NormalMap }
-                ? platform
                 : NormalEncoding.RGorAG;
     }
 }
