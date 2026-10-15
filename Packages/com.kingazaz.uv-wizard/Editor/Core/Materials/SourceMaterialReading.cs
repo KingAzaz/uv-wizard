@@ -67,8 +67,9 @@ namespace UVWizard.Core.Materials
     internal sealed class SourceMaterialReading
     {
         public SourceMaterialReading(ChannelSource? albedo, ChannelSource? emission, ChannelSource? normal,
-            MaterialVerdict verdict, string? reason, bool usesVertexColour = false)
+            MaterialVerdict verdict, string? reason, bool usesVertexColour = false, string? flaggedReason = null)
         {
+            FlaggedReason = verdict == MaterialVerdict.Flagged ? reason : flaggedReason;
             Albedo = albedo;
             Emission = emission;
             Normal = normal;
@@ -97,12 +98,19 @@ namespace UVWizard.Core.Materials
         /// <summary>Why the material is flagged or excluded; null when it is merged.</summary>
         public string? Reason { get; }
 
+        /// <summary>
+        /// What the merged shader changes about the material's look, kept when the material is excluded for another
+        /// reason, since its conversion changes it the same way; null when nothing.
+        /// </summary>
+        public string? FlaggedReason { get; }
+
         /// <summary>True when the source shader multiplies albedo by the mesh's vertex colours.</summary>
         public bool UsesVertexColour { get; }
 
         /// <summary>The same reading, excluded for the given reason.</summary>
         public SourceMaterialReading Excluded(string reason) =>
-            new SourceMaterialReading(Albedo, Emission, Normal, MaterialVerdict.Excluded, reason, UsesVertexColour);
+            new SourceMaterialReading(Albedo, Emission, Normal, MaterialVerdict.Excluded, reason, UsesVertexColour,
+                FlaggedReason);
     }
 
     /// <summary>What decides the texels a source material bakes to: every channel's source.</summary>

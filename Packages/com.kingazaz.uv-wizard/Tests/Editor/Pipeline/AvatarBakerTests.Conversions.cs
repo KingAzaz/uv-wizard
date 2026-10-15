@@ -117,6 +117,23 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ATransparentMaterialItsReaderExcludesIsStillFlaggedForBecomingOpaque()
+        {
+            // The detail map on UV1 excludes it, for a reason that replaces the reading's own.
+            var glass = Standard(Gradient(16, 1), Color.white);
+            glass.SetFloat("_Mode", 3);
+            glass.EnableKeyword("_DETAIL_MULX2");
+            glass.SetFloat("_UVSec", 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) }), glass);
+
+            var result = Bake(Converting(), renderer);
+
+            Assert.That(result.ConvertedMaterials.Select(c => c.Source), Is.EqualTo(new[] { glass }));
+            Assert.That(result.Flagged.Select(note => (note.Material, note.Reason)),
+                Has.Some.Matches<(Material Material, string Reason)>(n => n.Material == glass && n.Reason.Contains("Transparent")));
+        }
+
+        [Test]
         public void AConvertedMaterialWhosePropertiesAnAnimationChangesIsFlagged()
         {
             var glowing = Standard(Gradient(16, 1), Color.white);
