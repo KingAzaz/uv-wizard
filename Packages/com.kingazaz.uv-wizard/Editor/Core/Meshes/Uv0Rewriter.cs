@@ -214,18 +214,24 @@ namespace UVWizard.Core.Meshes
             }
         }
 
+        /// <summary>
+        /// Fails a skinned mesh whose bone weights read as none, rather than return a mesh that silently stops
+        /// skinning. Unity reads them from every mesh with BlendIndices, even one made non-readable with
+        /// UploadMeshData(true), in edit and Play Mode (#46), so this guards against an engine that stops doing so.
+        /// </summary>
+        internal static void RequireBoneWeights(int bonesPerVertexLength, bool hasBlendIndices, string meshName)
+        {
+            if (bonesPerVertexLength == 0 && hasBlendIndices)
+                throw new InvalidOperationException($"Couldn't read the bone weights of {meshName}.");
+        }
+
         // Through the bone-weight API rather than the vertex streams, which hold at most four bones per vertex.
         static void CopyBoneWeights(Mesh.MeshData data, Mesh source, Mesh mesh, int[] sourceOf)
         {
             mesh.bindposes = source.bindposes;
             using var bonesPerVertex = source.GetBonesPerVertex();
-            if (bonesPerVertex.Length == 0)
-            {
-                // Rather than a mesh that silently stops skinning.
-                if (data.HasVertexAttribute(VertexAttribute.BlendIndices))
-                    throw new InvalidOperationException($"Couldn't read the bone weights of {source.name}.");
-                return;
-            }
+            RequireBoneWeights(bonesPerVertex.Length, data.HasVertexAttribute(VertexAttribute.BlendIndices), source.name);
+            if (bonesPerVertex.Length == 0) return;
             using var weights = source.GetAllBoneWeights();
             var start = new int[bonesPerVertex.Length];
             for (var v = 1; v < start.Length; v++) start[v] = start[v - 1] + bonesPerVertex[v - 1];
