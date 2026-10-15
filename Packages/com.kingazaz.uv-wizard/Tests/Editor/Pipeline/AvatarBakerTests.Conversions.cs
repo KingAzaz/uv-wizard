@@ -16,8 +16,11 @@ namespace UVWizard.Core.Tests.Pipeline
         [Test]
         public void AnExcludedMaterialGetsItsOwnMaterialSamplingItsTintedColourAtItsOwnUvs()
         {
-            // The second slot's island spans five tiles, over the repeat limit, on a tiled and offset texture.
-            var repeated = Standard(Gradient(16, 1), new Color(1, 0.5f, 0.25f), new Vector4(2, 1, 0.25f, 0.5f));
+            // The second slot's island spans five tiles, over the repeat limit, on a tiled and offset texture. Its
+            // centroids sample over a texel from the gradient's seam, where it jumps from light to dark: GPUs differ
+            // by a fraction of a texel in where a bake samples, and CI's, about a quarter texel off, darkens the
+            // seam's texels by over the tolerance.
+            var repeated = Standard(Gradient(16, 1), new Color(1, 0.5f, 0.25f), new Vector4(2, 1, 0.1f, 0.5f));
             var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) });
             var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), repeated);
             var before = Centroids(renderer).Skip(2).Select(SourceColour).ToArray();
