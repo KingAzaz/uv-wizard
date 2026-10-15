@@ -34,6 +34,10 @@ namespace UVWizard.Core.Materials
             // Locking a Poiyomi material gives it a shader of its own, so Poiyomi is matched by name prefix.
             if (PoiyomiReader.Reads(material.shader)) return PoiyomiReader.Read(material);
 #endif
+#if UVWIZARD_LILTOON
+            // lilToon picks its rendering mode by switching between its own shaders.
+            if (LilToonReader.Reads(material.shader)) return LilToonReader.Read(material);
+#endif
             return ReadUnknown(material);
         }
 

@@ -83,9 +83,7 @@ namespace UVWizard.Core.Materials
         {
             if (properties.Float("_EnableEmission", 0) < 0.5f) return null;
             var colour = properties.Color("_EmissionColor", Color.white);
-            var strength = properties.Float("_EmissionStrength", 0) * colour.a;
-            var linear = colour.linear;
-            var tint = new Color(linear.r * strength, linear.g * strength, linear.b * strength, 1).gamma;
+            var tint = MaterialProperties.ScaleLinear(colour, properties.Float("_EmissionStrength", 0) * colour.a);
             return tint.maxColorComponent > 0 ? Source(properties, "_EmissionMap", tint) : null;
         }
 

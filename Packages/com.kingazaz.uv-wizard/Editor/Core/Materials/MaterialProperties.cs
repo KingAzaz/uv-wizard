@@ -15,6 +15,16 @@ namespace UVWizard.Core.Materials
         }
 
         /// <summary>
+        /// The colour with its linear value scaled by the strength, turned back into a colour with alpha 1.
+        /// Shaders scale the linearized colour (VRChat projects are always in Linear colour space).
+        /// </summary>
+        public static Color ScaleLinear(Color colour, float strength)
+        {
+            var linear = colour.linear;
+            return new Color(linear.r * strength, linear.g * strength, linear.b * strength, 1).gamma;
+        }
+
+        /// <summary>
         /// Why the material must be excluded when its detail maps are on and sampled from a UV channel other
         /// than UV0, or null when they aren't.
         /// </summary>
