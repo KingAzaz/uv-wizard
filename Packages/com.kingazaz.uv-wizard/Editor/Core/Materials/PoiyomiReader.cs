@@ -2,6 +2,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 namespace UVWizard.Core.Materials
@@ -21,6 +22,9 @@ namespace UVWizard.Core.Materials
         static readonly string[] UvModes =
             { "UV0", "UV1", "UV2", "UV3", "Panosphere", "World Pos", "Polar UV", "Distorted UV", "Local Pos",
               "Matcap", "Screen Space" };
+
+        // The enable toggles of Poiyomi's four decal slots.
+        static readonly string[] Decals = { "_DecalEnabled", "_DecalEnabled1", "_DecalEnabled2", "_DecalEnabled3" };
 
         /// <summary>True for Poiyomi's shaders, and for the shaders that locking them generates.</summary>
         public static bool Reads(Shader shader) =>
@@ -90,6 +94,12 @@ namespace UVWizard.Core.Materials
         {
             if (properties.Float("_ColorThemeIndex", 0) != 0)
                 yield return "Albedo takes a theme colour: the saved colour is baked.";
+            if (properties.Float("_MainColorAdjustToggle", 0) > 0.5f)
+                yield return "Albedo is colour-adjusted: hue, saturation, brightness and gamma aren't baked.";
+            if (Decals.Any(decal => properties.Float(decal, 0) > 0.5f))
+                yield return "Albedo has decals: decals aren't baked.";
+            if (properties.Float("_DetailEnabled", 0) > 0.5f)
+                yield return "Albedo takes detail textures: the detail texture and normal aren't baked.";
             if (emits)
             {
                 if (properties.Float("_EmissionColorThemeIndex", 0) != 0)

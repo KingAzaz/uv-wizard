@@ -161,6 +161,10 @@ namespace UVWizard.Core.Tests.Poiyomi
 
         // Each changes the colours the shader renders in a way the bake doesn't reproduce.
         [TestCase("_ColorThemeIndex", "Albedo")]
+        [TestCase("_MainColorAdjustToggle", "Albedo")]
+        [TestCase("_DecalEnabled", "Albedo")]
+        [TestCase("_DecalEnabled3", "Albedo")]
+        [TestCase("_DetailEnabled", "Albedo")]
         [TestCase("_EnableEmission1", "Emission")]
         [TestCase("_EnableEmission3", "Emission")]
         [TestCase("_EmissionColorThemeIndex", "Emission")]
