@@ -107,6 +107,21 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AConvertedMaterialsVertexColourToggleIsTheOneTheOptionsName()
+        {
+            // Standard's smoothness, 0.5 by default, stands in for the toggle. No Standard source uses vertex colour.
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
+                Standard(Gradient(16, 0), Color.white), Standard(Gradient(16, 1), Color.white));
+            var options = new BakeOptions(Shader.Find("Standard"), vertexColourProperty: "_Glossiness",
+                mobileShaders: System.Array.Empty<string>());
+
+            Bake(options, renderer);
+
+            Assume.That(renderer.sharedMaterials[1].name, Does.EndWith("(UV Wizard)"));
+            Assert.That(renderer.sharedMaterials[1].GetFloat("_Glossiness"), Is.EqualTo(0));
+        }
+
+        [Test]
         public void ATransparentExcludedMaterialIsFlaggedAsItsMergedSlotWouldBe()
         {
             var glass = Standard(Gradient(16, 1), Color.white);
