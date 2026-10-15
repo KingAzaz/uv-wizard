@@ -197,7 +197,7 @@ namespace UVWizard.NDMF.Tests
             };
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)));
             // The build saves in-memory materials as new objects, so compare the shader, not the reference.
@@ -222,7 +222,7 @@ namespace UVWizard.NDMF.Tests
             glasses.AddComponent(typeof(TraceAndOptimize).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile"));
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Excluded) }));
             // The build saves in-memory materials as new objects, so compare the shader, not the reference.

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using UnityEngine;
+using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
 
 namespace UVWizard.NDMF
@@ -21,10 +22,11 @@ namespace UVWizard.NDMF
         protected override void Execute(BuildContext context)
         {
             var root = context.AvatarRootObject;
-            if (root.GetComponentInChildren<UVWizardAvatar>(true) == null || !MobileBuild.IsActive) return;
+            var avatar = root.GetComponentInChildren<UVWizardAvatar>(true);
+            if (avatar == null || !MobileBuild.IsActive) return;
 
             var shader = ToonStandard.Shader;
-            Bake(root, shader != null ? ToonStandard.Options(shader) : null,
+            Bake(root, shader != null ? ToonStandard.Options(shader, avatar) : null,
                 context.Extension<AnimatorServicesContext>());
         }
 
@@ -65,6 +67,15 @@ namespace UVWizard.NDMF
             foreach (var note in result.Flagged)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Flagged,
                     note.Material, note.Renderer, note.Reason);
+            if (result.Budget is { } budget)
+            {
+                if (result.TextureBytes > budget.Bytes)
+                    ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudget,
+                        $"{result.TextureBytes / (double)TextureMemory.BytesPerMegabyte:0.##}", $"{budget.Megabytes:0.##}");
+                if (!result.WithinMaterialSlots)
+                    ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.TooManySlots,
+                        result.MaterialSlots, budget.MaterialSlots);
+            }
         }
     }
 }
