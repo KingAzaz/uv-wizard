@@ -83,18 +83,23 @@ namespace UVWizard.Core.Meshes
                 for (var k = 0; k < indices[s].Length; k++)
                     corners[s][k] = copies.Want(indices[s][k], atlasUvs[s]?[k]);
             }
-            var (sourceOf, uv0Of, firstCopy) = copies.Assign();
+            var (sourceOf, uv0Of, firstExtra) = copies.Assign();
             for (var s = 0; s < data.subMeshCount; s++)
             for (var k = 0; k < corners[s].Length; k++)
-                corners[s][k] += firstCopy[indices[s][k]];
+            {
+                var vertex = indices[s][k];
+                corners[s][k] = corners[s][k] == 0 ? vertex : firstExtra[vertex] + corners[s][k] - 1;
+            }
 
             Mesh mesh;
+            RewritePath path;
             if (sourceOf.Length == data.vertexCount)
             {
                 // Nothing splits, so a native copy keeps every attribute and blend shape, and only
                 // UV0 changes. Rebuilding blend shapes frame by frame slows down with each frame
                 // added: a 65k-vertex body with 695 frames takes about 5 s, more as copies are
                 // added, against 0.1 s for this.
+                path = RewritePath.Copied;
                 mesh = UnityEngine.Object.Instantiate(source);
                 mesh.name = source.name;
                 if (data.HasVertexAttribute(VertexAttribute.TexCoord0))
@@ -104,8 +109,19 @@ namespace UVWizard.Core.Meshes
                     mesh.SetVertexBufferData(bytes, 0, 0, bytes.Length, stream);
                 }
             }
+            else if (!AnyMoves(source, sourceOf, data.vertexCount))
+            {
+                // The extra copies go after the source's vertices, so every blend-shape delta stays
+                // on its vertex, and the copies get none, as their sources have none.
+                path = RewritePath.Appended;
+                mesh = UnityEngine.Object.Instantiate(source);
+                mesh.name = source.name;
+                CopyVertexStreams(data, mesh, sourceOf, uv0Of);
+                CopyBoneWeights(data, source, mesh, sourceOf);
+            }
             else
             {
+                path = RewritePath.Rebuilt;
                 mesh = new Mesh { name = source.name };
                 CopyVertexStreams(data, mesh, sourceOf, uv0Of);
                 CopyBoneWeights(data, source, mesh, sourceOf);
@@ -125,7 +141,7 @@ namespace UVWizard.Core.Meshes
             // recalculation logs an error on a mesh with line or point submeshes, so those keep the
             // source's metric.
             if (merged != null && AllTriangles(mesh)) mesh.RecalculateUVDistributionMetric(0);
-            return new RewrittenMesh(mesh, submeshOf, merged);
+            return new RewrittenMesh(mesh, submeshOf, merged, path);
         }
 
         static VertexAttribute TexCoord(int channel) => VertexAttribute.TexCoord0 + channel;
@@ -225,6 +241,25 @@ namespace UVWizard.Core.Meshes
             using var perVertexArray = new NativeArray<byte>(copiedPerVertex, Allocator.Temp);
             using var weightArray = new NativeArray<BoneWeight1>(copiedWeights.ToArray(), Allocator.Temp);
             mesh.SetBoneWeights(perVertexArray, weightArray);
+        }
+
+        // True when a blend-shape frame moves a vertex with extra copies: its position, normal or tangent.
+        static bool AnyMoves(Mesh source, int[] sourceOf, int vertexCount)
+        {
+            if (source.blendShapeCount == 0) return false;
+            var split = new List<int>();
+            for (var v = vertexCount; v < sourceOf.Length; v++) split.Add(sourceOf[v]);
+            var dv = new Vector3[source.vertexCount];
+            var dn = new Vector3[source.vertexCount];
+            var dt = new Vector3[source.vertexCount];
+            for (var shape = 0; shape < source.blendShapeCount; shape++)
+            for (var frame = 0; frame < source.GetBlendShapeFrameCount(shape); frame++)
+            {
+                source.GetBlendShapeFrameVertices(shape, frame, dv, dn, dt);
+                foreach (var v in split)
+                    if (dv[v] != Vector3.zero || dn[v] != Vector3.zero || dt[v] != Vector3.zero) return true;
+            }
+            return false;
         }
 
         static void CopyBlendShapes(Mesh source, Mesh mesh, int[] sourceOf)
@@ -335,30 +370,33 @@ namespace UVWizard.Core.Meshes
             }
 
             /// <summary>
-            /// Lays the copies out in source vertex order. Returns each copy's source vertex and
-            /// UV0 (null: its own), and each source vertex's first copy.
+            /// Lays the copies out: each source vertex's first copy where the vertex was, then the
+            /// extra copies, in source vertex order. Returns each copy's source vertex and UV0 (null:
+            /// its own), and where each source vertex's extra copies start.
             /// </summary>
-            public (int[] SourceOf, Vector2?[] Uv0Of, int[] FirstCopy) Assign()
+            public (int[] SourceOf, Vector2?[] Uv0Of, int[] FirstExtra) Assign()
             {
-                var firstCopy = new int[wanted.Length];
-                var count = 0;
+                var firstExtra = new int[wanted.Length];
+                var count = wanted.Length;
                 for (var v = 0; v < wanted.Length; v++)
                 {
-                    firstCopy[v] = count;
-                    count += wanted[v]?.Count ?? 1;
+                    firstExtra[v] = count;
+                    count += Math.Max(0, (wanted[v]?.Count ?? 1) - 1);
                 }
                 var sourceOf = new int[count];
                 var uv0Of = new Vector2?[count];
                 for (var v = 0; v < wanted.Length; v++)
                 {
                     var copies = wanted[v];
-                    for (var c = 0; c < (copies?.Count ?? 1); c++)
+                    sourceOf[v] = v;
+                    uv0Of[v] = copies?[0];
+                    for (var c = 1; c < (copies?.Count ?? 1); c++)
                     {
-                        sourceOf[firstCopy[v] + c] = v;
-                        uv0Of[firstCopy[v] + c] = copies?[c];
+                        sourceOf[firstExtra[v] + c - 1] = v;
+                        uv0Of[firstExtra[v] + c - 1] = copies![c];
                     }
                 }
-                return (sourceOf, uv0Of, firstCopy);
+                return (sourceOf, uv0Of, firstExtra);
             }
         }
     }
@@ -366,11 +404,12 @@ namespace UVWizard.Core.Meshes
     /// <summary>A mesh rewritten to sample the atlas, and where its source submeshes went.</summary>
     internal sealed class RewrittenMesh
     {
-        public RewrittenMesh(Mesh mesh, int[] submeshOf, int? mergedSubmesh)
+        public RewrittenMesh(Mesh mesh, int[] submeshOf, int? mergedSubmesh, RewritePath path)
         {
             Mesh = mesh;
             SubmeshOf = submeshOf;
             MergedSubmesh = mergedSubmesh;
+            Path = path;
         }
 
         public Mesh Mesh { get; }
@@ -383,5 +422,24 @@ namespace UVWizard.Core.Meshes
         /// places, or null when nothing on the mesh was merged.
         /// </summary>
         public int? MergedSubmesh { get; }
+
+        /// <summary>How the mesh was made, which decides how long a mesh with many blend-shape frames takes.</summary>
+        public RewritePath Path { get; }
+    }
+
+    /// <summary>How <see cref="Uv0Rewriter"/> made a rewritten mesh.</summary>
+    internal enum RewritePath
+    {
+        /// <summary>No vertex split: a native copy with UV0 rewritten.</summary>
+        Copied,
+
+        /// <summary>
+        /// Vertices split, but none that a blend shape moves: a native copy with the extra copies appended,
+        /// so the blend shapes stay as they were.
+        /// </summary>
+        Appended,
+
+        /// <summary>A vertex that a blend shape moves split, so every blend-shape frame was added again.</summary>
+        Rebuilt,
     }
 }
