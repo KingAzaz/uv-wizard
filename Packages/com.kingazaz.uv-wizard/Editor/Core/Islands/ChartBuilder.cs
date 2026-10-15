@@ -14,7 +14,8 @@ namespace UVWizard.Core.Islands
 
         /// <summary>
         /// Returns the charts of the given surfaces' islands, in order of their first island.
-        /// Islands share a chart when their surfaces have the same source key and they overlap.
+        /// Islands share a chart when their surfaces have the same source key and they overlap, or
+        /// when they're on one surface and share a mesh vertex at the same tile shift.
         /// </summary>
         public static Chart[] Build(IReadOnlyList<SourceSurface> surfaces)
         {
@@ -44,12 +45,38 @@ namespace UVWizard.Core.Islands
             cells.Sort();
             for (var k = 1; k < cells.Count; k++)
                 if (cells[k].SamePlaceAs(cells[k - 1])) unionFind.Union(cells[k].Island, cells[k - 1].Island);
+            JoinAtSharedVertices(surfaces, unionFind);
 
             return unionFind.Groups().ConvertAll(group =>
             {
                 var members = group.ConvertAll(g => islands[g]);
                 return new Chart(members.ToArray(), Footprint(surfaces, members));
             }).ToArray();
+        }
+
+        // Islands that meet only at a corner are separate islands, but where they share the mesh vertex
+        // there, apart they'd give it two atlas UVs, and the UV0 rewriter would have to copy it: on a
+        // mesh with many blend shapes, that means adding every frame again. Together, at the same tile
+        // shift, they give it one.
+        static void JoinAtSharedVertices(IReadOnlyList<SourceSurface> surfaces, UnionFind unionFind)
+        {
+            var first = 0;
+            foreach (var surface in surfaces)
+            {
+                var islandOf = new int[surface.Triangles.Length / 3];
+                for (var i = 0; i < surface.Islands.Count; i++)
+                    foreach (var t in surface.Islands[i].Triangles)
+                        islandOf[t] = i;
+                var seenIn = new Dictionary<int, int>();
+                for (var k = 0; k < surface.Triangles.Length; k++)
+                {
+                    var island = islandOf[k / 3];
+                    if (!seenIn.TryGetValue(surface.Triangles[k], out var other)) seenIn.Add(surface.Triangles[k], island);
+                    else if (other != island && surface.Islands[other].TileShift == surface.Islands[island].TileShift)
+                        unionFind.Union(first + other, first + island);
+                }
+                first += surface.Islands.Count;
+            }
         }
 
         // Texels whose centres any of the chart's islands cover, after their tile shifts.

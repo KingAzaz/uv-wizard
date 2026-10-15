@@ -208,6 +208,56 @@ namespace UVWizard.Core.Tests.Islands
             Assert.That(charts.Select(c => c.Islands), Is.EqualTo(new[] { new[] { (0, 0) }, new[] { (1, 0) } }));
         }
 
+        [Test]
+        public void IslandsThatShareAVertexAtOneCornerShareAChart()
+        {
+            // A bow-tie: two triangles of one mesh that meet only at vertex 0. Apart, each would give
+            // vertex 0 its own atlas UV, so the mesh would need a copy of it.
+            var surfaces = new[] { BowTie(sharedVertex: true, new Vector2(0.2f, 0.2f)) };
+
+            var charts = ChartBuilder.Build(surfaces);
+
+            Assert.That(charts.Select(c => c.Islands), Is.EqualTo(new[] { new[] { (0, 0), (0, 1) } }));
+        }
+
+        [Test]
+        public void IslandsThatOnlyTouchAtOneCornerWithoutSharingAVertexStaySeparate()
+        {
+            var surfaces = new[] { BowTie(sharedVertex: false, new Vector2(0.2f, 0.2f)) };
+
+            var charts = ChartBuilder.Build(surfaces);
+
+            Assert.That(charts.Select(c => c.Islands), Is.EqualTo(new[] { new[] { (0, 0) }, new[] { (0, 1) } }));
+        }
+
+        [Test]
+        public void IslandsThatShareAVertexOnATileEdgeButShiftByDifferentTilesStaySeparate()
+        {
+            // The vertex they share is on u = 1: one triangle is in the first tile, the other in the
+            // next, which shifts back a whole tile, so they no longer meet.
+            var surfaces = new[] { BowTie(sharedVertex: true, new Vector2(1, 0.2f)) };
+
+            var charts = ChartBuilder.Build(surfaces);
+
+            Assert.That(charts.Select(c => c.Islands), Is.EqualTo(new[] { new[] { (0, 0) }, new[] { (0, 1) } }));
+        }
+
+        // Two triangles meeting at one corner at the given UV, the first to its lower left and the
+        // second to its upper right. They share the mesh vertex there, or each has its own.
+        static SourceSurface BowTie(bool sharedVertex, Vector2 corner)
+        {
+            var d = 0.1f;
+            var uv0 = new[]
+            {
+                corner, corner - new Vector2(d, 0), corner - new Vector2(0, d),
+                corner + new Vector2(d, 0), corner + new Vector2(0, d), corner,
+            };
+            var triangles = new[] { 0, 1, 2, sharedVertex ? 0 : 5, 3, 4 };
+            var islands = IslandBuilder.Build(uv0, triangles, TextureWrapMode.Repeat, TextureWrapMode.Repeat);
+            Assume.That(islands, Has.Length.EqualTo(2));
+            return new SourceSurface(uv0, triangles, islands, 1, TextureSize);
+        }
+
         // The same surface with every triangle's winding reversed.
         static SourceSurface Mirrored(SourceSurface surface)
         {
