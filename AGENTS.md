@@ -18,7 +18,9 @@ Two local scheduled tasks develop UV Wizard unattended, and each starts the othe
 - **"UV Wizard owner"** merges, reviews, triages, runs Unity checks, plans new work, and starts slice runs. Its playbook is `docs/agents/project-owner.md`. Agent PRs merge themselves through GitHub auto-merge once CI is green. The required **Merge gate** check holds a PR while it has a hold label or a changes-requested review; `.github/scripts/merge_gate.py` has the list.
 - **"UV Wizard next slice"** fixes agent PRs and builds the next frontier ticket. It runs `.claude/skills/next-slice/SKILL.md` unattended, and you can run the same skill yourself with `/next-slice`.
 
-Both stand down while another session in this repo is running or the checkout is dirty. Agent PRs carry the `owner-agent` label. Disable either task to pause the loop.
+Both stand down while another session in this repo is running, another run holds the **checkout lease**, or the checkout is dirty. Agent PRs carry the `owner-agent` label. Disable either task to pause the loop.
+
+**Checkout lease.** A run that switches branches or runs Unity in `C:\Users\Azaz\AI\uv-wizard` holds the lease from then until it ends, because `list_sessions` reports a run waiting on sub-agents as `isRunning: false`. Run `.github/scripts/checkout_lease.py` from `origin/main`, since the checkout may be on an older branch: `MSYS_NO_PATHCONV=1 git -C C:/Users/Azaz/AI/uv-wizard show origin/main:.github/scripts/checkout_lease.py | python - <take|check|release> <session id> [<title>]`. Get the session id from `get_session("self")`. Exit 1 means another run holds it: stand down and quote its output. Release it however the run ends, including "nothing to do".
 
 ## Dev environment
 
@@ -26,11 +28,13 @@ Both stand down while another session in this repo is running or the checkout is
 - **Tests:** the dev project's `Packages/manifest.json` lists `"testables": ["com.kingazaz.uv-wizard"]`. Without it, Unity doesn't compile a `file:`-linked package's test assemblies. Run them from the Test Runner, or through MCP `run_tests` (EditMode, every test assembly: `find Packages/com.kingazaz.uv-wizard/Tests -name '*.asmdef'`). Those gated on the VRChat SDK, Poiyomi Toon, lilToon or NDMF compile out in CI.
   - `run_tests` ANDs `test_names` with `group_names`. Select tests with one `group_names` regex (e.g. `Ns\.Class\.(TestA|TestB)`), and count a `total: 0` result as a failed run.
   - **Benchmarks** are menu commands under **Tools → UV Wizard → Benchmarks** (MCP `execute_menu_item`). They log to the console.
-  - A run longer than a few seconds can drop the MCP call, which then retries it, and almost every `get_test_job` poll loses the bridge. Wait instead until the count of `Restored Interaction Mode after test run` in `%LOCALAPPDATA%\Unity\Editor\Editor.log` rises (`grep -c` only: the file is over 1 GB), then call `set_active_instance` and `get_test_job` once.
+  - A run longer than a few seconds can drop the MCP call, which then retries it, and almost every `get_test_job` poll loses the bridge. Wait instead until the count of `Restored Interaction Mode after test run` in `%LOCALAPPDATA%\Unity\Editor\Editor.log` rises (`grep -c` only: the file is over 1 GB), then call `set_active_instance` and `get_test_job` once. Wait with a Bash `until` loop run with `run_in_background`: the harness blocks a foreground `sleep`.
 - **CI** (`.github/workflows/test.yml`) runs the EditMode tests in this repo's own Unity project, which has no VRChat SDK, NDMF or AAO. Like VRChat projects, it uses Linear colour space, so colour tests mean the same as on real avatars.
   - Declare every Unity-registry package the code uses in `package.json` `dependencies`.
   - Put code and tests that need the SDK, NDMF or AAO in assemblies gated by `versionDefines` and `defineConstraints`, so CI compiles them out, and label those PRs `needs-unity`.
-  - CI's Linux GPU can't create compressed `Texture3D`s (ASTC, for example), though the Windows editor can. Build 3D textures in tests with an uncompressed format.
+  - CI's Linux GPU differs from the Windows editor's, so a test can pass locally and fail in CI:
+    - It can't create compressed `Texture3D`s (ASTC, for example). Build 3D textures in tests with an uncompressed format.
+    - It samples a bake about a quarter texel away. Keep a colour test's sample points over a texel from any sharp edge in its source texture, such as a Repeat gradient's seam.
 - **This checkout is Unity's.** A `git switch` here changes the code under the open editor. Do docs-only or other non-Unity work in a `git worktree` (e.g. `../uv-wizard-docs`).
 - **Unity MCP:** MCP for Unity (CoplayDev) **v10.2.0**. The package is in the dev project's manifest.
   - Each agent has its own server config: Claude Code in `.mcp.json`, Codex in `.codex/config.toml`. Both are stdio, `mcpforunityserver==10.2.0` via uvx, with telemetry off.

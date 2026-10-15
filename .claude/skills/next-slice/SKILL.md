@@ -11,7 +11,7 @@ You are the engineer half of a two-agent loop. The **owner** (`docs/agents/proje
 
 **Modes.**
 - **Attended:** KingAzaz invoked `/next-slice`. Ask them when this skill says "ask".
-- **Unattended:** a scheduled run, or the argument says `unattended`. Nobody is there to answer. Where this skill says "ask", post the question on the issue with your recommendation, add `needs-triage` (create it with `gh label create` if missing), unassign yourself, and move on to the next frontier ticket. If no ticket remains, stop.
+- **Unattended:** a scheduled run, or the argument says `unattended`. Nobody is there to answer. Where this skill says "ask", post the question on the issue with your recommendation, add `needs-triage` (create it with `gh label create` if missing), unassign yourself, and move on to the next frontier ticket. If no ticket remains, go to **Finish**.
 
 ## 0. Gate (unattended only)
 
@@ -20,8 +20,9 @@ Stop at once, with a one-line reason, when any of these holds:
 - `git -C C:\Users\Azaz\AI\uv-wizard status --porcelain` lists anything.
 - The checkout is on a `prototype/*` branch.
 - Unity MCP is unavailable.
+- `take` on the checkout lease (AGENTS.md, **Checkout lease**) exits 1. Take it last, once every other check has passed, with the title `UV Wizard next slice`.
 
-Repeat the running-session check right before the first branch switch or file write to `C:\Users\Azaz\AI\uv-wizard`. An idle session wakes when its background tasks finish, and `list_sessions` reports it `isRunning: false` while it waits.
+You hold the lease for the rest of the run, so a second run's gate stops even while you wait on sub-agents and `list_sessions` reports you `isRunning: false`. Sessions KingAzaz starts take no lease, so repeat the running-session check right before the first branch switch or file write to `C:\Users\Azaz\AI\uv-wizard`.
 
 ## 1. Orient
 
@@ -70,6 +71,7 @@ Done when its PR is open, its tests pass in Unity, and each acceptance criterion
    - Batch only mutations in different functions whose expected red tests don't overlap. Rerun on its own any mutation that stays green before calling it a survivor.
 7. Review the branch with the `code-review` skill against its base, and fix what it finds. Inline the Codex peer's inputs (the diff, the spec and the changed files) into its prompt, using the skill's `claude`-peer `peer-in.md` recipe: Codex's read-only sandbox can't read files on this machine.
 8. Open the PR with the `pr` skill.
+   - First `git fetch origin` and run `git merge-tree --write-tree origin/main HEAD`. Main moves while you build, and GitHub runs no checks on a conflicting PR. If it conflicts, merge `origin/main`, rerun the tests, and push.
    - Include `Closes #<n>`.
    - Label it `owner-agent`, plus `needs-unity` when CI can't cover the change.
    - If the branch is stacked, say in the body that it must be retargeted to `main` once its base merges.
@@ -81,6 +83,7 @@ Product decisions are KingAzaz's. Ask with a recommendation (unattended: see **M
 ## Finish
 
 1. Leave the Unity checkout clean, on the branch you just pushed. Never leave uncommitted work behind: commit it as WIP on the branch and push it, or, if it's worthless, delete the branch.
+   Then `release` the checkout lease.
 2. Report what landed, what's open, and what waits on KingAzaz.
 3. If the session hit new friction, follow the `retro` skill. It can't be called with the Skill tool: read `find ~/.claude/plugins -path '*supermatt*/skills/retro/SKILL.md'` and follow it. Unattended, file its candidates as one `needs-triage` issue titled `Retro: <date>` instead of applying them.
 4. **Unattended hand-off:** call `run_scheduled_task` with `uv-wizard-owner` so the owner reviews your PR now. If it's refused (already running, or disabled), that's fine.
