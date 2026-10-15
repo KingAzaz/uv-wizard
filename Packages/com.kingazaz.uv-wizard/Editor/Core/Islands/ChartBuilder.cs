@@ -67,13 +67,14 @@ namespace UVWizard.Core.Islands
                 for (var i = 0; i < surface.Islands.Count; i++)
                     foreach (var t in surface.Islands[i].Triangles)
                         islandOf[t] = i;
-                var seenIn = new Dictionary<int, int>();
+                // The first island seen at each vertex and tile shift.
+                var seenIn = new Dictionary<(int Vertex, Vector2Int TileShift), int>();
                 for (var k = 0; k < surface.Triangles.Length; k++)
                 {
                     var island = islandOf[k / 3];
-                    if (!seenIn.TryGetValue(surface.Triangles[k], out var other)) seenIn.Add(surface.Triangles[k], island);
-                    else if (other != island && surface.Islands[other].TileShift == surface.Islands[island].TileShift)
-                        unionFind.Union(first + other, first + island);
+                    var at = (surface.Triangles[k], surface.Islands[island].TileShift);
+                    if (seenIn.TryGetValue(at, out var other)) unionFind.Union(first + other, first + island);
+                    else seenIn.Add(at, island);
                 }
                 first += surface.Islands.Count;
             }

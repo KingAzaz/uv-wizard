@@ -55,8 +55,7 @@ namespace UVWizard.Core.Tests.Meshes
 
         static IEnumerable<Mesh> MeshesOf(GameObject avatar) =>
             avatar.GetComponentsInChildren<Renderer>(true)
-                .Select(renderer => renderer is SkinnedMeshRenderer skinned ? skinned.sharedMesh
-                    : renderer.GetComponent<MeshFilter>() is MeshFilter filter ? filter.sharedMesh : null)
+                .Select(MeshOf)
                 .Where(mesh => mesh != null && mesh.uv.Length > 0)!;
 
         static void Time(string avatar, Mesh mesh, string variant, Func<int, int[], bool> shifted)
