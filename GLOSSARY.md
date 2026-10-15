@@ -25,7 +25,7 @@ A connected patch of an avatar's mesh surface that stays connected in UV space, 
 _Avoid_: Shell, UV chart, piece, UV group
 
 **Chart**:
-One or more islands that would bake to identical atlas texels (same source texture, same tint, overlapping UVs), so they share one place in the atlas. Mirrored and stacked islands form one chart.
+One or more islands that would bake to identical atlas texels (same source texture, same tint, overlapping UVs), so they share one place in the atlas. Mirrored and stacked islands form one chart. So do islands of one mesh that meet only at a shared vertex, since apart they would give that vertex two atlas UVs.
 _Avoid_: Cluster, island group. xatlas uses "chart" to mean a single island, but this project does not.
 
 **Priority**:

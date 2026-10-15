@@ -5,8 +5,9 @@ using System.Collections.Generic;
 namespace UVWizard.Core.Islands
 {
     /// <summary>
-    /// One or more islands that bake to identical atlas texels, so they share one place in the
-    /// atlas. Each island keeps its position relative to the others, after its tile shift.
+    /// One or more islands that share one place in the atlas: islands that bake to identical atlas
+    /// texels, and islands of one mesh that meet at a vertex, which would otherwise need a copy of it.
+    /// Each island keeps its position relative to the others, after its tile shift.
     /// </summary>
     internal sealed class Chart
     {
