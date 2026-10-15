@@ -379,8 +379,9 @@ namespace UVWizard.Core.Tests.Meshes
             Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { new[] { A0, A1, A2 } }));
         }
 
-        // Unity reports bones per vertex for every mesh with BlendIndices, Read/Write off or not, in edit and Play
-        // Mode (#46), so no mesh reaches this guard: it's tested on its own.
+        // Unity reports bones per vertex for every mesh with BlendIndices, even one made non-readable with
+        // UploadMeshData(true), in edit and Play Mode (#46). No mesh reaches this guard, so it's tested on its own,
+        // and its call in CopyBoneWeights is not.
         [Test]
         public void ASkinnedMeshWhoseBoneWeightsCantBeReadFails()
         {

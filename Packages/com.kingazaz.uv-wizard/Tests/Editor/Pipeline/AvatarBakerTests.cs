@@ -886,7 +886,8 @@ namespace UVWizard.Core.Tests.Pipeline
         public void ARewriteThatFailsLeavesEveryRendererAsItWas()
         {
             // The first renderer rewrites fine. The second already uses UV3, where the later tool wants the source
-            // UV0 kept, so its rewrite throws after the first's has been made.
+            // UV0 kept, so its rewrite throws after the first's has been made: renderers are rewritten in the order
+            // they're passed.
             var fine = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) });
             var failing = Mesh(new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
             failing.SetUVs(3, new Vector2[failing.vertexCount]);

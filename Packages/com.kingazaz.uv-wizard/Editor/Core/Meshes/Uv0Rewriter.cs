@@ -216,8 +216,8 @@ namespace UVWizard.Core.Meshes
 
         /// <summary>
         /// Fails a skinned mesh whose bone weights read as none, rather than return a mesh that silently stops
-        /// skinning. Unity reads them from every mesh with BlendIndices, Read/Write off or not, in edit and Play
-        /// Mode (#46), so this guards against an engine that stops doing so.
+        /// skinning. Unity reads them from every mesh with BlendIndices, even one made non-readable with
+        /// UploadMeshData(true), in edit and Play Mode (#46), so this guards against an engine that stops doing so.
         /// </summary>
         internal static void RequireBoneWeights(int bonesPerVertexLength, bool hasBlendIndices, string meshName)
         {
