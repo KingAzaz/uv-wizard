@@ -21,6 +21,18 @@ namespace UVWizard.NDMF
         static readonly string[] SharedProperties =
             { "_Ramp", "_Culling", "_ShadowBoost", "_ShadowAlbedo", "_MinBrightness", "_LimitBrightness" };
 
+        /// <summary>
+        /// The shaders the VRChat SDK allows on a mobile avatar: SDK 3.10.5's AvatarValidation.ShaderWhiteList. A
+        /// material left on the avatar with any other shader gets a Toon Standard material of its own.
+        /// </summary>
+        public static readonly string[] MobileShaders =
+        {
+            "VRChat/Mobile/Standard Lite", "VRChat/Mobile/Diffuse", "VRChat/Mobile/Bumped Diffuse",
+            "VRChat/Mobile/Bumped Mapped Specular", "VRChat/Mobile/Toon Lit", "VRChat/Mobile/MatCap Lit",
+            "VRChat/Mobile/Particles/Additive", "VRChat/Mobile/Particles/Multiply", "VRChat/Mobile/Toon Standard",
+            "VRChat/Mobile/Toon Standard (Outline)",
+        };
+
         /// <summary>The shader, or null when the VRChat SDK in the project doesn't have it.</summary>
         public static Shader? Shader => AssetDatabase.LoadAssetAtPath<Shader>(AssetDatabase.GUIDToAssetPath(ShaderGuid));
 
@@ -29,12 +41,13 @@ namespace UVWizard.NDMF
 
         /// <summary>
         /// Atlas channels up to 2048, sized and compressed to ASTC so the avatar fits the component's preset, with
-        /// the channels it turns on. Bakes are cached in the project's Library.
+        /// the channels it turns on. Bakes are cached in the project's Library. Materials left out of the atlas get
+        /// Toon Standard materials of their own.
         /// </summary>
         public static BakeOptions Options(Shader shader, UVWizardAvatar avatar) => new BakeOptions(shader, atlasSize: 2048,
             padding: 8, compress: true, rampProperty: "_Ramp", defaultRamp: Resources.Load<Texture2D>(DefaultRamp),
             representativeProperties: SharedProperties, budget: BudgetOf(avatar.preset), channels: ChannelsOf(avatar),
-            cacheDirectory: CacheDirectory);
+            cacheDirectory: CacheDirectory, mobileShaders: MobileShaders);
 
         static Budget BudgetOf(UVWizardAvatar.Preset preset) => preset switch
         {

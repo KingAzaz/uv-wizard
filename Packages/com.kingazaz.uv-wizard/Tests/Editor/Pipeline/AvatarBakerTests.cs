@@ -875,6 +875,12 @@ namespace UVWizard.Core.Tests.Pipeline
             if (result.EmissionAtlas != null) created.Add(result.EmissionAtlas);
             if (result.NormalAtlas != null) created.Add(result.NormalAtlas);
             foreach (var (_, rewritten) in result.ReplacedMeshes) created.Add(rewritten);
+            foreach (var (_, converted) in result.ConvertedMaterials)
+            {
+                created.Add(converted);
+                foreach (var id in converted.GetTexturePropertyNameIDs())
+                    if (converted.GetTexture(id) is Texture2D texture && texture.name.StartsWith("UV Wizard")) created.Add(texture);
+            }
             return result;
         }
 

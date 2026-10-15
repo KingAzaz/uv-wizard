@@ -386,7 +386,7 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
-        public void AnExcludedMaterialStaysAndIsReportedAsNonFatal()
+        public void AnExcludedMaterialGetsAToonStandardMaterialOfItsOwnAndIsReportedAsNonFatal()
         {
             // The hat's island spans five tiles, over the repeat limit. (Not a keyword: NDMF's saving of
             // in-memory materials during the build drops their keywords, so a test material can't carry one.)
@@ -400,7 +400,8 @@ namespace UVWizard.NDMF.Tests
             // The build saves in-memory materials as new objects, so compare the shader, not the reference.
             var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>().sharedMaterial;
             var kept = hat.GetComponent<MeshRenderer>().sharedMaterial;
-            Assert.That(kept.shader.name, Is.EqualTo("Standard"));
+            Assert.That(kept.shader.name, Is.EqualTo(ToonStandardName));
+            Assert.That(kept, Is.Not.SameAs(body), "it isn't merged");
             Assert.That(body.shader.name, Is.EqualTo(ToonStandardName));
             Assert.That(errors.Select(e => (e.TheError.Severity, (e.TheError as SimpleError)?.TitleKey)),
                 Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Excluded), (ErrorSeverity.NonFatal, Messages.TooManySlots) }),
@@ -465,8 +466,8 @@ namespace UVWizard.NDMF.Tests
 
             MobileBuild.Override = true;
             var errors = BesidesSlots(Build(avatar));
-            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, "Standard" }));
-            Assert.That(body.sharedMaterials[1].name, Is.EqualTo("Eyes blue"));
+            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, ToonStandardName }));
+            Assert.That(body.sharedMaterials[1].name, Is.EqualTo("Eyes blue (UV Wizard)"));
             foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
                 Assert.That(avatar.transform.Find(other).GetComponent<Renderer>().sharedMaterials.Select(m => m.shader.name),
                     Has.All.EqualTo(ToonStandardName), other);
@@ -477,7 +478,8 @@ namespace UVWizard.NDMF.Tests
             var swaps = FxClips(avatar).SelectMany(clip => AnimationUtility.GetObjectReferenceCurveBindings(clip)
                 .Select(binding => (binding.path, binding.propertyName,
                     AnimationUtility.GetObjectReferenceCurve(clip, binding)[0].value.name)));
-            Assert.That(swaps, Is.EqualTo(new[] { ("Body", "m_Materials.Array.data[1]", "Eyes red") }));
+            Assert.That(swaps, Is.EqualTo(new[] { ("Body", "m_Materials.Array.data[1]", "Eyes red (UV Wizard)") }));
+            Assert.That(FxClips(avatar).SelectMany(SwappedIn).Select(m => m.shader.name), Has.All.EqualTo(ToonStandardName));
         }
 
         [Test]
@@ -494,12 +496,16 @@ namespace UVWizard.NDMF.Tests
             var errors = BesidesSlots(Build(avatar));
 
             var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
-            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { "Standard", "Standard" }));
+            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, ToonStandardName }));
+            Assert.That(body.sharedMaterials.Distinct().Count(), Is.EqualTo(2), "each keeps a material of its own");
             foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
                 Assert.That(avatar.transform.Find(other).GetComponent<Renderer>().sharedMaterials.Select(m => m.shader.name),
                     Has.All.EqualTo(ToonStandardName), other);
-            Assert.That(Reports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)));
-            Assert.That(Texts(errors), Has.All.Contain("Body glow").And.All.Contain("_EmissionColor"));
+            Assert.That(Reports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)
+                .Concat(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Flagged), 2))));
+            Assert.That(Texts(errors).Take(2), Has.All.Contain("Body glow").And.All.Contain("_EmissionColor"));
+            Assert.That(Texts(errors).Skip(2), Has.All.Contain("material properties"),
+                "the glow now changes Toon Standard materials");
         }
 
         [Test]
@@ -543,7 +549,8 @@ namespace UVWizard.NDMF.Tests
             var errors = BesidesSlots(Build(avatar));
 
             Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
-            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, "Standard", "Standard" }));
+            Assert.That(body.sharedMaterials.Select(m => m.shader.name), Has.All.EqualTo(ToonStandardName));
+            Assert.That(body.sharedMaterials.Distinct().Count(), Is.EqualTo(3));
             var swaps = FxClips(avatar).SelectMany(AnimationUtility.GetObjectReferenceCurveBindings)
                 .Select(binding => binding.propertyName).Where(name => !name.Contains("-1")).OrderBy(name => name);
             Assert.That(swaps, Is.EqualTo(new[] { "m_Materials.Array.data[1]", "m_Materials.Array.data[2]" }));
@@ -586,9 +593,93 @@ namespace UVWizard.NDMF.Tests
             MobileBuild.Override = true;
             var errors = Build(avatar);
 
-            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo("Standard"));
+            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo(ToonStandardName));
             Assert.That(Texts(errors), Has.Some.Contain("Hat recolour"));
+            Assert.That(SwappedIn(hat.GetComponent<Animator>().runtimeAnimatorController.animationClips.Single()).Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName }),
+                "a child animator's swap is converted too");
         }
+
+        [Test]
+        public void AMobileBuildLeavesEveryMaterialOnAShaderMobileAllowsAndExcludedOnesKeepTheirColours()
+        {
+            // The hat repeats its tinted texture past the repeat limit, and an FX toggle swaps the tail between two
+            // Standard materials, so neither merges.
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(2, 0, 0, 5, 1) });
+            var tinted = Standard(Gradient(16, 2));
+            tinted.color = new Color(1, 0.6f, 0.3f);
+            hat.GetComponent<MeshRenderer>().sharedMaterials = new[] { tinted };
+            var before = Centroids(hat.gameObject).Select(SourceColour).ToArray();
+            var spots = Standard(Gradient(16, 5));
+            var toggle = Keep(new AnimationClip { name = "Spotted tail" });
+            AnimationUtility.SetObjectReferenceCurve(toggle,
+                EditorCurveBinding.PPtrCurve("Tail", typeof(SkinnedMeshRenderer), "m_Materials.Array.data[0]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = spots } });
+            WithFx(avatar, toggle);
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            var shaders = Materials(avatar).Concat(FxClips(avatar).SelectMany(SwappedIn)).Select(m => m.shader.name);
+            Assert.That(shaders, Has.All.Matches<string>(name => ToonStandard.MobileShaders.Contains(name)));
+            var converted = hat.GetComponent<MeshRenderer>().sharedMaterial;
+            var albedo = Readable((Texture2D)converted.mainTexture);
+            var after = Centroids(hat.gameObject).Select(c => albedo.GetPixelBilinear(c.Uv.x, c.Uv.y) * converted.color).ToArray();
+            for (var k = 0; k < before.Length; k++)
+            for (var channel = 0; channel < 3; channel++)
+                Assert.That(after[k][channel], Is.EqualTo(before[k][channel]).Within(0.08f), $"triangle {k}, channel {channel}");
+        }
+
+        [Test]
+        public void TheMobileShadersAreTheSdksShaderWhitelist()
+        {
+            // The SDK's VRC.SDKBase assembly isn't one this assembly references, so its validation is found by name.
+            var validation = System.AppDomain.CurrentDomain.GetAssemblies()
+                .Select(assembly => assembly.GetType("VRC.SDKBase.Validation.AvatarValidation")).FirstOrDefault(type => type != null);
+            var whitelist = validation?.GetField("ShaderWhiteList",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+            Assume.That(whitelist, Is.Not.Null, "the SDK keeps its whitelist where 3.10.5 did");
+
+            Assert.That(ToonStandard.MobileShaders, Is.EquivalentTo((IEnumerable<string>)whitelist!.GetValue(null)));
+        }
+
+        [Test]
+        public void ASwapOntoALineKeepsItsSourceAndTheLineIsReported()
+        {
+            // One clip swaps the same Standard material onto the tail, a mesh, and onto a leash line, which keeps its
+            // material as the bake leaves particles and lines alone.
+            var avatar = Avatar(withComponent: true);
+            var leash = new GameObject("Leash").AddComponent<LineRenderer>();
+            leash.transform.SetParent(avatar.transform);
+            leash.sharedMaterials = new[] { Standard(Gradient(16, 6)) };
+            var spots = Standard(Gradient(16, 5));
+            var toggle = Keep(new AnimationClip { name = "Spotted" });
+            AnimationUtility.SetObjectReferenceCurve(toggle,
+                EditorCurveBinding.PPtrCurve("Tail", typeof(SkinnedMeshRenderer), "m_Materials.Array.data[0]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = spots } });
+            AnimationUtility.SetObjectReferenceCurve(toggle,
+                EditorCurveBinding.PPtrCurve("Leash", typeof(LineRenderer), "m_Materials.Array.data[0]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = spots } });
+            WithFx(avatar, toggle);
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            var clip = FxClips(avatar).Single();
+            Material SwapOn(string path) => (Material)AnimationUtility.GetObjectReferenceCurve(clip,
+                AnimationUtility.GetObjectReferenceCurveBindings(clip).Single(binding => binding.path == path))[0].value;
+            Assert.That(SwapOn("Tail").shader.name, Is.EqualTo(ToonStandardName));
+            Assert.That(SwapOn("Leash").shader.name, Is.EqualTo("Standard"));
+            Assert.That(leash.sharedMaterial.shader.name, Is.EqualTo("Standard"));
+            Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.Unconverted)));
+        }
+
+        // The materials a clip's material swaps put in their slots.
+        static IEnumerable<Material> SwappedIn(AnimationClip clip) => AnimationUtility.GetObjectReferenceCurveBindings(clip)
+            .SelectMany(binding => AnimationUtility.GetObjectReferenceCurve(clip, binding))
+            .Select(key => key.value).OfType<Material>();
 
         static EditorCurveBinding Slot(string path, int slot) =>
             EditorCurveBinding.PPtrCurve(path, typeof(SkinnedMeshRenderer), $"m_Materials.Array.data[{slot}]");

@@ -176,8 +176,9 @@ namespace UVWizard.NDMF.Tests
             var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)));
-            // The build saves in-memory materials as new objects, so compare the shader, not the reference.
-            Assert.That(renderer.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(materials.Select(m => m.shader.name)));
+            // Each keeps a Toon Standard material of its own.
+            Assert.That(renderer.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(materials.Select(_ => ToonStandardName)));
+            Assert.That(renderer.sharedMaterials.Distinct().Count(), Is.EqualTo(materials.Length));
             var mesh = glasses.GetComponent<MeshFilter>().sharedMesh;
             var positions = mesh.vertices;
             var drawn = Enumerable.Range(0, mesh.subMeshCount).SelectMany(s => mesh.GetIndices(s));
@@ -201,8 +202,9 @@ namespace UVWizard.NDMF.Tests
             var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Excluded) }));
-            // The build saves in-memory materials as new objects, so compare the shader, not the reference.
-            Assert.That(renderer.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(materials.Select(m => m.shader.name)));
+            // Each keeps a Toon Standard material of its own.
+            Assert.That(renderer.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(materials.Select(_ => ToonStandardName)));
+            Assert.That(renderer.sharedMaterials.Distinct().Count(), Is.EqualTo(materials.Length));
         }
 
         [Test]

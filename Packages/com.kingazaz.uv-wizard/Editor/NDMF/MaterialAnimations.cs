@@ -11,9 +11,9 @@ using UVWizard.Core.Pipeline;
 namespace UVWizard.NDMF
 {
     /// <summary>
-    /// Finds the material slots the avatar's animations swap or change, and moves material swaps to follow their
-    /// slots once the bake has collapsed the merged ones. By the Optimizing phase, Modular Avatar's material
-    /// components have become animator content, so the animations are all there is to scan.
+    /// Finds the material slots the avatar's animations swap or change. Once the bake has collapsed the merged ones,
+    /// moves material swaps to follow their slots and to swap in converted materials. By the Optimizing phase, Modular
+    /// Avatar's material components have become animator content, so the animations are all there is to scan.
     /// </summary>
     internal static class MaterialAnimations
     {
@@ -97,6 +97,29 @@ namespace UVWizard.NDMF
                 }
                 foreach (var (from, _, _) in curves) clip.SetObjectCurve(from, null);
                 foreach (var (_, to, curve) in curves) clip.SetObjectCurve(to, curve);
+            }
+        }
+
+        /// <summary>Makes each material swap that puts a converted source in a slot put its converted material there.</summary>
+        public static void SwapInConverted(AnimatorServicesContext animators, GameObject root,
+            IEnumerable<(Material Source, Material Converted)> converted)
+        {
+            var conversionOf = converted.ToDictionary(c => c.Source, c => c.Converted);
+            if (conversionOf.Count == 0) return;
+            foreach (var (clip, resolve) in Clips(animators, root))
+            foreach (var binding in clip.GetObjectCurveBindings())
+            {
+                // Only where the bake converts materials: a particle keeps its source, as on its own slots.
+                if (SlotIndex(binding) == null || Target(binding, resolve) is not { } renderer
+                    || !AvatarBaker.ConvertsMaterialsOf(renderer) || clip.GetObjectCurve(binding) is not { } keys) continue;
+                var changed = false;
+                for (var k = 0; k < keys.Length; k++)
+                    if (keys[k].value is Material source && conversionOf.TryGetValue(source, out var to))
+                    {
+                        keys[k].value = to;
+                        changed = true;
+                    }
+                if (changed) clip.SetObjectCurve(binding, keys);
             }
         }
 
