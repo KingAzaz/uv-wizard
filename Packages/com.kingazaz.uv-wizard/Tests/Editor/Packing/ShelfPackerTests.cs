@@ -144,6 +144,20 @@ namespace UVWizard.Core.Tests.Packing
         }
 
         [Test]
+        public void TheSameChartsGiveTheSamePlacements()
+        {
+            var rng = new System.Random(3);
+            var charts = Enumerable.Range(0, 40).Select(_ => Irregular(rng)).ToArray();
+            var settings = new PackSettings(atlasSize: 256, padding: 4);
+
+            var first = ShelfPacker.Pack(charts, 0.5f, settings);
+            var second = ShelfPacker.Pack(charts, 0.5f, settings);
+
+            Assert.That(first.Fits, Is.True);
+            Assert.That(second.Placements, Is.EqualTo(first.Placements));
+        }
+
+        [Test]
         public void ManyIrregularChartsStayInsideAndApart()
         {
             // As for the exact packer: 80 lopsided charts in a 512 px atlas, with a padding that

@@ -132,8 +132,8 @@ namespace UVWizard.Core.Tests.Packing
             var charts = Enumerable.Range(0, 12).Select(i => Rectangle(10 + i, 24 - i)).ToArray();
             var settings = new PackSettings(atlasSize: 64, padding: 2);
 
-            var first = ScaleSearch.Search(charts, settings);
-            var second = ScaleSearch.Search(charts, settings);
+            var first = ScaleSearch.Search(charts, settings, null, ScaleSearch.ExactPackerChartLimit, System.TimeSpan.MaxValue);
+            var second = ScaleSearch.Search(charts, settings, null, ScaleSearch.ExactPackerChartLimit, System.TimeSpan.MaxValue);
 
             Assert.That(second.Scale, Is.EqualTo(first.Scale));
             Assert.That(second.Attempts, Is.EqualTo(first.Attempts));
@@ -182,6 +182,70 @@ namespace UVWizard.Core.Tests.Packing
             Assert.That(result.Scale, Is.EqualTo(ShelfOnly(charts, NestingSettings).Scale));
             Assert.That(AtlasCorners(charts, result.Packing), Has.All.Matches<Vector2>(InsideAtlas(64)));
             Assert.That(PixelsCoveredByMoreThanOneChart(charts, result.Packing), Is.Empty);
+        }
+
+        // A search whose budget runs out once it has been asked whether time is up more than this many times.
+        static ScaleSearchResult OutOfTimeAfter(int checks, ChartShape[] charts, PackSettings settings)
+        {
+            var asked = 0;
+            return ScaleSearch.Search(charts, settings, null, exactPackerChartLimit: ScaleSearch.ExactPackerChartLimit, outOfTime: () => ++asked > checks);
+        }
+
+        [Test]
+        public void ABudgetCutAfterTheExactPackerBeatsTheShelfKeepsTheExactPacking()
+        {
+            var charts = NestingCharts();
+            var shelfScale = ShelfOnly(charts, NestingSettings).Scale;
+
+            ScaleSearchResult cut = null;
+            for (var checks = 1; checks < 20 && cut == null; checks++)
+            {
+                var result = OutOfTimeAfter(checks, charts, NestingSettings);
+                if (result.RanOutOfTime && result.Scale > shelfScale) cut = result;
+            }
+
+            Assert.That(cut, Is.Not.Null, "no cut came after the exact packer beat the shelf");
+            Assert.That(cut.Packer, Is.EqualTo(Packer.Exact));
+            Assert.That(cut.Packing.Placements, Has.All.Matches<Placement>(p => p.Scale == cut.Scale));
+            Assert.That(AtlasCorners(charts, cut.Packing), Has.All.Matches<Vector2>(InsideAtlas(64)));
+            Assert.That(PixelsCoveredByMoreThanOneChart(charts, cut.Packing), Is.Empty);
+        }
+
+        [Test]
+        public void WhenTheExactPackerDoesNoBetterTheShelfPackingStays()
+        {
+            var charts = new[] { Rectangle(100, 10) };
+            var settings = new PackSettings(atlasSize: 64, padding: 0);
+
+            var result = ScaleSearch.Search(charts, settings, null, exactPackerChartLimit: 100, timeBudget: System.TimeSpan.MaxValue);
+
+            Assert.That(result.Packer, Is.EqualTo(Packer.Shelf));
+            Assert.That(result.RanOutOfTime, Is.False);
+            Assert.That(result.Scale, Is.EqualTo(ShelfOnly(charts, settings).Scale));
+        }
+
+        [Test]
+        public void TheHalvingSearchStopsOnceTheBudgetRunsOut()
+        {
+            // 300 charts never fit the 256 cells of a 64 px atlas, so neither packer has a fit to
+            // refine and the exact search halves the scale from 1.
+            var charts = Enumerable.Repeat(Rectangle(10, 10), 300).ToArray();
+            var settings = new PackSettings(atlasSize: 64, padding: 0);
+
+            var result = OutOfTimeAfter(0, charts, settings);
+
+            Assert.That(result.RanOutOfTime, Is.True);
+            Assert.That(result.Fits, Is.False);
+            Assert.That(result.Scale, Is.EqualTo(0));
+            Assert.That(result.Attempts, Is.EqualTo(ShelfOnly(charts, settings).Attempts + 1), "the exact packer tried more than scale 1");
+        }
+
+        [Test]
+        public void TheWarmUpRunsEveryExactPackingJob()
+        {
+            // A packing that fits has rasterized, scanned rows and placed charts, so Burst has
+            // compiled every job the exact search runs.
+            Assert.That(ScaleSearch.WarmUpExactPacker().Fits, Is.True);
         }
 
         [Test]

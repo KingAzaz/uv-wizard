@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using UnityEngine;
 
 namespace UVWizard.Core.Packing
 {
@@ -48,6 +49,35 @@ namespace UVWizard.Core.Packing
         internal static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? priorities,
             int exactPackerChartLimit, TimeSpan timeBudget)
         {
+            // The clock starts once Burst has compiled the packing jobs, so the same charts get the
+            // same packing whether or not the editor has packed since its last domain reload.
+            if (charts.Count <= exactPackerChartLimit && !exactPackerWarm)
+            {
+                WarmUpExactPacker();
+                exactPackerWarm = true;
+            }
+            var clock = Stopwatch.StartNew();
+            return Search(charts, settings, priorities, exactPackerChartLimit, () => clock.Elapsed > timeBudget);
+        }
+
+        // Static fields reset on each domain reload, as Burst's loaded jobs do.
+        static bool exactPackerWarm;
+
+        /// <summary>
+        /// Packs one small chart with the exact packer. Its jobs compile synchronously on first use,
+        /// which can take longer than <see cref="TimeBudget"/>.
+        /// </summary>
+        internal static PackResult WarmUpExactPacker() =>
+            ExactPacker.Pack(new[] { new ChartShape(new[] { new Vector2(0, 0), new Vector2(8, 0), new Vector2(0, 8) }) }, 1,
+                new PackSettings(atlasSize: 64, padding: 0));
+
+        /// <param name="outOfTime">
+        /// Asked before each exact attempt the search could skip. Once it answers true, the search
+        /// stops and keeps the best packing found.
+        /// </param>
+        internal static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? priorities,
+            int exactPackerChartLimit, Func<bool> outOfTime)
+        {
             if (priorities != null)
             {
                 if (priorities.Count != charts.Count)
@@ -57,7 +87,6 @@ namespace UVWizard.Core.Packing
                         throw new ArgumentException($"A priority of {priority} isn't positive and finite.", nameof(priorities));
             }
 
-            var clock = Stopwatch.StartNew();
             var attempts = 0;
             var ranOutOfTime = false;
             var scales = new float[charts.Count];
@@ -83,9 +112,15 @@ namespace UVWizard.Core.Packing
                 else
                 {
                     float hi = 1, lo = 0.5f;
-                    PackResult best;
-                    while (!(best = attempt(lo)).Fits)
+                    var best = top;
+                    while (true)
                     {
+                        if (outOfTime())
+                        {
+                            ranOutOfTime = true;
+                            return new Bracket(best, packer, 0, hi);
+                        }
+                        if ((best = attempt(lo)).Fits) break;
                         hi = lo;
                         lo /= 2;
                         if (lo < MinScale) return new Bracket(best, packer, 0, hi);
@@ -111,7 +146,7 @@ namespace UVWizard.Core.Packing
 
             var result = charts.Count > exactPackerChartLimit
                 ? Shelf()
-                : Climb(Packer.Exact, () => Shelf(), () => clock.Elapsed > timeBudget);
+                : Climb(Packer.Exact, () => Shelf(), outOfTime);
             return new ScaleSearchResult(result.Packing, result.Packer, result.Scale, result.FailedScale, ranOutOfTime, attempts);
         }
 
