@@ -173,6 +173,7 @@ namespace UVWizard.Core.Tests.LilToon
         [TestCase("lilToon")]
         [TestCase("Hidden/lilToonLite")]
         [TestCase("Hidden/lilToonTessellation")]
+        [TestCase("_lil/lilToonMulti")]
         public void OpaqueShadersAreMerged(string shader)
         {
             var reading = SourceShaderReader.Read(Material(shader));
@@ -180,7 +181,7 @@ namespace UVWizard.Core.Tests.LilToon
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
         }
 
-        // lilToonMulti keeps one shader and reads its rendering mode from _TransparentMode.
+        // lilToonMulti keeps its rendering mode in _TransparentMode, also on the Hidden variants it switches to.
         [TestCase(1, "Cutout")]
         [TestCase(2, "Transparent")]
         [TestCase(3, "Transparent")]
@@ -285,6 +286,111 @@ namespace UVWizard.Core.Tests.LilToon
             Assert.That(reading.Reason, Does.StartWith("Emission"));
         }
 
+        // Each changes the emission lilToon renders in a way the bake doesn't reproduce.
+        [TestCase("_EmissionUseGrad", 1f)]
+        [TestCase("_EmissionFluorescence", 0.5f)]
+        [TestCase("_EmissionBlendMode", 0f)]
+        [TestCase("_EmissionBlendMode", 2f)]
+        public void EmissionFeaturesTheBakeCantReproduceAreFlagged(string property, float value)
+        {
+            var material = EmittingMaterial();
+            material.SetFloat(property, value);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission"));
+        }
+
+        [Test]
+        public void BlinkingEmissionIsFlagged()
+        {
+            var material = EmittingMaterial();
+            material.SetVector("_EmissionBlink", new Vector4(1, 0, 3.141593f, 0));
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission"));
+        }
+
+        [Test]
+        public void ASecondNormalMapIsFlagged()
+        {
+            var material = Material(LilToon);
+            material.SetFloat("_UseBump2ndMap", 1);
+            material.SetTexture("_Bump2ndMap", Texture());
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Normal"));
+        }
+
+        [Test]
+        public void ASecondNormalMapThatIsOffOrUnsetIsIgnored()
+        {
+            var off = Material(LilToon);
+            off.SetFloat("_UseBump2ndMap", 0);
+            off.SetTexture("_Bump2ndMap", Texture());
+            var unset = Material(LilToon);
+            unset.SetFloat("_UseBump2ndMap", 1);
+
+            Assert.That(SourceShaderReader.Read(off).Verdict, Is.EqualTo(MaterialVerdict.Merged), "off");
+            Assert.That(SourceShaderReader.Read(unset).Verdict, Is.EqualTo(MaterialVerdict.Merged), "unset");
+        }
+
+        // lilToon shifts backface UVs by one tile, which samples other texels unless U repeats every whole tile.
+        [Test]
+        public void ShiftingBackfaceUvsIsFlaggedWhenTheMainTextureDoesntRepeatPerTile()
+        {
+            var material = Material(LilToon);
+            material.SetTexture("_MainTex", Texture());
+            material.SetTextureScale("_MainTex", new Vector2(0.5f, 1));
+            material.SetFloat("_ShiftBackfaceUV", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Albedo"));
+        }
+
+        [Test]
+        public void ShiftingBackfaceUvsIsFlaggedWhenTheMainTextureIsClamped()
+        {
+            var texture = Texture();
+            texture.wrapModeU = TextureWrapMode.Clamp;
+            var material = Material(LilToon);
+            material.SetTexture("_MainTex", texture);
+            material.SetFloat("_ShiftBackfaceUV", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Albedo"));
+        }
+
+        [Test]
+        public void BackfaceUvsArentFlaggedWhileTheShiftIsOff()
+        {
+            var material = Material(LilToon);
+            material.SetTexture("_MainTex", Texture());
+            material.SetTextureScale("_MainTex", new Vector2(0.5f, 1));
+            material.SetFloat("_ShiftBackfaceUV", 0);
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        [Test]
+        public void ShiftingBackfaceUvsIsIgnoredWhenTheMainTextureRepeatsPerTile()
+        {
+            var material = Material(LilToon);
+            material.SetTexture("_MainTex", Texture());
+            material.SetFloat("_ShiftBackfaceUV", 1);
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
         [Test]
         public void AnEmissionMaskIsFlagged()
         {
@@ -305,6 +411,9 @@ namespace UVWizard.Core.Tests.LilToon
             material.SetVector("_EmissionMap_ScrollRotate", new Vector4(0.1f, 0, 0, 0));
             material.SetFloat("_EmissionMainStrength", 1);
             material.SetTexture("_EmissionBlendMask", Texture());
+            material.SetFloat("_EmissionUseGrad", 1);
+            material.SetFloat("_EmissionBlendMode", 0);
+            material.SetVector("_EmissionBlink", new Vector4(1, 0, 3.141593f, 0));
 
             Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }
@@ -325,6 +434,19 @@ namespace UVWizard.Core.Tests.LilToon
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
             Assert.That(reading.Reason, Does.Contain(named));
+        }
+
+        [TestCase("Hidden/lilToonMultiOutline", 2, "Transparent")]
+        [TestCase("Hidden/lilToonMultiFur", 5, "Cutout")]
+        public void LilToonMultiVariantsAreFlaggedByTheirRenderingMode(string shader, int mode, string reason)
+        {
+            var material = Material(shader);
+            material.SetInt("_TransparentMode", mode);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith(reason));
         }
 
         [Test]

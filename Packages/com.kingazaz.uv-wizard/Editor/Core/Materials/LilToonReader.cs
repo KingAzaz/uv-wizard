@@ -22,6 +22,12 @@ namespace UVWizard.Core.Materials
         const int MultiFur = 4;
         const string Multi = "_lil/lilToonMulti";
 
+        // The Hidden variants lilToonMulti switches its materials to, which keep _TransparentMode.
+        const string MultiVariants = "Hidden/lilToonMulti";
+
+        // _EmissionBlendMode: Normal 0, Add 1, Screen 2, Multiply 3. Toon Standard only adds emission.
+        const int AddBlend = 1;
+
         // lilToon's add-on shaders, which draw an extra layer over another material slot's surface.
         const string AddOns = "_lil/[Optional] ";
 
@@ -53,13 +59,13 @@ namespace UVWizard.Core.Materials
             return reading;
         }
 
-        // What the rendering mode loses: alpha, outlines and fur. lilToonMulti keeps one shader and reads its
-        // mode from properties; every other lilToon shader names its mode.
+        // What the rendering mode loses: alpha, outlines and fur. lilToonMulti and its variants keep the mode in
+        // properties; every other lilToon shader names its mode.
         static IEnumerable<string> RenderingMode(Material material)
         {
             var shader = material.shader.name;
             bool cutout, transparent, outline, fur;
-            if (shader == Multi)
+            if (shader == Multi || shader.StartsWith(MultiVariants))
             {
                 var mode = (int)Float(material, "_TransparentMode", 0);
                 cutout = mode == MultiCutout || mode == MultiFurCutout;
@@ -95,6 +101,10 @@ namespace UVWizard.Core.Materials
             if ((albedo.Texture != null || normal != null) &&
                 Vector(material, "_MainTex_ScrollRotate", Vector4.zero) != Vector4.zero)
                 yield return "Albedo scrolls or rotates: the UV animation isn't baked.";
+            if (ShiftsBackfaceTexels(material, albedo))
+                yield return "Albedo shifts backface UVs: backfaces bake the front's texels.";
+            if (Float(material, "_UseBump2ndMap", 0) > 0.5f && Texture(material, "_Bump2ndMap") != null)
+                yield return "Normal 2nd isn't baked: only the first normal map is.";
             if (emission != null)
             {
                 if (emission.Texture != null &&
@@ -104,10 +114,25 @@ namespace UVWizard.Core.Materials
                     yield return "Emission takes the main colour: only the emission colour is baked.";
                 if (Texture(material, "_EmissionBlendMask") != null)
                     yield return "Emission is masked: the mask isn't baked.";
+                if ((int)Float(material, "_EmissionBlendMode", AddBlend) != AddBlend)
+                    yield return "Emission doesn't add: it's baked as added glow.";
+                if (Vector(material, "_EmissionBlink", Vector4.zero).x != 0)
+                    yield return "Emission blinks: it's baked steady.";
+                if (Float(material, "_EmissionUseGrad", 0) > 0.5f)
+                    yield return "Emission has a gradation: the gradation isn't baked.";
+                if (Float(material, "_EmissionFluorescence", 0) > 0)
+                    yield return "Emission is fluorescent: it's baked as if lit.";
             }
             if (Float(material, "_UseEmission2nd", 0) > 0.5f)
                 yield return "Emission 2nd isn't baked: only the first emission is.";
         }
+
+        // lilToon moves backface UVs one tile along U, which samples other texels unless the main texture
+        // repeats a whole number of times per tile.
+        static bool ShiftsBackfaceTexels(Material material, ChannelSource albedo) =>
+            Float(material, "_ShiftBackfaceUV", 0) > 0.5f && albedo.Texture != null &&
+            (albedo.ScaleOffset.x != Mathf.Round(albedo.ScaleOffset.x) ||
+             albedo.Texture.wrapModeU != TextureWrapMode.Repeat);
 
         // _MainTexHSVG's neutral value: no hue shift, and saturation, value and gamma of 1.
         static readonly Vector4 NoHsvg = new Vector4(0, 1, 1, 1);
