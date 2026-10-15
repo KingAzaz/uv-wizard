@@ -24,6 +24,7 @@ namespace UVWizard.Core.Tests.Islands
         [TestCase(1 / 3f, 3)]
         [TestCase(0.4f, 5)]
         [TestCase(1 / 16f, 16)]
+        [TestCase(0.3333f, 3)]
         public void ARepeatingTextureLinesUpAfterWholeRepeats(float ratio, int period)
         {
             Assert.That(TilePeriod.Of(TextureWrapMode.Repeat, ratio), Is.EqualTo(period));
@@ -42,6 +43,13 @@ namespace UVWizard.Core.Tests.Islands
         {
             Assert.That(TilePeriod.Of(TextureWrapMode.Repeat, 0.7071f), Is.EqualTo(0));
             Assert.That(TilePeriod.Of(TextureWrapMode.Repeat, 1 / 17f), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ALargeTilingALittleOffWholeRepeatsDriftsByItsFractionEveryTile()
+        {
+            // 0.004 of a repeat per tile is about 4 texels of a 1024 texture, and 16 tiles never add up to whole.
+            Assert.That(TilePeriod.Of(TextureWrapMode.Repeat, 100.004f), Is.EqualTo(0));
         }
 
         [TestCase(TextureWrapMode.Repeat)]

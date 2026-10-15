@@ -208,6 +208,21 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void WithEmissionTurnedOffAClampedEmissionMapDoesntKeepIslandsApart()
+        {
+            var glow = Gradient(16, 1);
+            glow.wrapMode = TextureWrapMode.Clamp;
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), glow, Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 1.1f, 0.1f, 1.4f, 0.4f) }), glowing);
+
+            Bake(StandardOptions(channels: Channels.Albedo), renderer);
+
+            var centroids = Centroids(renderer).Select(c => c.Uv).ToArray();
+            Assert.That(Vector2.Distance(centroids[0], centroids[2]), Is.LessThan(1e-5f), "first triangles");
+            Assert.That(Vector2.Distance(centroids[1], centroids[3]), Is.LessThan(1e-5f), "second triangles");
+        }
+
+        [Test]
         public void AShaderWithoutAnEmissionStrengthCarriesItOnTheEmissionColour()
         {
             // Standard has no _EmissionStrength, but its emission colour is HDR, so the strength goes there.

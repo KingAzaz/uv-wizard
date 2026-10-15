@@ -14,8 +14,10 @@ namespace UVWizard.Core.Islands
         // its islands where they are.
         const int Longest = 16;
 
-        // How far from a whole number of repeats still counts as one, for tilings such as 1/3 that floats round.
-        const float Tolerance = 1e-4f;
+        // How far from a whole number of repeats still counts as one, for tilings such as 1/3 that floats round or
+        // a creator types as 0.3333: a thousandth of a repeat, under a texel of a 1024 texture. It doesn't grow with
+        // the repeats, so a large tiling a little off whole still drifts by its fraction every tile.
+        const float Tolerance = 1e-3f;
 
         /// <summary>
         /// The period of a texture with the given wrap mode, repeating <paramref name="ratio"/> times per tile of
@@ -35,7 +37,7 @@ namespace UVWizard.Core.Islands
             for (var tiles = 1; tiles <= Longest; tiles++)
             {
                 var periods = tiles * ratio / repeats;
-                if (Mathf.Abs(periods - Mathf.Round(periods)) <= Tolerance * Mathf.Max(1, periods)) return tiles;
+                if (Mathf.Abs(periods - Mathf.Round(periods)) <= Tolerance) return tiles;
             }
             return 0;
         }

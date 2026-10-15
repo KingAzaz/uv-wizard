@@ -125,12 +125,8 @@ namespace UVWizard.Core.Tests.Islands
             new Rect(island.UvBounds.position + island.TileShift, island.UvBounds.size);
 
         // One island: a quad from min to max.
-        static Island BuildQuad(Vector2 min, Vector2 max, TextureWrapMode wrapU, TextureWrapMode wrapV)
-        {
-            var uv0 = new[] { min, new Vector2(max.x, min.y), new Vector2(min.x, max.y), max };
-            var triangles = new[] { 0, 1, 2, 2, 1, 3 };
-            return IslandBuilder.Build(uv0, triangles, wrapU, wrapV).Single();
-        }
+        static Island BuildQuad(Vector2 min, Vector2 max, TextureWrapMode wrapU, TextureWrapMode wrapV) =>
+            BuildQuad(min, max, TilePeriod.Of(wrapU), TilePeriod.Of(wrapV));
 
         static Island BuildQuad(Vector2 min, Vector2 max, int periodU, int periodV)
         {
