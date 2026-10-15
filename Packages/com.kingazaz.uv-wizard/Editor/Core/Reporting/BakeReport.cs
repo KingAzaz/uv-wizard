@@ -228,5 +228,31 @@ namespace UVWizard.Core.Reporting
         public const string LeftoverStaticMesh = "uvwizard.report.leftover-static-mesh";
         public const string LeftoverBoundsOrRootBone = "uvwizard.report.leftover-bounds-or-root-bone";
         public const string LeftoverOther = "uvwizard.report.leftover-other";
+
+        // The report window and the component's inspector.
+        public const string WindowTitle = "uvwizard.report.window-title";
+        public const string NoReport = "uvwizard.report.no-report";
+        public const string PreviewNote = "uvwizard.report.preview-note";
+        public const string ManualBakeButton = "uvwizard.report.manual-bake-button";
+        public const string OpenReportButton = "uvwizard.report.open-report-button";
+        public const string NotAnAvatar = "uvwizard.report.not-an-avatar";
+        public const string FiguresHeader = "uvwizard.report.figures";
+        public const string BeforeColumn = "uvwizard.report.before";
+        public const string AfterColumn = "uvwizard.report.after";
+        public const string MaterialSlotsRow = "uvwizard.report.material-slots";
+        public const string SkinnedMeshesRow = "uvwizard.report.skinned-meshes";
+        public const string MeshesRow = "uvwizard.report.meshes";
+        public const string TextureMemoryRow = "uvwizard.report.texture-memory";
+        public const string RankRow = "uvwizard.report.rank";
+        public const string Megabytes = "uvwizard.report.megabytes";
+        public const string NotMeasured = "uvwizard.report.not-measured";
+        public const string Target = "uvwizard.report.target";
+        public const string PackingHeader = "uvwizard.report.packing";
+        public const string ExcludedHeader = "uvwizard.report.excluded";
+        public const string FlaggedHeader = "uvwizard.report.flagged";
+        public const string LeftoversHeader = "uvwizard.report.leftovers";
+
+        /// <summary>The key naming a rank.</summary>
+        public static string Rank(PerformanceRank rank) => "uvwizard.report.rank." + rank.ToString().ToLowerInvariant();
     }
 }

@@ -51,6 +51,16 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void ABodyMeshLargerThanTheMergedOneIsStillTheLeftover()
+        {
+            // An avatar base's Body is often its largest mesh, and the merge of everything else is smaller.
+            var body = Skinned("Body", root.transform, vertices: 500);
+            Skinned("Merged", root.transform, vertices: 100);
+
+            Assert.That(Reasons(), Is.EqualTo(new[] { (body as Renderer, LeftoverReason.MmdBody) }));
+        }
+
+        [Test]
         public void AMeshWithAnotherNameOrDeeperDownIsntTheMmdBody()
         {
             Skinned("Merged", root.transform, vertices: 100);
@@ -80,6 +90,15 @@ namespace UVWizard.Core.Tests.Reporting
                 (glasses as Renderer, LeftoverReason.Toggle),
                 (hat, LeftoverReason.Toggle),
             }));
+        }
+
+        [Test]
+        public void AToggledMeshLargerThanTheMergedOneIsStillTheLeftover()
+        {
+            var outfit = Skinned("Outfit", root.transform, vertices: 500);
+            Skinned("Merged", root.transform, vertices: 100);
+
+            Assert.That(Reasons(outfit.gameObject), Is.EqualTo(new[] { (outfit as Renderer, LeftoverReason.Toggle) }));
         }
 
         [Test]

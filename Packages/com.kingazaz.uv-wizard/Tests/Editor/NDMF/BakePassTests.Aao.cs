@@ -89,31 +89,7 @@ namespace UVWizard.NDMF.Tests
         public void TraceAndOptimizeLeavesApart(Unmergeable extra)
         {
             var avatar = MergeableAvatar(addTraceAndOptimize: true);
-            var hips = avatar.transform.Find("Armature/Hips");
-            Renderer apart;
-            switch (extra)
-            {
-                case Unmergeable.ToggledOutfit:
-                    apart = Skinned(avatar, "Outfit", hips, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
-                    Toggle(avatar, "Outfit");
-                    break;
-                case Unmergeable.StaticMesh:
-                    var glasses = new GameObject("Glasses");
-                    glasses.transform.SetParent(avatar.transform);
-                    glasses.AddComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) });
-                    apart = glasses.AddComponent<MeshRenderer>();
-                    apart.sharedMaterials = new[] { Standard(Gradient(16, 4)) };
-                    break;
-                case Unmergeable.MmdBody:
-                    apart = Skinned(avatar, "Body", hips, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
-                    break;
-                default:
-                    var head = new GameObject("Head").transform;
-                    head.SetParent(hips);
-                    head.localPosition = Vector3.up;
-                    apart = Skinned(avatar, "Hair", head, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
-                    break;
-            }
+            var apart = AddUnmergeable(avatar, extra);
 
             MobileBuild.Override = true;
             Build(avatar);
@@ -295,6 +271,37 @@ namespace UVWizard.NDMF.Tests
                             $"submesh {s}, triangle {k / 3}, channel {channel}");
                 }
             }
+        }
+
+        // Adds a renderer Trace and Optimize won't merge with the rest, and returns it.
+        Renderer AddUnmergeable(GameObject avatar, Unmergeable extra)
+        {
+            var hips = avatar.transform.Find("Armature/Hips");
+            Renderer apart;
+            switch (extra)
+            {
+                case Unmergeable.ToggledOutfit:
+                    apart = Skinned(avatar, "Outfit", hips, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
+                    Toggle(avatar, "Outfit");
+                    break;
+                case Unmergeable.StaticMesh:
+                    var glasses = new GameObject("Glasses");
+                    glasses.transform.SetParent(avatar.transform);
+                    glasses.AddComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) });
+                    apart = glasses.AddComponent<MeshRenderer>();
+                    apart.sharedMaterials = new[] { Standard(Gradient(16, 4)) };
+                    break;
+                case Unmergeable.MmdBody:
+                    apart = Skinned(avatar, "Body", hips, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
+                    break;
+                default:
+                    var head = new GameObject("Head").transform;
+                    head.SetParent(hips);
+                    head.localPosition = Vector3.up;
+                    apart = Skinned(avatar, "Hair", head, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
+                    break;
+            }
+            return apart;
         }
 
         // A torso of two slots and a tail, skinned to the same root bone with the same bounds, so Trace and

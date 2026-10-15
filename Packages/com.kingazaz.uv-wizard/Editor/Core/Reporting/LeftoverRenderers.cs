@@ -17,7 +17,8 @@ namespace UVWizard.Core.Reporting
 
         /// <summary>
         /// Every renderer that uploads, besides the main skinned mesh, in hierarchy order. The main one is the skinned
-        /// mesh with the most vertices, which is the merged one after Avatar Optimizer.
+        /// mesh with the most vertices, which is the merged one after Avatar Optimizer, leaving out a mesh kept apart for
+        /// MMD worlds or a toggle unless nothing else is skinned.
         /// </summary>
         /// <param name="root">The avatar root, as the build leaves it.</param>
         /// <param name="toggled">
@@ -29,10 +30,16 @@ namespace UVWizard.Core.Reporting
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
                 if (!TextureMemory.IsEditorOnly(renderer.transform)) renderers.Add(renderer);
 
-            SkinnedMeshRenderer? main = null;
+            SkinnedMeshRenderer? main = null, fallback = null;
             foreach (var renderer in renderers)
-                if (renderer is SkinnedMeshRenderer skinned && (main == null || Vertices(skinned) > Vertices(main)))
+            {
+                if (renderer is not SkinnedMeshRenderer skinned) continue;
+                if (fallback == null || Vertices(skinned) > Vertices(fallback)) fallback = skinned;
+                if (!IsMmdBody(skinned, root) && !IsToggled(skinned, root, toggled)
+                    && (main == null || Vertices(skinned) > Vertices(main)))
                     main = skinned;
+            }
+            main ??= fallback;
 
             var leftovers = new List<LeftoverRenderer>();
             foreach (var renderer in renderers)
@@ -42,14 +49,16 @@ namespace UVWizard.Core.Reporting
 
         static LeftoverReason Reason(Renderer renderer, GameObject root, SkinnedMeshRenderer? main, ISet<Object> toggled)
         {
-            if (renderer is SkinnedMeshRenderer && renderer.name == MmdBodyName && renderer.transform.parent == root.transform)
-                return LeftoverReason.MmdBody;
+            if (IsMmdBody(renderer, root)) return LeftoverReason.MmdBody;
             if (IsToggled(renderer, root, toggled)) return LeftoverReason.Toggle;
             if (renderer is not SkinnedMeshRenderer skinned) return LeftoverReason.StaticMesh;
             if (main != null && (skinned.rootBone != main.rootBone || skinned.localBounds != main.localBounds))
                 return LeftoverReason.BoundsOrRootBone;
             return LeftoverReason.Other;
         }
+
+        static bool IsMmdBody(Renderer renderer, GameObject root) =>
+            renderer is SkinnedMeshRenderer && renderer.name == MmdBodyName && renderer.transform.parent == root.transform;
 
         // True when an animation enables the renderer, or turns its object or one above it on or off.
         static bool IsToggled(Renderer renderer, GameObject root, ISet<Object> toggled)
