@@ -11,12 +11,14 @@ namespace UVWizard.Core.Packing
     /// </summary>
     internal readonly struct ChartBox
     {
-        ChartBox(Vector2 min, int width, int height, int padCells)
+        ChartBox(Vector2 min, int width, int height, int padCells, float scale, int blockSize)
         {
             Min = min;
             Width = width;
             Height = height;
             PadCells = padCells;
+            Scale = scale;
+            BlockSize = blockSize;
         }
 
         /// <summary>The chart's lower-left corner, in source texels.</summary>
@@ -30,6 +32,12 @@ namespace UVWizard.Core.Packing
 
         /// <summary>The border of cells on each side that holds the chart's share of the padding.</summary>
         public int PadCells { get; }
+
+        /// <summary>Atlas pixels per source texel.</summary>
+        public float Scale { get; }
+
+        /// <summary>The packing grid's cell size, in pixels.</summary>
+        public int BlockSize { get; }
 
         /// <summary>
         /// The border every box gets: two neighbouring charts each keep half the padding, rounded up
@@ -53,7 +61,7 @@ namespace UVWizard.Core.Packing
             return new ChartBox(min,
                 Math.Max(1, Mathf.CeilToInt((max.x - min.x) * cellsPerTexel)) + 2 * padCells,
                 Math.Max(1, Mathf.CeilToInt((max.y - min.y) * cellsPerTexel)) + 2 * padCells,
-                padCells);
+                padCells, scale, settings.BlockSize);
         }
 
         // In pixels, with the box's corner at origin = cell * block: unturned, a chart texel t
@@ -62,14 +70,14 @@ namespace UVWizard.Core.Packing
         // origin + (pad * block + (t.y - min.y) * scale, (Width - pad) * block - (t.x - min.x) * scale).
         /// <summary>Where the chart lands with the box's lower-left cell at <paramref name="cell"/>.</summary>
         /// <param name="turned">True when the box lies turned: Height cells wide and Width cells tall.</param>
-        public Placement PlacementAt(Vector2Int cell, bool turned, float scale, int blockSize)
+        public Placement PlacementAt(Vector2Int cell, bool turned)
         {
             if (!turned)
-                return new Placement(new Vector2(cell.x + PadCells, cell.y + PadCells) * blockSize - scale * Min, false, scale);
+                return new Placement(new Vector2(cell.x + PadCells, cell.y + PadCells) * BlockSize - Scale * Min, false, Scale);
             var offset = new Vector2(
-                (cell.x + PadCells) * blockSize - scale * Min.y,
-                (cell.y + Width - PadCells) * blockSize + scale * Min.x);
-            return new Placement(offset, true, scale);
+                (cell.x + PadCells) * BlockSize - Scale * Min.y,
+                (cell.y + Width - PadCells) * BlockSize + Scale * Min.x);
+            return new Placement(offset, true, Scale);
         }
     }
 }

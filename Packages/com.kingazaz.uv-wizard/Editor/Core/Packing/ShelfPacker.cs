@@ -68,7 +68,7 @@ namespace UVWizard.Core.Packing
                 }
                 var cell = new Vector2Int(shelfUsed[shelf], shelfRows[shelf]);
                 shelfUsed[shelf] += across;
-                placements[i] = boxes[i].PlacementAt(cell, boxes[i].Height > boxes[i].Width, scales[i], settings.BlockSize);
+                placements[i] = boxes[i].PlacementAt(cell, boxes[i].Height > boxes[i].Width);
             }
             return new PackResult(true, placements);
         }

@@ -117,7 +117,7 @@ namespace UVWizard.Core.Packing
                 for (var i = 0; i < charts.Count; i++)
                 {
                     var cell = positions[i];
-                    placements[i] = boxes[i].PlacementAt(new Vector2Int(cell.x, cell.y), turned[i], scales[i], block);
+                    placements[i] = boxes[i].PlacementAt(new Vector2Int(cell.x, cell.y), turned[i]);
                 }
                 return new PackResult(true, placements);
             }
