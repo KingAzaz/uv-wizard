@@ -883,6 +883,29 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ARewriteThatFailsLeavesEveryRendererAsItWas()
+        {
+            // The first renderer rewrites fine. The second already uses UV3, where the later tool wants the source
+            // UV0 kept, so its rewrite throws after the first's has been made.
+            var fine = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) });
+            var failing = Mesh(new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            failing.SetUVs(3, new Vector2[failing.vertexCount]);
+            var fineMaterials = new[] { Standard(Gradient(16, 0), Color.white) };
+            var failingMaterials = new[] { Standard(Gradient(32, 1), Color.white) };
+            var first = MeshRenderer(fine, fineMaterials);
+            var second = MeshRenderer(failing, failingMaterials);
+
+            var thrown = Assert.Throws<ArgumentException>(() =>
+                Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { SourceUv0Channel = 3 }, first, second));
+            Assert.That(thrown.Message, Does.StartWith("The mesh already uses UV3."));
+
+            Assert.That(Filter(first).sharedMesh, Is.SameAs(fine));
+            Assert.That(first.sharedMaterials, Is.EqualTo(fineMaterials));
+            Assert.That(Filter(second).sharedMesh, Is.SameAs(failing));
+            Assert.That(second.sharedMaterials, Is.EqualTo(failingMaterials));
+        }
+
+        [Test]
         public void ARendererWhoseSourceUv0ALaterToolCantFindIsExcluded()
         {
             var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });

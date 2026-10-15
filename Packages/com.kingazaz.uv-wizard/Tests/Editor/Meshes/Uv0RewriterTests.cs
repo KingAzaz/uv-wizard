@@ -379,6 +379,21 @@ namespace UVWizard.Core.Tests.Meshes
             Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { new[] { A0, A1, A2 } }));
         }
 
+        // Unity reports bones per vertex for every mesh with BlendIndices, Read/Write off or not, in edit and Play
+        // Mode (#46), so no mesh reaches this guard: it's tested on its own.
+        [Test]
+        public void ASkinnedMeshWhoseBoneWeightsCantBeReadFails()
+        {
+            var thrown = Assert.Throws<System.InvalidOperationException>(() =>
+                Uv0Rewriter.RequireBoneWeights(bonesPerVertexLength: 0, hasBlendIndices: true, "Body"));
+            Assert.That(thrown.Message, Is.EqualTo("Couldn't read the bone weights of Body."));
+        }
+
+        [TestCase(0, false)]
+        [TestCase(4, true)]
+        public void AMeshWithoutBlendIndicesOrWithBoneWeightsPasses(int bonesPerVertexLength, bool hasBlendIndices) =>
+            Assert.DoesNotThrow(() => Uv0Rewriter.RequireBoneWeights(bonesPerVertexLength, hasBlendIndices, "Body"));
+
         [Test]
         public void EverySubmeshNeedsAnEntry()
         {
