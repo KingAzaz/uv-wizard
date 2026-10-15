@@ -866,9 +866,10 @@ namespace UVWizard.Core.Tests.Pipeline
         BakeResult Bake(BakeOptions options, ILaterMeshEdits? laterEdits, params Renderer[] renderers) =>
             Bake(options, laterEdits, renderers, Array.Empty<AnimatedSlot>());
 
-        BakeResult Bake(BakeOptions options, ILaterMeshEdits? laterEdits, Renderer[] renderers, AnimatedSlot[] animated)
+        BakeResult Bake(BakeOptions options, ILaterMeshEdits? laterEdits, Renderer[] renderers, AnimatedSlot[] animated,
+            Transform? head = null)
         {
-            var result = AvatarBaker.Bake(renderers, options, laterEdits, animated);
+            var result = AvatarBaker.Bake(renderers, options, laterEdits, animated, head);
             if (result.MergedMaterial != null) created.Add(result.MergedMaterial);
             if (result.Atlas != null) created.Add(result.Atlas);
             if (result.EmissionAtlas != null) created.Add(result.EmissionAtlas);

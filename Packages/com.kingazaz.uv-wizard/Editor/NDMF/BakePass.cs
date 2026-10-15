@@ -38,6 +38,10 @@ namespace UVWizard.NDMF
             null;
 #endif
 
+        // The humanoid rig's Head bone, whose charts get priority, or null on an avatar without a humanoid rig.
+        static Transform? Head(GameObject root) =>
+            root.TryGetComponent<Animator>(out var animator) && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
+
         /// <summary>
         /// Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing, and give a null
         /// result. Without animator services, no slot counts as animated.
@@ -52,7 +56,7 @@ namespace UVWizard.NDMF
 
             var renderers = root.GetComponentsInChildren<Renderer>(true);
             var animated = animators != null ? MaterialAnimations.Find(animators, root, renderers) : null;
-            var result = AvatarBaker.Bake(renderers, options, LaterMeshEdits(), animated);
+            var result = AvatarBaker.Bake(renderers, options, LaterMeshEdits(), animated, Head(root));
             if (animators != null) MaterialAnimations.FollowMovedSlots(animators, root, result.MovedSlots);
 
             // A mesh two renderers share is rewritten for each; NDMF tracks the first copy.

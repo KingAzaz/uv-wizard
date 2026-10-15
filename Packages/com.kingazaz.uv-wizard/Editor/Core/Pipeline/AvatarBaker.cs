@@ -26,13 +26,17 @@ namespace UVWizard.Core.Pipeline
         // A source with no texture still needs a little atlas space to hold its tint.
         static readonly Vector2Int UntexturedSize = new Vector2Int(8, 8);
 
+        /// <summary>The priority of a chart on the head. Tuned by eye on the dev avatars.</summary>
+        public const float HeadPriority = 2;
+
         // The most the merged material multiplies its Emission atlas by: Toon Standard's _EmissionStrength range.
         const float MaxEmissionStrength = 2;
 
         /// <param name="laterEdits">What a tool after the bake will do to the rewritten meshes, or null for none.</param>
         /// <param name="animated">Slots that animations swap or change, which stay out of the atlas.</param>
+        /// <param name="head">The avatar's humanoid Head bone, whose charts get priority, or null for none.</param>
         public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options,
-            ILaterMeshEdits? laterEdits = null, IReadOnlyList<AnimatedSlot>? animated = null)
+            ILaterMeshEdits? laterEdits = null, IReadOnlyList<AnimatedSlot>? animated = null, Transform? head = null)
         {
             var excluded = new List<SlotNote>();
             var flagged = new List<SlotNote>();
@@ -66,6 +70,7 @@ namespace UVWizard.Core.Pipeline
                     ForEachCorner(slots[s], slots[s].Islands[i], texelsPerUv[c], (_, texel) => corners.Add(texel));
                 shapes.Add(new ChartShape(corners.ToArray()));
             }
+            var priorities = head != null ? Priorities(slots, charts, head) : null;
 
             // The merged material is made before the atlas, since its own textures, such as the ramp, take budget.
             var representative = Representative(slots, charts, options.MergedShader);
@@ -73,7 +78,7 @@ namespace UVWizard.Core.Pipeline
             var channels = Needed(slots, options.Channels);
             var share = options.Budget is { } budget ? budget.Bytes - OutsideBytes(renderers, slots, merged) : (long?)null;
             var cache = options.CacheDirectory is { } directory ? new BakeCache(directory, options.CacheEntries) : null;
-            var key = cache != null ? Key(slots, surfaces, channels, share, options) : null;
+            var key = cache != null ? Key(slots, surfaces, priorities, channels, share, options) : null;
             var cached = key is { } hash ? cache!.Load(hash, options.Compress) : null;
 
             AtlasSizes sizes;
@@ -88,12 +93,12 @@ namespace UVWizard.Core.Pipeline
                 AtlasSizes SizesUpTo(int largest) =>
                     share is { } bytes ? AtlasSizing.Fit(channels, largest, bytes) : AtlasSizing.Finest(channels, largest);
                 sizes = SizesUpTo(options.AtlasSize);
-                var search = Pack(shapes, sizes, options.Padding);
+                var search = Pack(shapes, priorities, sizes, options.Padding);
                 // Charts that fit at full detail would only be upscaled, so the atlas shrinks while they still do. Each
                 // smaller size gets the finest formats that fit it.
                 while (share != null && search.FitsAtFullDetail && sizes.Largest / 2 >= AtlasSizing.MinSize
                        && SizesUpTo(sizes.Largest / 2) is var halved
-                       && Pack(shapes, halved, options.Padding) is { FitsAtFullDetail: true } smaller)
+                       && Pack(shapes, priorities, halved, options.Padding) is { FitsAtFullDetail: true } smaller)
                 {
                     sizes = halved;
                     search = smaller;
@@ -142,9 +147,11 @@ namespace UVWizard.Core.Pipeline
         }
 
         // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.
-        static Hash128? Key(List<Slot> slots, List<SourceSurface> surfaces, Channels channels, long? share, BakeOptions options)
+        static Hash128? Key(List<Slot> slots, List<SourceSurface> surfaces, float[]? priorities, Channels channels,
+            long? share, BakeOptions options)
         {
             var key = new BakeKey();
+            key.Add(priorities ?? Array.Empty<float>());
             key.Add(options.AtlasSize);
             key.Add(options.Padding);
             key.Add(options.Compress ? 1 : 0);
@@ -205,9 +212,53 @@ namespace UVWizard.Core.Pipeline
         }
 
         // Packs the charts at the largest channel's size, with the padding widened so it holds at the smallest.
-        static ScaleSearchResult Pack(List<ChartShape> shapes, AtlasSizes sizes, int padding) =>
+        static ScaleSearchResult Pack(List<ChartShape> shapes, float[]? priorities, AtlasSizes sizes, int padding) =>
             ScaleSearch.Search(shapes, new PackSettings(sizes.Largest,
-                (padding * sizes.Largest + sizes.Smallest - 1) / sizes.Smallest));
+                (padding * sizes.Largest + sizes.Smallest - 1) / sizes.Smallest), priorities);
+
+        // Each chart's priority: HeadPriority for a chart on the head, where most of its vertices follow the head or a
+        // bone below it, and 1 for the rest.
+        static float[] Priorities(List<Slot> slots, Chart[] charts, Transform head)
+        {
+            var onHead = new Dictionary<Renderer, bool[]>();
+            return Array.ConvertAll(charts, chart =>
+            {
+                var vertices = new HashSet<(Renderer, int)>();
+                foreach (var (s, i) in chart.Islands)
+                {
+                    var slot = slots[s];
+                    foreach (var t in slot.Islands[i].Triangles)
+                        for (var k = t * 3; k < t * 3 + 3; k++)
+                            vertices.Add((slot.Renderer, slot.Triangles[k]));
+                    if (!onHead.ContainsKey(slot.Renderer)) onHead.Add(slot.Renderer, OnHead(slot.Renderer, slot.Mesh, head));
+                }
+                var count = 0;
+                foreach (var (renderer, v) in vertices)
+                    if (onHead[renderer][v]) count++;
+                return count * 2 > vertices.Count ? HeadPriority : 1;
+            });
+        }
+
+        // Which of the mesh's vertices follow the head or a bone below it: on a skinned mesh, the bone each is weighted
+        // to most, and on a rigid mesh, the renderer itself.
+        static bool[] OnHead(Renderer renderer, Mesh mesh, Transform head)
+        {
+            var flags = new bool[mesh.vertexCount];
+            if (renderer is not SkinnedMeshRenderer skinned)
+            {
+                if (renderer.transform.IsChildOf(head)) Array.Fill(flags, true);
+                return flags;
+            }
+            using var bonesPerVertex = mesh.GetBonesPerVertex();
+            if (bonesPerVertex.Length == 0) return flags;
+            var boneOnHead = Array.ConvertAll(skinned.bones, bone => bone != null && bone.IsChildOf(head));
+            // Unity keeps each vertex's weights heaviest first.
+            using var weights = mesh.GetAllBoneWeights();
+            for (int v = 0, first = 0; v < flags.Length; first += bonesPerVertex[v++])
+                flags[v] = weights[first].boneIndex < boneOnHead.Length
+                           && boneOnHead[weights[first].boneIndex];
+            return flags;
+        }
 
         // Sorts each of the renderer's material slots into merged (a Slot), excluded or skipped.
         static void CollectSlots(Renderer renderer, IReadOnlyList<AnimatedSlot> animated,
