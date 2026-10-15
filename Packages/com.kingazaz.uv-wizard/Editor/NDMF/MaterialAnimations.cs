@@ -94,8 +94,9 @@ namespace UVWizard.NDMF
             foreach (var (clip, resolve) in Clips(animators, root))
             foreach (var binding in clip.GetObjectCurveBindings())
             {
-                if (SlotIndex(binding) == null || Target(binding, resolve) == null
-                    || clip.GetObjectCurve(binding) is not { } keys) continue;
+                // Only where the bake converts materials: a particle keeps its source, as on its own slots.
+                if (SlotIndex(binding) == null || Target(binding, resolve) is not { } renderer
+                    || !AvatarBaker.ConvertsMaterialsOf(renderer) || clip.GetObjectCurve(binding) is not { } keys) continue;
                 var changed = false;
                 for (var k = 0; k < keys.Length; k++)
                     if (keys[k].value is Material source && conversionOf.TryGetValue(source, out var to))

@@ -81,6 +81,52 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(editorOnly.sharedMaterial, Is.SameAs(kept));
             Assert.That(line.sharedMaterial, Is.SameAs(drawn));
             Assert.That(result.ConvertedMaterials, Is.Empty);
+            Assert.That(result.Unconverted.Select(note => (note.Renderer, note.Material)), Is.EqualTo(new[] { ((Renderer)line, drawn) }),
+                "the line's shader would stop the upload; the editor-only renderer doesn't upload");
+            Assert.That(result.Unconverted[0].Reason, Does.Contain("mesh renderers only"));
+        }
+
+        [Test]
+        public void AConvertedMaterialTakesTheMergedMaterialsSharedSettings()
+        {
+            // The merged source covers more area, so it's the representative; its smoothness is shared.
+            var smooth = Standard(Gradient(16, 0), Color.white);
+            smooth.SetFloat("_Glossiness", 0.2f);
+            var repeated = Standard(Gradient(16, 1), Color.white);
+            repeated.SetFloat("_Glossiness", 0.9f);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
+                smooth, repeated);
+
+            var result = Bake(Converting(representativeProperties: new[] { "_Glossiness" }), renderer);
+
+            Assert.That(result.MergedMaterial!.GetFloat("_Glossiness"), Is.EqualTo(0.2f));
+            Assert.That(renderer.sharedMaterials[1].GetFloat("_Glossiness"), Is.EqualTo(0.2f));
+        }
+
+        [Test]
+        public void ATransparentExcludedMaterialIsFlaggedAsItsMergedSlotWouldBe()
+        {
+            var glass = Standard(Gradient(16, 1), Color.white);
+            glass.SetFloat("_Mode", 3);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }), glass);
+
+            var result = Bake(Converting(), renderer);
+
+            Assert.That(result.Flagged.Select(note => (note.Material, note.Reason)),
+                Has.Some.Matches<(Material Material, string Reason)>(n => n.Material == glass && n.Reason.Contains("Transparent")));
+        }
+
+        [Test]
+        public void AConvertedMaterialWhosePropertiesAnAnimationChangesIsFlagged()
+        {
+            var glowing = Standard(Gradient(16, 1), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
+
+            var result = Bake(Converting(), new Renderer[] { renderer }, new AnimatedSlot(renderer, null, "Glows in \"Glow\"."));
+
+            Assert.That(renderer.sharedMaterial, Is.Not.SameAs(glowing));
+            Assert.That(result.Flagged.Select(note => (note.Material, note.Reason)),
+                Has.Some.Matches<(Material Material, string Reason)>(n => n.Material == glowing && n.Reason.Contains("material properties")));
         }
 
         // The channels as an int: the enum is internal, and a test's parameters must be public.
@@ -189,9 +235,9 @@ namespace UVWizard.Core.Tests.Pipeline
 
         // Standard as the merged shader, converting every material whose shader isn't one of the given ones.
         static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Budget? budget = null,
-            string[]? mobileShaders = null, Channels channels = Channels.All) =>
+            string[]? mobileShaders = null, Channels channels = Channels.All, string[]? representativeProperties = null) =>
             new BakeOptions(Shader.Find("Standard"), atlasSize, padding: 0, compress, normalMapKeyword: "_NORMALMAP",
-                normalEncoding: NormalEncoding.RGorAG, budget: budget, channels: channels,
+                normalEncoding: NormalEncoding.RGorAG, budget: budget, channels: channels, representativeProperties: representativeProperties,
                 mobileShaders: mobileShaders ?? System.Array.Empty<string>());
     }
 }

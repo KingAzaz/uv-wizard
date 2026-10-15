@@ -501,8 +501,11 @@ namespace UVWizard.NDMF.Tests
             foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
                 Assert.That(avatar.transform.Find(other).GetComponent<Renderer>().sharedMaterials.Select(m => m.shader.name),
                     Has.All.EqualTo(ToonStandardName), other);
-            Assert.That(Reports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)));
-            Assert.That(Texts(errors), Has.All.Contain("Body glow").And.All.Contain("_EmissionColor"));
+            Assert.That(Reports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)
+                .Concat(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Flagged), 2))));
+            Assert.That(Texts(errors).Take(2), Has.All.Contain("Body glow").And.All.Contain("_EmissionColor"));
+            Assert.That(Texts(errors).Skip(2), Has.All.Contain("material properties"),
+                "the glow now changes Toon Standard materials");
         }
 
         [Test]
@@ -627,6 +630,50 @@ namespace UVWizard.NDMF.Tests
             for (var k = 0; k < before.Length; k++)
             for (var channel = 0; channel < 3; channel++)
                 Assert.That(after[k][channel], Is.EqualTo(before[k][channel]).Within(0.08f), $"triangle {k}, channel {channel}");
+        }
+
+        [Test]
+        public void TheMobileShadersAreTheSdksShaderWhitelist()
+        {
+            // The SDK's VRC.SDKBase assembly isn't one this assembly references, so its validation is found by name.
+            var validation = System.AppDomain.CurrentDomain.GetAssemblies()
+                .Select(assembly => assembly.GetType("VRC.SDKBase.Validation.AvatarValidation")).FirstOrDefault(type => type != null);
+            var whitelist = validation?.GetField("ShaderWhiteList",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+            Assume.That(whitelist, Is.Not.Null, "the SDK keeps its whitelist where 3.10.5 did");
+
+            Assert.That(ToonStandard.MobileShaders, Is.EquivalentTo((IEnumerable<string>)whitelist!.GetValue(null)));
+        }
+
+        [Test]
+        public void ASwapOntoALineKeepsItsSourceAndTheLineIsReported()
+        {
+            // One clip swaps the same Standard material onto the tail, a mesh, and onto a leash line, which keeps its
+            // material as the bake leaves particles and lines alone.
+            var avatar = Avatar(withComponent: true);
+            var leash = new GameObject("Leash").AddComponent<LineRenderer>();
+            leash.transform.SetParent(avatar.transform);
+            leash.sharedMaterials = new[] { Standard(Gradient(16, 6)) };
+            var spots = Standard(Gradient(16, 5));
+            var toggle = Keep(new AnimationClip { name = "Spotted" });
+            AnimationUtility.SetObjectReferenceCurve(toggle,
+                EditorCurveBinding.PPtrCurve("Tail", typeof(SkinnedMeshRenderer), "m_Materials.Array.data[0]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = spots } });
+            AnimationUtility.SetObjectReferenceCurve(toggle,
+                EditorCurveBinding.PPtrCurve("Leash", typeof(LineRenderer), "m_Materials.Array.data[0]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = spots } });
+            WithFx(avatar, toggle);
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            var clip = FxClips(avatar).Single();
+            Material SwapOn(string path) => (Material)AnimationUtility.GetObjectReferenceCurve(clip,
+                AnimationUtility.GetObjectReferenceCurveBindings(clip).Single(binding => binding.path == path))[0].value;
+            Assert.That(SwapOn("Tail").shader.name, Is.EqualTo(ToonStandardName));
+            Assert.That(SwapOn("Leash").shader.name, Is.EqualTo("Standard"));
+            Assert.That(leash.sharedMaterial.shader.name, Is.EqualTo("Standard"));
+            Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.Unconverted)));
         }
 
         // The materials a clip's material swaps put in their slots.

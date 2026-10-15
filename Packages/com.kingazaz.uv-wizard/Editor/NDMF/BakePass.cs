@@ -72,6 +72,9 @@ namespace UVWizard.NDMF
             foreach (var note in result.Excluded)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Excluded,
                     note.Material, note.Renderer, note.Reason);
+            foreach (var note in result.Unconverted)
+                ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Unconverted,
+                    note.Material, note.Renderer, note.Reason);
             foreach (var note in result.Flagged)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Flagged,
                     note.Material, note.Renderer, note.Reason);

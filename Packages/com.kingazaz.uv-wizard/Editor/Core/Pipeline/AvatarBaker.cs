@@ -49,12 +49,12 @@ namespace UVWizard.Core.Pipeline
             foreach (var renderer in renderers)
                 CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
                     laterEdits, needs, options.Channels);
-            var conversions = new Conversions(options);
+            var conversions = new Conversions(options, animated);
             if (slots.Count == 0)
             {
-                conversions.Apply(renderers, null, animated);
-                return BakeResult.Unchanged(true, excluded, conversions.Flagged(flagged), conversions.Made)
-                    .Measured(renderers, options.Budget);
+                conversions.Apply(renderers, null);
+                return BakeResult.Unchanged(true, excluded, conversions.Flagged(flagged), conversions.Made,
+                    conversions.Unconverted).Measured(renderers, options.Budget);
             }
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -84,6 +84,7 @@ namespace UVWizard.Core.Pipeline
             // The merged material is made before the atlas, since its own textures, such as the ramp, take budget.
             var representative = Representative(slots, charts, options.MergedShader);
             var merged = MergedMaterial(options, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
+            conversions.Merged = merged;
             var channels = Needed(slots, options.Channels);
             var share = options.Budget is { } budget ? budget.Bytes - OutsideBytes(renderers, slots, merged, conversions) : (long?)null;
             var cache = options.CacheDirectory is { } directory ? new BakeCache(directory, options.CacheEntries) : null;
@@ -115,9 +116,9 @@ namespace UVWizard.Core.Pipeline
                 if (!search.Fits)
                 {
                     Object.DestroyImmediate(merged);
-                    conversions.Apply(renderers, null, animated);
+                    conversions.Apply(renderers, null);
                     return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
-                        conversions.Made).Measured(renderers, options.Budget);
+                        conversions.Made, conversions.Unconverted).Measured(renderers, options.Budget);
                 }
                 placements = search.Packing.Placements;
             }
@@ -153,10 +154,10 @@ namespace UVWizard.Core.Pipeline
             UseAtlases(merged, options, atlas, emissionAtlas, emissionStrength, normalAtlas);
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
-            conversions.Apply(renderers, merged, animated);
+            conversions.Apply(renderers, merged);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
-                emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, conversions.Made)
-                .Measured(renderers, options.Budget);
+                emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, conversions.Made,
+                conversions.Unconverted).Measured(renderers, options.Budget);
         }
 
         // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.
@@ -483,8 +484,7 @@ namespace UVWizard.Core.Pipeline
                 var intensity = Intensity(slot.Reading.Emission!.Tint);
                 if (intensity > MaxEmissionStrength)
                     flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
-                        $"Its emission is {intensity:0.##} times full brightness, but the merged material's emission " +
-                        $"goes up to {MaxEmissionStrength}, so it glows less."));
+                        GlowsLess(intensity, "the merged material")));
             }
             return strength;
         }
@@ -496,9 +496,7 @@ namespace UVWizard.Core.Pipeline
             {
                 var emission = slot.Reading.Emission;
                 if (emission == null) return Source(slot, null, Color.black);
-                var linear = emission.Tint.linear;
-                var divisor = Mathf.Max(strength, Intensity(emission.Tint));
-                var tint = new Color(linear.r / divisor, linear.g / divisor, linear.b / divisor, linear.a).gamma;
+                var tint = Divided(emission.Tint, Mathf.Max(strength, Intensity(emission.Tint)));
                 return Source(slot, new ChannelSource(emission.Texture, tint, emission.ScaleOffset, emission.UvChannel), Color.black);
             })), texture, options);
 
@@ -517,6 +515,18 @@ namespace UVWizard.Core.Pipeline
             var atlas = ChannelBaker.Bake(plan);
             if (options.Compress) AtlasCompressor.Compress(atlas, texture.Format);
             return atlas;
+        }
+
+        // Why an emission brighter than the material can glow is flagged.
+        static string GlowsLess(float intensity, string material) =>
+            $"Its emission is {intensity:0.##} times full brightness, but {material}'s emission goes up to " +
+            $"{MaxEmissionStrength}, so it glows less.";
+
+        // The colour with its linear components divided by the divisor, as an Emission texture holds it.
+        static Color Divided(Color colour, float divisor)
+        {
+            var linear = colour.linear;
+            return new Color(linear.r / divisor, linear.g / divisor, linear.b / divisor, linear.a).gamma;
         }
 
         // A colour's brightest linear component: what the shader multiplies by once the colour is linearized.

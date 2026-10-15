@@ -20,6 +20,7 @@ namespace UVWizard.NDMF
         public const string NoToonStandard = "uvwizard.no-toon-standard";
         public const string OverBudget = "uvwizard.over-budget";
         public const string TooManySlots = "uvwizard.too-many-slots";
+        public const string Unconverted = "uvwizard.unconverted";
 
         static readonly (string Key, string Text)[] English =
         {
@@ -28,7 +29,7 @@ namespace UVWizard.NDMF
                 "default settings, so AAO can merge the avatar's skinned meshes into one. Its defaults don't change how " +
                 "the avatar looks. To stop this, turn off Add Trace And Optimize on the UV Wizard component."),
             (Excluded, "Kept out of the atlas: {0}"),
-            (Excluded + ":description", "{2} It stays on {1}, on a Toon Standard material of its own."),
+            (Excluded + ":description", "{2} It stays on {1} outside the atlas, on a material of its own."),
             (Flagged, "May look different after the bake: {0}"),
             (Flagged + ":description", "{2} It's on {1}."),
             (NoFit, "Nothing was merged"),
@@ -43,6 +44,9 @@ namespace UVWizard.NDMF
             (TooManySlots + ":description", "After the bake, the avatar will have {0} material slots, but the preset " +
                 "allows {1}. Each excluded material keeps a slot of its own. Choose a lower preset, or remove what keeps " +
                 "those materials out of the atlas."),
+            (Unconverted, "Mobile doesn't allow this material's shader: {0}"),
+            (Unconverted + ":description", "{2} It stays on {1} as it is, and the VRChat SDK won't upload the avatar " +
+                "for mobile until it's replaced with one of VRChat's mobile shaders."),
             (NoToonStandard + ":description", "UV Wizard bakes into Toon Standard, which comes with the VRChat SDK. Update the VRChat SDK."),
         };
 

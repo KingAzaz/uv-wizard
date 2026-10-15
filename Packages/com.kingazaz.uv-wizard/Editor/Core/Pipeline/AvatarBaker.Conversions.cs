@@ -1,6 +1,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UVWizard.Core.Baking;
 using UVWizard.Core.Budgets;
@@ -10,6 +11,13 @@ namespace UVWizard.Core.Pipeline
 {
     internal static partial class AvatarBaker
     {
+        /// <summary>
+        /// True for a renderer whose materials a bake converts for mobile: a mesh renderer that uploads. Other
+        /// renderers, such as particles, keep theirs, and the bake reports any that mobile doesn't allow.
+        /// </summary>
+        internal static bool ConvertsMaterialsOf(Renderer renderer) =>
+            renderer is MeshRenderer or SkinnedMeshRenderer && !TextureMemory.IsEditorOnly(renderer.transform);
+
         /// <summary>
         /// Gives each source material that stays on the avatar with a shader mobile doesn't allow its own material with
         /// the merged shader (ADR 0004), so the upload passes the SDK's shader check. Its channels are baked as the
@@ -24,35 +32,68 @@ namespace UVWizard.Core.Pipeline
             static readonly Vector4 Identity = new Vector4(1, 1, 0, 0);
 
             readonly BakeOptions options;
+            readonly IReadOnlyList<AnimatedSlot> animated;
+            // Each source seen, and what takes its place: its converted material, or itself when it can't be converted.
             readonly Dictionary<Material, Material> converted = new Dictionary<Material, Material>();
             readonly List<SlotNote> flagged = new List<SlotNote>();
 
-            public Conversions(BakeOptions options) => this.options = options;
+            public Conversions(BakeOptions options, IReadOnlyList<AnimatedSlot>? animated)
+            {
+                this.options = options;
+                this.animated = animated ?? System.Array.Empty<AnimatedSlot>();
+            }
+
+            /// <summary>The merged material, whose shared settings converted materials take. Null until it's made.</summary>
+            public Material? Merged { get; set; }
 
             /// <summary>Each source material converted so far, and its converted material.</summary>
             public List<(Material Source, Material Converted)> Made { get; } = new List<(Material, Material)>();
 
+            /// <summary>Slots left with a shader mobile doesn't allow, because their material can't be converted.</summary>
+            public List<SlotNote> Unconverted { get; } = new List<SlotNote>();
+
             /// <summary>
             /// The material that takes the source's place in the renderer's slot: its converted material, or the
-            /// source itself when mobile allows its shader, conversion is off, or the renderer isn't a mesh renderer.
+            /// source itself when mobile allows its shader, conversion is off, the renderer doesn't upload, or the
+            /// source can't be converted.
             /// </summary>
             public Material Of(Material source, Renderer renderer, int slot)
             {
-                if (options.MobileShaders == null || options.MobileShaders.Contains(source.shader.name) || !Converts(renderer))
+                if (options.MobileShaders == null || options.MobileShaders.Contains(source.shader.name)
+                    || TextureMemory.IsEditorOnly(renderer.transform))
                     return source;
-                if (!converted.TryGetValue(source, out var made))
+                if (!ConvertsMaterialsOf(renderer))
                 {
-                    converted.Add(source, made = Convert(source, renderer, slot));
-                    Made.Add((source, made));
+                    Leave(source, renderer, slot, "UV Wizard converts the materials of mesh renderers only.");
+                    return source;
                 }
+                if (converted.TryGetValue(source, out var made)) return made;
+                var reading = SourceShaderReader.Read(source);
+                // An add-on layer has no surface of its own: converted, it would paint over the one beneath.
+                if (reading.Albedo == null)
+                {
+                    converted.Add(source, source);
+                    Leave(source, renderer, slot, (reading.Reason != null ? reading.Reason + " " : "") +
+                                                  "It has no surface of its own to convert.");
+                    return source;
+                }
+                converted.Add(source, made = Convert(source, reading, renderer, slot));
+                Made.Add((source, made));
                 return made;
+            }
+
+            // Notes a source left on a slot with a shader mobile doesn't allow, once per source.
+            void Leave(Material source, Renderer renderer, int slot, string reason)
+            {
+                if (!Unconverted.Exists(note => note.Material == source))
+                    Unconverted.Add(new SlotNote(renderer, slot, source, reason));
             }
 
             /// <summary>
             /// Puts the converted materials on the renderers' slots, other than the merged material's, and converts
             /// the materials animations swap into excluded slots.
             /// </summary>
-            public void Apply(IReadOnlyList<Renderer> renderers, Material? merged, IReadOnlyList<AnimatedSlot>? animated)
+            public void Apply(IReadOnlyList<Renderer> renderers, Material? merged)
             {
                 if (options.MobileShaders == null) return;
                 var changes = new List<(Renderer Renderer, Material[] Materials)>();
@@ -83,7 +124,7 @@ namespace UVWizard.Core.Pipeline
                     }
                 foreach (var (renderer, materials) in changes) renderer.sharedMaterials = materials;
                 foreach (var (animator, controller) in detached) animator.runtimeAnimatorController = controller;
-                foreach (var slot in animated ?? System.Array.Empty<AnimatedSlot>())
+                foreach (var slot in animated)
                     if (slot.Slot is { } index)
                         foreach (var swapped in slot.SwappedIn)
                             if (swapped != null) Of(swapped, slot.Renderer, index);
@@ -97,21 +138,30 @@ namespace UVWizard.Core.Pipeline
                 return all;
             }
 
-            // Mesh renderers that upload: the SDK checks their shaders. Other renderers, such as particles, are left
-            // to the creator.
-            static bool Converts(Renderer renderer) =>
-                renderer is MeshRenderer or SkinnedMeshRenderer && !TextureMemory.IsEditorOnly(renderer.transform);
-
             // A material with the merged shader, set up as the merged material is, that draws what the source does.
-            Material Convert(Material source, Renderer renderer, int slot)
+            Material Convert(Material source, SourceMaterialReading reading, Renderer renderer, int slot)
             {
                 void Flag(string reason) => flagged.Add(new SlotNote(renderer, slot, source, reason));
-                var reading = SourceShaderReader.Read(source);
+                if (reading.Verdict == MaterialVerdict.Flagged && reading.Reason != null) Flag(reading.Reason);
+                if (animated.Any(a => a.Renderer == renderer && a.Slot == null))
+                    Flag("An animation changes this renderer's material properties, which its Toon Standard material " +
+                         "may not have, or may show differently.");
+
                 var material = new Material(options.MergedShader) { name = $"{source.name} (UV Wizard)" };
+                if (Merged != null)
+                    foreach (var property in options.RepresentativeProperties) CopyProperty(Merged, material, property);
+                else if (options.DefaultRamp != null && material.HasTexture(options.RampProperty))
+                    material.SetTexture(options.RampProperty, options.DefaultRamp);
                 if (material.HasColor("_Color")) material.SetColor("_Color", Color.white);
                 if (material.HasFloat("_VertexColor")) material.SetFloat("_VertexColor", reading.UsesVertexColour ? 1 : 0);
-                if (options.DefaultRamp != null && material.HasTexture(options.RampProperty))
-                    material.SetTexture(options.RampProperty, options.DefaultRamp);
+                // The source's own culling, under the merged shader's name or under lilToon's and Poiyomi's, which
+                // take the same values.
+                foreach (var cull in new[] { options.CullingProperty, "_Cull" })
+                    if (source.HasFloat(cull) && material.HasFloat(options.CullingProperty))
+                    {
+                        material.SetFloat(options.CullingProperty, source.GetFloat(cull));
+                        break;
+                    }
 
                 // The merged shader samples its main texture from UV0 only: a source sampling another keeps its colour.
                 var albedo = reading.Albedo;
@@ -141,9 +191,7 @@ namespace UVWizard.Core.Pipeline
                 {
                     var intensity = Intensity(emission.Tint);
                     strength = Mathf.Clamp(intensity, 1, MaxEmissionStrength);
-                    if (intensity > MaxEmissionStrength)
-                        Flag($"Its emission is {intensity:0.##} times full brightness, but its Toon Standard " +
-                             $"material's emission goes up to {MaxEmissionStrength}, so it glows less.");
+                    if (intensity > MaxEmissionStrength) Flag(GlowsLess(intensity, "its Toon Standard material"));
                 }
 
                 var albedoTexture = (options.Channels & Channels.Albedo) != 0 && albedo != null
@@ -185,13 +233,6 @@ namespace UVWizard.Core.Pipeline
                 if (options.Compress) AtlasCompressor.Compress(baked, AtlasSizing.Finest(channel, size)[channel]!.Value.Format);
                 baked.name = $"UV Wizard {channel} {source.name}";
                 return baked;
-            }
-
-            // The colour with its linear components divided by the divisor, as the Emission atlas holds it.
-            static Color Divided(Color colour, float divisor)
-            {
-                var linear = colour.linear;
-                return new Color(linear.r / divisor, linear.g / divisor, linear.b / divisor, linear.a).gamma;
             }
 
             static void ScaleOffset(Material material, string property, Vector4 st)

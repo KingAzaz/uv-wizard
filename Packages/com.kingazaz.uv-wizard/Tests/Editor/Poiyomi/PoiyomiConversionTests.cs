@@ -64,10 +64,12 @@ namespace UVWizard.Core.Tests.Poiyomi
             material.SetInt("_EmissionMapUV", 2);
             material.SetColor("_EmissionColor", Color.white);
             material.SetFloat("_EmissionStrength", 1);
+            material.SetFloat("_Cull", 0);
 
             var (converted, result) = Convert(material);
 
             Assert.That(converted.GetTexture("_EmissionMap"), Is.Null);
+            Assert.That(converted.GetFloat("_Culling"), Is.EqualTo(0), "double-sided, as Poiyomi drew it");
             Assert.That(result.Flagged.Select(note => note.Reason), Has.Some.Contains("emission isn't sampled from UV0 or UV1"));
         }
 
