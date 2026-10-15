@@ -336,21 +336,18 @@ namespace UVWizard.Core.Tests.Meshes
         [TestCase(false, false)]
         [TestCase(true, true)]
         [TestCase(true, false)]
-        public void TheOtherUvChannelsKeepTheSourcesDistributionMetric(bool split, bool splitVerticesStill)
+        public void Uv1KeepsTheSourcesDistributionMetric(bool split, bool splitVerticesStill)
         {
+            // Unity keeps a metric for UV0 and UV1 only.
             var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }), splitVerticesStill ? new[] { 1, 2 } : new int[0]);
-            for (var channel = 1; channel < 8; channel++) HalveUvs(source, channel);
-            source.RecalculateUVDistributionMetrics();
+            HalveUvs(source, 1);
+            source.RecalculateUVDistributionMetric(1);
 
             var result = Rewrite(source, split ? TwoCharts : OneChart);
 
-            Assume.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
-            for (var channel = 1; channel < 8; channel++)
-            {
-                Assume.That(source.GetUVDistributionMetric(channel), Is.Not.EqualTo(1).Within(1e-3f));
-                Assert.That(result.Mesh.GetUVDistributionMetric(channel),
-                    Is.EqualTo(source.GetUVDistributionMetric(channel)).Within(1e-4f), $"UV{channel}");
-            }
+            Assert.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            Assert.That(source.GetUVDistributionMetric(1), Is.Not.EqualTo(1).Within(1e-3f));
+            Assert.That(result.Mesh.GetUVDistributionMetric(1), Is.EqualTo(source.GetUVDistributionMetric(1)).Within(1e-4f));
         }
 
         [TestCase(false, false)]
@@ -358,17 +355,20 @@ namespace UVWizard.Core.Tests.Meshes
         [TestCase(true, false)]
         public void AMeshWithALineSubmeshKeepsTheSourcesUv0DistributionMetric(bool split, bool splitVerticesStill)
         {
-            // Unity can't recalculate the metric of a mesh with line submeshes.
-            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }), splitVerticesStill ? new[] { 1, 2 } : new int[0]);
+            // Unity can't recalculate the metric of a mesh with line submeshes. A line vertex keeps
+            // its own UV0, so a line over the triangles' vertices splits them: this one lies on
+            // vertex 3, which only the second triangle uses, so a single triangle splits nothing.
+            var source = Skinned(Square(split ? new[] { 0, 1, 2, 2, 1, 3 } : new[] { 0, 1, 2 }),
+                splitVerticesStill ? new[] { 1, 2, 3 } : new int[0]);
             HalveUvs(source, 0);
             source.RecalculateUVDistributionMetric(0);
             source.subMeshCount = 2;
-            source.SetIndices(new[] { 0, 3 }, MeshTopology.Lines, 1);
+            source.SetIndices(new[] { 3, 3 }, MeshTopology.Lines, 1);
 
-            var result = Rewrite(source, split ? TwoCharts : OneChart, null);
+            var result = Rewrite(source, split ? TwoCharts : new[] { A0, A1, A2 }, null);
 
-            Assume.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
-            Assume.That(source.GetUVDistributionMetric(0), Is.Not.EqualTo(1).Within(1e-3f));
+            Assert.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            Assert.That(source.GetUVDistributionMetric(0), Is.Not.EqualTo(1).Within(1e-3f));
             Assert.That(result.Mesh.GetUVDistributionMetric(0), Is.EqualTo(source.GetUVDistributionMetric(0)).Within(1e-4f));
         }
 
