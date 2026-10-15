@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UVWizard.Core.Pipeline;
 using UVWizard.Core.Reporting;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.NDMF
 {
@@ -43,8 +42,8 @@ namespace UVWizard.NDMF
         public ReportFigures? After { get; set; }
         public IReadOnlyList<LeftoverRenderer>? Leftovers { get; set; }
 
-        /// <summary>The objects animations turn on or off, and the renderers they enable or disable.</summary>
-        public ISet<Object> Toggled { get; set; } = new HashSet<Object>();
+        /// <summary>The objects animations turn on or off.</summary>
+        public ISet<GameObject> Toggled { get; set; } = new HashSet<GameObject>();
 
         /// <summary>True once the bake has run, so later passes know there's a report to finish.</summary>
         public bool Baked { get; set; }

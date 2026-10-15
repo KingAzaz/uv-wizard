@@ -6,7 +6,6 @@ using System.Linq;
 using nadena.dev.ndmf.animator;
 using UnityEditor;
 using UnityEngine;
-using Object = UnityEngine.Object;
 using UVWizard.Core.Pipeline;
 
 namespace UVWizard.NDMF
@@ -62,24 +61,17 @@ namespace UVWizard.NDMF
         }
 
         /// <summary>
-        /// The objects the avatar's animations turn on or off, and the renderers they enable or disable. Avatar
-        /// Optimizer keeps such renderers out of the merge (ADR 0001).
+        /// The objects the avatar's animations turn on or off. Avatar Optimizer keeps renderers on or under them out of
+        /// the merge (ADR 0001). It does merge a renderer whose enabled flag is animated, so those don't count.
         /// </summary>
-        public static HashSet<Object> Toggled(AnimatorServicesContext animators, GameObject root)
+        public static HashSet<GameObject> Toggled(AnimatorServicesContext animators, GameObject root)
         {
-            var toggled = new HashSet<Object>();
+            var toggled = new HashSet<GameObject>();
             foreach (var (clip, resolve) in Clips(animators, root))
                 foreach (var binding in clip.GetFloatCurveBindings())
-                {
-                    if (binding.type == typeof(GameObject) && binding.propertyName == "m_IsActive")
-                    {
-                        if (resolve(binding.path) is { } target) toggled.Add(target);
-                    }
-                    else if (binding.propertyName == "m_Enabled" && binding.type != null
-                             && typeof(Renderer).IsAssignableFrom(binding.type)
-                             && resolve(binding.path) is { } owner && owner.TryGetComponent(binding.type, out var renderer))
-                        toggled.Add(renderer);
-                }
+                    if (binding.type == typeof(GameObject) && binding.propertyName == "m_IsActive"
+                        && resolve(binding.path) is { } target)
+                        toggled.Add(target);
             return toggled;
         }
 

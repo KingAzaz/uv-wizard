@@ -66,6 +66,7 @@ namespace UVWizard.NDMF.Tests
             Assert.That(clone.GetComponentsInChildren<Renderer>().SelectMany(r => r.sharedMaterials).Select(m => m.shader.name),
                 Has.All.EqualTo(ToonStandardName), "the clone is baked as for mobile");
             Assert.That(BakeReports.Latest!.MobilePreview, Is.True);
+            Assert.That(BakeReports.Latest.AvatarName, Is.EqualTo("Avatar"), "the clone's name, without (Clone)");
             Assert.That(BakeReports.Latest.Heading.Key, Is.EqualTo(ReportText.MobilePreviewHeading));
         }
 

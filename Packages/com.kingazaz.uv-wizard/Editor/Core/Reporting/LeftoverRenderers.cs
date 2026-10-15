@@ -21,10 +21,8 @@ namespace UVWizard.Core.Reporting
         /// MMD worlds or a toggle unless nothing else is skinned.
         /// </summary>
         /// <param name="root">The avatar root, as the build leaves it.</param>
-        /// <param name="toggled">
-        /// The objects animations turn on or off, and the renderers they enable or disable.
-        /// </param>
-        public static List<LeftoverRenderer> Find(GameObject root, ISet<Object> toggled)
+        /// <param name="toggled">The objects animations turn on or off.</param>
+        public static List<LeftoverRenderer> Find(GameObject root, ISet<GameObject> toggled)
         {
             var renderers = new List<Renderer>();
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
@@ -47,7 +45,7 @@ namespace UVWizard.Core.Reporting
             return leftovers;
         }
 
-        static LeftoverReason Reason(Renderer renderer, GameObject root, SkinnedMeshRenderer? main, ISet<Object> toggled)
+        static LeftoverReason Reason(Renderer renderer, GameObject root, SkinnedMeshRenderer? main, ISet<GameObject> toggled)
         {
             if (IsMmdBody(renderer, root)) return LeftoverReason.MmdBody;
             if (IsToggled(renderer, root, toggled)) return LeftoverReason.Toggle;
@@ -60,10 +58,9 @@ namespace UVWizard.Core.Reporting
         static bool IsMmdBody(Renderer renderer, GameObject root) =>
             renderer is SkinnedMeshRenderer && renderer.name == MmdBodyName && renderer.transform.parent == root.transform;
 
-        // True when an animation enables the renderer, or turns its object or one above it on or off.
-        static bool IsToggled(Renderer renderer, GameObject root, ISet<Object> toggled)
+        // True when an animation turns the renderer's object, or one above it, on or off.
+        static bool IsToggled(Renderer renderer, GameObject root, ISet<GameObject> toggled)
         {
-            if (toggled.Contains(renderer)) return true;
             for (var transform = renderer.transform; transform != null && transform != root.transform; transform = transform.parent)
                 if (toggled.Contains(transform.gameObject)) return true;
             return false;

@@ -38,7 +38,7 @@ namespace UVWizard.Core.Tests.Reporting
         {
             Skinned("Merged", root.transform, vertices: 100);
 
-            Assert.That(LeftoverRenderers.Find(root, new HashSet<Object>()), Is.Empty);
+            Assert.That(LeftoverRenderers.Find(root, new HashSet<GameObject>()), Is.Empty);
         }
 
         [Test]
@@ -77,7 +77,7 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
-        public void AToggledRendererOrOneUnderAToggledObjectIsKeptForItsToggle()
+        public void AToggledMeshOrOneUnderAToggledObjectIsKeptForItsToggle()
         {
             Skinned("Merged", root.transform, vertices: 100);
             var toggles = new GameObject("Toggles");
@@ -85,7 +85,7 @@ namespace UVWizard.Core.Tests.Reporting
             var glasses = Skinned("Glasses", toggles.transform, vertices: 10);
             var hat = Skinned("Hat", root.transform, vertices: 10);
 
-            Assert.That(Reasons(toggles, hat), Is.EqualTo(new[]
+            Assert.That(Reasons(toggles, hat.gameObject), Is.EqualTo(new[]
             {
                 (glasses as Renderer, LeftoverReason.Toggle),
                 (hat, LeftoverReason.Toggle),
@@ -137,8 +137,8 @@ namespace UVWizard.Core.Tests.Reporting
             Assert.That(Reasons(), Is.Empty);
         }
 
-        (Renderer, LeftoverReason)[] Reasons(params Object[] toggled) =>
-            LeftoverRenderers.Find(root, new HashSet<Object>(toggled)).Select(l => (l.Renderer, l.Reason)).ToArray();
+        (Renderer, LeftoverReason)[] Reasons(params GameObject[] toggled) =>
+            LeftoverRenderers.Find(root, new HashSet<GameObject>(toggled)).Select(l => (l.Renderer, l.Reason)).ToArray();
 
         SkinnedMeshRenderer Skinned(string name, Transform parent, int vertices)
         {
