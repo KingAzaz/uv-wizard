@@ -15,7 +15,7 @@ namespace UVWizard.NDMF
         public static void Open()
         {
             var window = GetWindow<BakeReportWindow>();
-            window.titleContent = new GUIContent(Text(ReportText.WindowTitle));
+            window.titleContent = new GUIContent(Messages.Text(ReportText.WindowTitle));
             window.Show();
         }
 
@@ -34,21 +34,21 @@ namespace UVWizard.NDMF
         {
             if (BakeReports.Latest is not { } report)
             {
-                EditorGUILayout.HelpBox(Text(ReportText.NoReport), MessageType.Info);
+                EditorGUILayout.HelpBox(Messages.Text(ReportText.NoReport), MessageType.Info);
                 return;
             }
 
             scroll = EditorGUILayout.BeginScrollView(scroll);
-            EditorGUILayout.LabelField(report.Heading.Text(Text), EditorStyles.boldLabel);
-            if (report.MobilePreview) EditorGUILayout.HelpBox(Text(ReportText.PreviewNote), MessageType.Warning);
+            EditorGUILayout.LabelField(report.Heading.Text(Messages.Text), EditorStyles.boldLabel);
+            if (report.MobilePreview) EditorGUILayout.HelpBox(Messages.Text(ReportText.PreviewNote), MessageType.Warning);
 
             Header(ReportText.FiguresHeader);
             Figures(report);
             if (report.Target is { } target)
-                EditorGUILayout.LabelField(string.Format(Text(ReportText.Target), Text(ReportText.Rank(target))));
+                EditorGUILayout.LabelField(string.Format(Messages.Text(ReportText.Target), Messages.Text(ReportText.Rank(target))));
 
             Header(ReportText.PackingHeader);
-            foreach (var line in report.PackingLines) Wrapped(line.Text(Text));
+            foreach (var line in report.PackingLines) Wrapped(line.Text(Messages.Text));
 
             Materials(report, MaterialOutcome.Excluded, ReportText.ExcludedHeader);
             Materials(report, MaterialOutcome.Flagged, ReportText.FlaggedHeader);
@@ -58,8 +58,8 @@ namespace UVWizard.NDMF
                 Header(ReportText.LeftoversHeader);
                 foreach (var leftover in report.Leftovers)
                 {
-                    ObjectButton(leftover.Renderer, leftover.Renderer != null ? leftover.Renderer.name : "");
-                    Wrapped(leftover.Line.Text(Text));
+                    ObjectButton(leftover.Renderer, leftover.Name);
+                    Wrapped(leftover.Line.Text(Messages.Text));
                 }
             }
             EditorGUILayout.EndScrollView();
@@ -67,22 +67,22 @@ namespace UVWizard.NDMF
 
         static void Figures(BakeReport report)
         {
-            Row("", Text(ReportText.BeforeColumn), Text(ReportText.AfterColumn), EditorStyles.miniBoldLabel);
-            Row(Text(ReportText.MaterialSlotsRow), Figure(report.Before, f => f.MaterialSlots.ToString()),
+            Row("", Messages.Text(ReportText.BeforeColumn), Messages.Text(ReportText.AfterColumn), EditorStyles.miniBoldLabel);
+            Row(Messages.Text(ReportText.MaterialSlotsRow), Figure(report.Before, f => f.MaterialSlots.ToString()),
                 Figure(report.After, f => f.MaterialSlots.ToString()));
-            Row(Text(ReportText.SkinnedMeshesRow), Figure(report.Before, f => f.SkinnedMeshes.ToString()),
+            Row(Messages.Text(ReportText.SkinnedMeshesRow), Figure(report.Before, f => f.SkinnedMeshes.ToString()),
                 Figure(report.After, f => f.SkinnedMeshes.ToString()));
-            Row(Text(ReportText.MeshesRow), Figure(report.Before, f => f.Meshes.ToString()),
+            Row(Messages.Text(ReportText.MeshesRow), Figure(report.Before, f => f.Meshes.ToString()),
                 Figure(report.After, f => f.Meshes.ToString()));
-            Row(Text(ReportText.TextureMemoryRow), Figure(report.Before, Megabytes), Figure(report.After, Megabytes));
-            Row(Text(ReportText.RankRow), Figure(report.Before, f => Text(ReportText.Rank(f.Rank))),
-                Figure(report.After, f => Text(ReportText.Rank(f.Rank))));
+            Row(Messages.Text(ReportText.TextureMemoryRow), Figure(report.Before, Megabytes), Figure(report.After, Megabytes));
+            Row(Messages.Text(ReportText.RankRow), Figure(report.Before, f => Messages.Text(ReportText.Rank(f.Rank))),
+                Figure(report.After, f => Messages.Text(ReportText.Rank(f.Rank))));
         }
 
-        static string Megabytes(ReportFigures figures) => string.Format(Text(ReportText.Megabytes), figures.TextureMegabytes);
+        static string Megabytes(ReportFigures figures) => string.Format(Messages.Text(ReportText.Megabytes), figures.TextureMegabytes);
 
         static string Figure(ReportFigures? figures, System.Func<ReportFigures, string> show) =>
-            figures != null ? show(figures) : Text(ReportText.NotMeasured);
+            figures != null ? show(figures) : Messages.Text(ReportText.NotMeasured);
 
         static void Row(string label, string before, string after, GUIStyle? style = null)
         {
@@ -104,8 +104,8 @@ namespace UVWizard.NDMF
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     ObjectButton(row.Material, row.Material != null ? row.Material.name : "");
-                    foreach (var renderer in row.Renderers)
-                        ObjectButton(renderer, renderer != null ? renderer.name : "");
+                    for (var r = 0; r < row.Renderers.Count; r++)
+                        ObjectButton(row.Renderers[r], row.RendererNames[r]);
                 }
                 Wrapped(row.Reason);
             }
@@ -122,11 +122,9 @@ namespace UVWizard.NDMF
         static void Header(string key)
         {
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField(Text(key), EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(Messages.Text(key), EditorStyles.boldLabel);
         }
 
         static void Wrapped(string text) => EditorGUILayout.LabelField(text, EditorStyles.wordWrappedLabel);
-
-        static string Text(string key) => Messages.Localizer.GetLocalizedString(key);
     }
 }

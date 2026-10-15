@@ -45,6 +45,12 @@ namespace UVWizard.NDMF
         /// <summary>The objects animations turn on or off.</summary>
         public ISet<GameObject> Toggled { get; set; } = new HashSet<GameObject>();
 
+        /// <summary>
+        /// True when the avatar's Trace and Optimize keeps a Body mesh apart for MMD worlds. False without one, since
+        /// then nothing merges the meshes.
+        /// </summary>
+        public bool MmdWorldCompatibility { get; set; }
+
         /// <summary>True once the bake has run, so later passes know there's a report to finish.</summary>
         public bool Baked { get; set; }
 

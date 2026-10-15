@@ -142,6 +142,29 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void ALeftoverStillNamesItsRendererOnceTheBuildsCloneIsGone()
+        {
+            var hat = Renderer("Hat");
+            var leftover = new LeftoverRenderer(hat, LeftoverReason.StaticMesh);
+
+            Object.DestroyImmediate(hat.gameObject);
+
+            Assert.That(leftover.Line.Args, Is.EqualTo(new object[] { "Hat" }));
+        }
+
+        [Test]
+        public void AMaterialRowStillNamesItsRenderersOnceTheBuildsCloneIsGone()
+        {
+            var body = Renderer("Body");
+            var report = new BakeReport("Avatar", false,
+                Merged(flagged: new[] { new SlotNote(body, 0, Material("Glass"), "It's transparent.") }), null);
+
+            Object.DestroyImmediate(body.gameObject);
+
+            Assert.That(report.Materials[0].RendererNames, Is.EqualTo(new[] { "Body" }));
+        }
+
+        [Test]
         public void ALineReadsItsTemplateFromTheLookupAndFillsInItsArguments()
         {
             var line = new ReportLine("some.key", "Hat", 3);

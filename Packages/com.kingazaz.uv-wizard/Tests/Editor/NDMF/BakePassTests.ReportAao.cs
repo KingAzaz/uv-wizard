@@ -2,8 +2,10 @@
 
 #if UVWIZARD_AAO
 using System.Linq;
+using Anatawa12.AvatarOptimizer;
 using nadena.dev.ndmf;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UVWizard.Core.Reporting;
 using VRC.SDKBase.Validation.Performance;
@@ -63,6 +65,28 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void WithTheAvatarsOwnTraceAndOptimizeOffForMmdABodyMeshGetsItsRealReason()
+        {
+            // The Body is skinned to another root bone, so it stays apart for that, not for MMD worlds.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var own = new SerializedObject(avatar.AddComponent<TraceAndOptimize>());
+            own.FindProperty("mmdWorldCompatibility").boolValue = false;
+            own.ApplyModifiedPropertiesWithoutUndo();
+            var head = new GameObject("Head").transform;
+            head.SetParent(avatar.transform.Find("Armature/Hips"));
+            var body = Skinned(avatar, "Body", head, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Renderer, Is.SameAs(body));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("BoundsOrRootBone"));
+        }
+
+        [Test]
         public void AMeshNamedTorsoIsntTakenForTheMmdBody()
         {
             var avatar = MergeableAvatar(addTraceAndOptimize: true);
@@ -78,7 +102,7 @@ namespace UVWizard.NDMF.Tests
 
             Assert.That(BakeReports.Latest!.Leftovers.Count, Is.EqualTo(1));
             Assert.That(BakeReports.Latest.Leftovers[0].Renderer, Is.SameAs(apart));
-            Assert.That(BakeReports.Latest.Leftovers[0].Reason.ToString(), Is.Not.EqualTo("MmdBody"));
+            Assert.That(BakeReports.Latest.Leftovers[0].Reason.ToString(), Is.EqualTo("BoundsOrRootBone"));
         }
     }
 }

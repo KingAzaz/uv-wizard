@@ -22,18 +22,24 @@ namespace UVWizard.Core.Reporting
         /// </summary>
         /// <param name="root">The avatar root, as the build leaves it.</param>
         /// <param name="toggled">The objects animations turn on or off.</param>
-        public static List<LeftoverRenderer> Find(GameObject root, ISet<GameObject> toggled)
+        /// <param name="mmdWorldCompatibility">
+        /// True when the avatar's Trace and Optimize keeps a Body mesh apart for MMD worlds.
+        /// </param>
+        public static List<LeftoverRenderer> Find(GameObject root, ISet<GameObject> toggled, bool mmdWorldCompatibility)
         {
+            // Only meshes count towards the SDK's mesh figures; particles, trails and lines don't.
             var renderers = new List<Renderer>();
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
-                if (!TextureMemory.IsEditorOnly(renderer.transform)) renderers.Add(renderer);
+                if (renderer is SkinnedMeshRenderer or MeshRenderer && !TextureMemory.IsEditorOnly(renderer.transform))
+                    renderers.Add(renderer);
+            bool KeptForMmd(Renderer renderer) => mmdWorldCompatibility && IsMmdBody(renderer, root);
 
             SkinnedMeshRenderer? main = null, fallback = null;
             foreach (var renderer in renderers)
             {
                 if (renderer is not SkinnedMeshRenderer skinned) continue;
                 if (fallback == null || Vertices(skinned) > Vertices(fallback)) fallback = skinned;
-                if (!IsMmdBody(skinned, root) && !IsToggled(skinned, root, toggled)
+                if (!KeptForMmd(skinned) && !IsToggled(skinned, root, toggled)
                     && (main == null || Vertices(skinned) > Vertices(main)))
                     main = skinned;
             }
@@ -41,13 +47,14 @@ namespace UVWizard.Core.Reporting
 
             var leftovers = new List<LeftoverRenderer>();
             foreach (var renderer in renderers)
-                if (renderer != main) leftovers.Add(new LeftoverRenderer(renderer, Reason(renderer, root, main, toggled)));
+                if (renderer != main)
+                    leftovers.Add(new LeftoverRenderer(renderer,
+                        KeptForMmd(renderer) ? LeftoverReason.MmdBody : Reason(renderer, root, main, toggled)));
             return leftovers;
         }
 
         static LeftoverReason Reason(Renderer renderer, GameObject root, SkinnedMeshRenderer? main, ISet<GameObject> toggled)
         {
-            if (IsMmdBody(renderer, root)) return LeftoverReason.MmdBody;
             if (IsToggled(renderer, root, toggled)) return LeftoverReason.Toggle;
             if (renderer is not SkinnedMeshRenderer skinned) return LeftoverReason.StaticMesh;
             if (main != null && (skinned.rootBone != main.rootBone || skinned.localBounds != main.localBounds))

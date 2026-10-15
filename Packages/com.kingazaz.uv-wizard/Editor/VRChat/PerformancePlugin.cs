@@ -31,7 +31,7 @@ namespace UVWizard.VRChat
                 .BeforePlugin("com.kingazaz.uv-wizard")
                 .Run("Measure before the bake", context =>
                 {
-                    if (Marked(context)) context.GetState<ReportDraft>().Before = Measure(context.AvatarRootObject);
+                    if (Bakes(context)) context.GetState<ReportDraft>().Before = Measure(context.AvatarRootObject);
                 });
             InPhase(BuildPhase.Optimizing)
                 .AfterPlugin("com.kingazaz.uv-wizard")
@@ -43,12 +43,13 @@ namespace UVWizard.VRChat
                     if (!draft.Baked) return;
                     var root = context.AvatarRootObject;
                     draft.After = Measure(root);
-                    draft.Leftovers = LeftoverRenderers.Find(root, draft.Toggled);
+                    draft.Leftovers = LeftoverRenderers.Find(root, draft.Toggled, draft.MmdWorldCompatibility);
                     draft.Publish(root);
                 });
         }
 
-        static bool Marked(BuildContext context) =>
+        // The bake's own condition: a mobile build of an avatar with the UV Wizard component.
+        static bool Bakes(BuildContext context) =>
             MobileBuild.IsActive && context.AvatarRootObject.GetComponentInChildren<UVWizardAvatar>(true) != null;
 
         /// <summary>The SDK's mobile performance stats for the avatar as it stands.</summary>

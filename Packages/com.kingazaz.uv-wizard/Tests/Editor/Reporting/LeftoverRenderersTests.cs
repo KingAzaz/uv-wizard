@@ -38,7 +38,7 @@ namespace UVWizard.Core.Tests.Reporting
         {
             Skinned("Merged", root.transform, vertices: 100);
 
-            Assert.That(LeftoverRenderers.Find(root, new HashSet<GameObject>()), Is.Empty);
+            Assert.That(LeftoverRenderers.Find(root, new HashSet<GameObject>(), mmdWorldCompatibility: true), Is.Empty);
         }
 
         [Test]
@@ -128,6 +128,34 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void WithMmdWorldCompatibilityOffABodyMeshIsJustAnotherMesh()
+        {
+            Skinned("Merged", root.transform, vertices: 100);
+            var body = Skinned("Body", root.transform, vertices: 10);
+
+            Assert.That(LeftoverRenderers.Find(root, new HashSet<GameObject>(), mmdWorldCompatibility: false)
+                .Select(l => (l.Renderer, l.Reason)), Is.EqualTo(new[] { (body as Renderer, LeftoverReason.Other) }));
+        }
+
+        [Test]
+        public void AnAvatarWhoseOnlySkinnedMeshIsItsBodyHasNoLeftovers()
+        {
+            Skinned("Body", root.transform, vertices: 10);
+
+            Assert.That(Reasons(), Is.Empty);
+        }
+
+        [Test]
+        public void ParticleTrailAndLineRenderersArentMeshesAndAreLeftOut()
+        {
+            Skinned("Merged", root.transform, vertices: 100);
+            foreach (var type in new[] { typeof(ParticleSystem), typeof(TrailRenderer), typeof(LineRenderer) })
+                new GameObject(type.Name, type).transform.SetParent(root.transform);
+
+            Assert.That(Reasons(), Is.Empty);
+        }
+
+        [Test]
         public void ARendererThatDoesntUploadIsLeftOut()
         {
             Skinned("Merged", root.transform, vertices: 100);
@@ -138,7 +166,7 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         (Renderer, LeftoverReason)[] Reasons(params GameObject[] toggled) =>
-            LeftoverRenderers.Find(root, new HashSet<GameObject>(toggled)).Select(l => (l.Renderer, l.Reason)).ToArray();
+            LeftoverRenderers.Find(root, new HashSet<GameObject>(toggled), mmdWorldCompatibility: true).Select(l => (l.Renderer, l.Reason)).ToArray();
 
         SkinnedMeshRenderer Skinned(string name, Transform parent, int vertices)
         {

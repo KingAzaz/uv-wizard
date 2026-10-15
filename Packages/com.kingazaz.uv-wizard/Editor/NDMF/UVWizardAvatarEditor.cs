@@ -17,9 +17,9 @@ namespace UVWizard.NDMF
             EditorGUILayout.Space();
 
             var root = RuntimeUtil.FindAvatarInParents(((Component)target).transform);
-            if (root == null) EditorGUILayout.HelpBox(Text(ReportText.NotAnAvatar), MessageType.Warning);
+            if (root == null) EditorGUILayout.HelpBox(Messages.Text(ReportText.NotAnAvatar), MessageType.Warning);
             using (new EditorGUI.DisabledScope(root == null))
-                if (GUILayout.Button(Text(ReportText.ManualBakeButton)) && root != null)
+                if (GUILayout.Button(Messages.Text(ReportText.ManualBakeButton)) && root != null)
                 {
                     ManualBake.Run(root.gameObject);
                     BakeReportWindow.Open();
@@ -27,9 +27,7 @@ namespace UVWizard.NDMF
                     GUIUtility.ExitGUI();
                 }
             using (new EditorGUI.DisabledScope(BakeReports.Latest == null))
-                if (GUILayout.Button(Text(ReportText.OpenReportButton))) BakeReportWindow.Open();
+                if (GUILayout.Button(Messages.Text(ReportText.OpenReportButton))) BakeReportWindow.Open();
         }
-
-        static string Text(string key) => Messages.Localizer.GetLocalizedString(key);
     }
 }

@@ -143,12 +143,17 @@ namespace UVWizard.Core.Reporting
             Outcome = outcome;
             Material = material;
             Renderers = renderers;
+            RendererNames = renderers.Select(renderer => renderer.name).ToList();
             Reason = reason;
         }
 
         public MaterialOutcome Outcome { get; }
         public Material Material { get; }
+        /// <summary>The renderers, which are gone once the build's clone is.</summary>
         public IReadOnlyList<Renderer> Renderers { get; }
+
+        /// <summary>The renderers' names, kept for when the renderers are gone.</summary>
+        public IReadOnlyList<string> RendererNames { get; }
         public string Reason { get; }
     }
 
@@ -177,10 +182,15 @@ namespace UVWizard.Core.Reporting
         public LeftoverRenderer(Renderer renderer, LeftoverReason reason)
         {
             Renderer = renderer;
+            Name = renderer.name;
             Reason = reason;
         }
 
+        /// <summary>The renderer, which is gone once the build's clone is.</summary>
         public Renderer Renderer { get; }
+
+        /// <summary>The renderer's name, kept for when the renderer is gone.</summary>
+        public string Name { get; }
         public LeftoverReason Reason { get; }
 
         /// <summary>The line naming the renderer and why it was kept apart.</summary>
@@ -191,7 +201,7 @@ namespace UVWizard.Core.Reporting
             LeftoverReason.StaticMesh => ReportText.LeftoverStaticMesh,
             LeftoverReason.BoundsOrRootBone => ReportText.LeftoverBoundsOrRootBone,
             _ => ReportText.LeftoverOther,
-        }, Renderer.name);
+        }, Name);
 
         public bool Equals(LeftoverRenderer other) => Renderer == other.Renderer && Reason == other.Reason;
         public override bool Equals(object? obj) => obj is LeftoverRenderer other && Equals(other);

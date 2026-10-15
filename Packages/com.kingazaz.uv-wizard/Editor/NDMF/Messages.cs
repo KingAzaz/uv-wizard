@@ -51,8 +51,8 @@ namespace UVWizard.NDMF
                 "Other tools and the source textures keep their PC settings, so the figures are an estimate. Switch " +
                 "the project to Android or iOS for exact ones."),
             (ReportText.ExactPacker, "The atlas kept {0}% of the source textures' detail."),
-            (ReportText.ShelfPacker, "The atlas kept {0}% of the source textures' detail. The avatar has so many " +
-                "texture pieces that UV Wizard packed them as rectangles, which leaves more space unused."),
+            (ReportText.ShelfPacker, "The atlas kept {0}% of the source textures' detail. The avatar's textures " +
+                "are split into so many parts that UV Wizard packed them as rectangles, which leaves more space unused."),
             (ReportText.RanOutOfTime, "UV Wizard stopped looking for a tighter fit when its time ran out. A faster " +
                 "computer may keep more detail."),
             (ReportText.NothingMerged, "Nothing was merged, so the avatar's materials are as they were."),
@@ -92,6 +92,9 @@ namespace UVWizard.NDMF
             (ReportText.Rank(PerformanceRank.Poor), "Poor"),
             (ReportText.Rank(PerformanceRank.VeryPoor), "Very Poor"),
         };
+
+        /// <summary>The text for a key in the editor's language.</summary>
+        public static string Text(string key) => Localizer.GetLocalizedString(key);
 
         public static readonly Localizer Localizer = new Localizer("en-US", () =>
             new List<(string, Func<string, string>)> { ("en-US", Lookup(English)!) });
