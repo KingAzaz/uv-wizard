@@ -110,9 +110,7 @@ namespace UVWizard.Core.Pipeline
                 var material = new Material(options.MergedShader) { name = $"{source.name} (UV Wizard)" };
                 if (material.HasColor("_Color")) material.SetColor("_Color", Color.white);
                 if (material.HasFloat("_VertexColor")) material.SetFloat("_VertexColor", reading.UsesVertexColour ? 1 : 0);
-                if (source.shader == options.MergedShader)
-                    foreach (var property in options.RepresentativeProperties) CopyProperty(source, material, property);
-                else if (options.DefaultRamp != null && material.HasTexture(options.RampProperty))
+                if (options.DefaultRamp != null && material.HasTexture(options.RampProperty))
                     material.SetTexture(options.RampProperty, options.DefaultRamp);
 
                 // The merged shader samples its main texture from UV0 only: a source sampling another keeps its colour.

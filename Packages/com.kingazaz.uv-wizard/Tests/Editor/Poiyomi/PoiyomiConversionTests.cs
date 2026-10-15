@@ -39,6 +39,8 @@ namespace UVWizard.Core.Tests.Poiyomi
             material.SetFloat("_EmissionStrength", 1);
             material.SetTexture("_BumpMap", Texture());
             material.SetInt("_BumpMapUV", 2);
+            material.SetFloat("_MainVertexColoringEnabled", 1);
+            material.SetFloat("_MainVertexColoring", 1);
 
             var (converted, result) = Convert(material);
 
@@ -48,6 +50,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             Assert.That(converted.GetFloat("_EmissionUV"), Is.EqualTo(1), "Toon Standard samples emission from UV1 too");
             Assert.That(converted.GetTexture("_EmissionMap"), Is.Not.Null);
             Assert.That(converted.GetTexture("_BumpMap"), Is.Null);
+            Assert.That(converted.GetFloat("_VertexColor"), Is.EqualTo(1), "Poiyomi multiplies in vertex colour");
             Assert.That(result.Flagged.Select(note => note.Reason), Has.Some.Contains("main texture isn't sampled from UV0")
                 .And.Some.Contains("normal map isn't sampled from UV0"));
         }

@@ -67,6 +67,41 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void LinesAndRenderersThatDontUploadKeepTheirMaterials()
+        {
+            var editorOnly = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }), Standard(Gradient(16, 1), Color.white));
+            editorOnly.tag = "EditorOnly";
+            var line = Keep(new GameObject("line")).AddComponent<LineRenderer>();
+            var drawn = Standard(Gradient(16, 2), Color.white);
+            line.sharedMaterials = new[] { drawn };
+            var kept = editorOnly.sharedMaterial;
+
+            var result = Bake(Converting(), editorOnly, line);
+
+            Assert.That(editorOnly.sharedMaterial, Is.SameAs(kept));
+            Assert.That(line.sharedMaterial, Is.SameAs(drawn));
+            Assert.That(result.ConvertedMaterials, Is.Empty);
+        }
+
+        // The channels as an int: the enum is internal, and a test's parameters must be public.
+        [TestCase((int)Channels.Albedo)]
+        [TestCase((int)(Channels.Emission | Channels.Normal))]
+        public void ChannelsTurnedOffArentBakedIntoConvertedMaterials(int on)
+        {
+            var channels = (Channels)on;
+            var source = NormalMapped(Emitting(Standard(Gradient(16, 1), Color.white), Gradient(16, 3), Color.white),
+                NormalGradient(16, 1), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }), source);
+
+            Bake(Converting(channels: channels), renderer);
+
+            var converted = renderer.sharedMaterial;
+            Assert.That(converted.mainTexture != null, Is.EqualTo((channels & Channels.Albedo) != 0), "albedo");
+            Assert.That(converted.GetTexture("_EmissionMap") != null, Is.EqualTo((channels & Channels.Emission) != 0), "emission");
+            Assert.That(converted.GetTexture("_BumpMap") != null, Is.EqualTo((channels & Channels.Normal) != 0), "normal");
+        }
+
+        [Test]
         public void ARendererWithNothingToMergeStillHasItsMaterialsConverted()
         {
             var repeated = Standard(Gradient(16, 1), Color.white);
@@ -154,9 +189,9 @@ namespace UVWizard.Core.Tests.Pipeline
 
         // Standard as the merged shader, converting every material whose shader isn't one of the given ones.
         static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Budget? budget = null,
-            string[]? mobileShaders = null) =>
+            string[]? mobileShaders = null, Channels channels = Channels.All) =>
             new BakeOptions(Shader.Find("Standard"), atlasSize, padding: 0, compress, normalMapKeyword: "_NORMALMAP",
-                normalEncoding: NormalEncoding.RGorAG, budget: budget,
+                normalEncoding: NormalEncoding.RGorAG, budget: budget, channels: channels,
                 mobileShaders: mobileShaders ?? System.Array.Empty<string>());
     }
 }
