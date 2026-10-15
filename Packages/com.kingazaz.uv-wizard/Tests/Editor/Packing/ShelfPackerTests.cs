@@ -144,6 +144,35 @@ namespace UVWizard.Core.Tests.Packing
         }
 
         [Test]
+        public void AChartAwayFromTheOriginLandsAtItsBoxsCell()
+        {
+            // At scale 0.5 on an 8 px grid, the 40 px square takes cells 0 to 2, so the 20 px square
+            // texels away from the origin starts at cell 3, 24 px in.
+            var away = new ChartShape(Rectangle(20, 20).Corners.Select(c => c + new Vector2(100, 100)).ToArray());
+            var charts = new[] { Rectangle(40, 40), away };
+
+            var result = ShelfPacker.Pack(charts, 0.5f, new PackSettings(atlasSize: 64, padding: 0, blockSize: 8));
+
+            Assert.That(result.Fits, Is.True);
+            var corners = away.Corners.Select(c => result.Placements[1].ToAtlas(c)).ToArray();
+            Assert.That(new Vector2(corners.Min(c => c.x), corners.Min(c => c.y)), Is.EqualTo(new Vector2(24, 0)));
+        }
+
+        [Test]
+        public void TheSameChartsGiveTheSamePlacements()
+        {
+            var rng = new System.Random(3);
+            var charts = Enumerable.Range(0, 40).Select(_ => Irregular(rng)).ToArray();
+            var settings = new PackSettings(atlasSize: 256, padding: 4);
+
+            var first = ShelfPacker.Pack(charts, 0.5f, settings);
+            var second = ShelfPacker.Pack(charts, 0.5f, settings);
+
+            Assert.That(first.Fits, Is.True);
+            Assert.That(second.Placements, Is.EqualTo(first.Placements));
+        }
+
+        [Test]
         public void ManyIrregularChartsStayInsideAndApart()
         {
             // As for the exact packer: 80 lopsided charts in a 512 px atlas, with a padding that

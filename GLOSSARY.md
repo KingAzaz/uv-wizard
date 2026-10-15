@@ -33,7 +33,7 @@ How strongly a chart resists shrinking when the atlas is over budget. Charts on 
 _Avoid_: Importance, weight, size priority
 
 **Packing**:
-Choosing where each chart sits in the atlas, and at what scale and rotation, using each chart's exact shape rather than its bounding box.
+Choosing where each chart sits in the atlas, and at what scale and rotation. The exact packer uses each chart's exact shape; the shelf packer, its fallback for very many charts or when the exact packer does no better, uses bounding boxes.
 _Avoid_: Layout, arrangement, atlasing (for this step alone)
 
 ### Outputs
