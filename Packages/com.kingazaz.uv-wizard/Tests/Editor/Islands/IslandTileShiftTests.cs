@@ -46,6 +46,23 @@ namespace UVWizard.Core.Tests.Islands
         }
 
         [Test]
+        public void AnIslandShiftsByWholePeriodsOnly()
+        {
+            // Period 3 on U brings tile 4 to tile 1, and period 2 on V brings tile -3 to tile 1.
+            var island = BuildQuad(new Vector2(4.25f, -2.75f), new Vector2(4.75f, -2.25f), periodU: 3, periodV: 2);
+
+            Assert.That(island.TileShift, Is.EqualTo(new Vector2Int(-3, 4)));
+        }
+
+        [Test]
+        public void AnIslandWithNoPeriodStaysWhereItIs()
+        {
+            var island = BuildQuad(new Vector2(4.25f, -2.75f), new Vector2(4.75f, -2.25f), periodU: 0, periodV: 1);
+
+            Assert.That(island.TileShift, Is.EqualTo(new Vector2Int(0, 3)));
+        }
+
+        [Test]
         public void AnIslandAcrossATileEdgeKeepsItsFullExtent()
         {
             // The island really tiles the texture across u = 4. It moves home by whole tiles, and
@@ -108,11 +125,14 @@ namespace UVWizard.Core.Tests.Islands
             new Rect(island.UvBounds.position + island.TileShift, island.UvBounds.size);
 
         // One island: a quad from min to max.
-        static Island BuildQuad(Vector2 min, Vector2 max, TextureWrapMode wrapU, TextureWrapMode wrapV)
+        static Island BuildQuad(Vector2 min, Vector2 max, TextureWrapMode wrapU, TextureWrapMode wrapV) =>
+            BuildQuad(min, max, TilePeriod.Of(wrapU), TilePeriod.Of(wrapV));
+
+        static Island BuildQuad(Vector2 min, Vector2 max, int periodU, int periodV)
         {
             var uv0 = new[] { min, new Vector2(max.x, min.y), new Vector2(min.x, max.y), max };
             var triangles = new[] { 0, 1, 2, 2, 1, 3 };
-            return IslandBuilder.Build(uv0, triangles, wrapU, wrapV).Single();
+            return IslandBuilder.Build(uv0, triangles, periodU, periodV).Single();
         }
     }
 }

@@ -359,14 +359,12 @@ namespace UVWizard.Core.Pipeline
                 // Triangles a later tool deletes take no atlas space.
                 var removed = removals == null ? null : Removed(corners, s, removals);
                 var triangles = removed == null ? corners : Kept(corners, removed);
-                var texture = reading.Albedo?.Texture;
-                // Islands and charts live in the texture's own UV space, tiling and offset applied, so a tiled
+                // Islands and charts live in the albedo's own UV space, tiling and offset applied, so a tiled
                 // texture counts its repeats against the limit and its charts are sized by the texels they sample.
                 var st = reading.Albedo?.ScaleOffset ?? new Vector4(1, 1, 0, 0);
                 var sampled = Array.ConvertAll(uv0, uv => new Vector2(uv.x * st.x + st.z, uv.y * st.y + st.w));
-                var islands = IslandBuilder.Build(sampled, triangles,
-                    texture != null ? texture.wrapModeU : TextureWrapMode.Repeat,
-                    texture != null ? texture.wrapModeV : TextureWrapMode.Repeat);
+                var (periodU, periodV) = TilePeriods(reading, channels);
+                var islands = IslandBuilder.Build(sampled, triangles, periodU, periodV);
                 if (Array.Exists(islands, island => island.ExceedsRepeatLimit))
                 {
                     Exclude("Part of it repeats its texture across more than two tiles, more than the atlas can hold.");
@@ -433,21 +431,43 @@ namespace UVWizard.Core.Pipeline
         // albedo needs more texels per unit. Channels turned off don't count.
         static Vector2Int TextureSize(SourceMaterialReading reading, Channels on)
         {
-            var albedoScale = reading.Albedo?.ScaleOffset ?? new Vector4(1, 1, 0, 0);
             Vector2Int? size = null;
+            foreach (var (texture, tiling) in BakedTextures(reading, on))
+            {
+                var needed = Vector2Int.CeilToInt(Vector2.Scale(new Vector2(texture.width, texture.height), tiling));
+                size = Vector2Int.Max(size ?? Vector2Int.zero, needed);
+            }
+            return size ?? UntexturedSize;
+        }
+
+        // The tile period on each axis of the charts' UV space: islands shift between tiles only by whole periods, so
+        // that every channel the slot bakes samples the same texels at home. An emission map tiled half as often as
+        // the albedo repeats every two tiles, and one that clamps never does. Untextured, the albedo repeats.
+        static (int U, int V) TilePeriods(SourceMaterialReading reading, Channels on)
+        {
+            var (u, v) = (1, 1);
+            foreach (var (texture, tiling) in BakedTextures(reading, on))
+            {
+                u = TilePeriod.Both(u, TilePeriod.Of(texture.wrapModeU, tiling.x));
+                v = TilePeriod.Both(v, TilePeriod.Of(texture.wrapModeV, tiling.y));
+            }
+            return (u, v);
+        }
+
+        // The textures of the channels the slot bakes, with how many times each repeats per repeat of the albedo's.
+        // Channels turned off don't count.
+        static IEnumerable<(Texture Texture, Vector2 Tiling)> BakedTextures(SourceMaterialReading reading, Channels on)
+        {
+            var albedoScale = reading.Albedo?.ScaleOffset ?? new Vector4(1, 1, 0, 0);
             foreach (var channel in new[]
                      {
                          (on & Channels.Albedo) != 0 ? reading.Albedo : null,
                          (on & Channels.Emission) != 0 ? BakedEmission(reading) : null,
                          (on & Channels.Normal) != 0 ? BakedNormal(reading) : null,
                      })
-            {
-                if (channel?.Texture is not { } texture) continue;
-                var tiling = new Vector2(Ratio(channel.ScaleOffset.x, albedoScale.x), Ratio(channel.ScaleOffset.y, albedoScale.y));
-                var needed = Vector2Int.CeilToInt(Vector2.Scale(new Vector2(texture.width, texture.height), tiling));
-                size = Vector2Int.Max(size ?? Vector2Int.zero, needed);
-            }
-            return size ?? UntexturedSize;
+                if (channel?.Texture is { } texture)
+                    yield return (texture, new Vector2(Ratio(channel.ScaleOffset.x, albedoScale.x),
+                        Ratio(channel.ScaleOffset.y, albedoScale.y)));
         }
 
         // How many times a channel's texture repeats per repeat of the albedo's. A zero albedo scale collapses every

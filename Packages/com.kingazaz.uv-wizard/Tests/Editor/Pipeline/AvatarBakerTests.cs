@@ -177,6 +177,52 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void IslandsInTwoTilesOfAClampedEmissionMapEachGetTheirOwnEmission()
+        {
+            // The albedo repeats, so on it alone the islands in tiles 0 and 1 would stack into one chart. The emission
+            // map clamps, so the island in tile 1 glows with its right edge, unlike the one in tile 0.
+            var glow = Gradient(16, 1);
+            glow.wrapMode = TextureWrapMode.Clamp;
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), glow, Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 1.1f, 0.1f, 1.4f, 0.4f) }), glowing);
+            var before = Centroids(renderer).Select(EmissionColour).ToArray();
+
+            var result = Bake(renderer);
+
+            var after = Centroids(renderer).Select(c => result.EmissionAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void IslandsInTwoTilesOfARepeatingEmissionMapStillShareAChart()
+        {
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 1.1f, 0.1f, 1.4f, 0.4f) }), glowing);
+
+            Bake(renderer);
+
+            var centroids = Centroids(renderer).Select(c => c.Uv).ToArray();
+            Assert.That(Vector2.Distance(centroids[0], centroids[2]), Is.LessThan(1e-5f), "first triangles");
+            Assert.That(Vector2.Distance(centroids[1], centroids[3]), Is.LessThan(1e-5f), "second triangles");
+        }
+
+        [Test]
+        public void WithEmissionTurnedOffAClampedEmissionMapDoesntKeepIslandsApart()
+        {
+            var glow = Gradient(16, 1);
+            glow.wrapMode = TextureWrapMode.Clamp;
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), glow, Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 1.1f, 0.1f, 1.4f, 0.4f) }), glowing);
+
+            Bake(StandardOptions(channels: Channels.Albedo), renderer);
+
+            var centroids = Centroids(renderer).Select(c => c.Uv).ToArray();
+            Assert.That(Vector2.Distance(centroids[0], centroids[2]), Is.LessThan(1e-5f), "first triangles");
+            Assert.That(Vector2.Distance(centroids[1], centroids[3]), Is.LessThan(1e-5f), "second triangles");
+        }
+
+        [Test]
         public void AShaderWithoutAnEmissionStrengthCarriesItOnTheEmissionColour()
         {
             // Standard has no _EmissionStrength, but its emission colour is HDR, so the strength goes there.
@@ -245,6 +291,21 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.MergedMaterial!.GetTexture("_BumpMap"), Is.SameAs(result.NormalAtlas));
             Assert.That(result.MergedMaterial.GetFloat("_BumpScale"), Is.EqualTo(1), "the atlas holds each source's strength");
             Assert.That(result.MergedMaterial.IsKeywordEnabled("_NORMALMAP"), Is.True);
+            var after = Centroids(renderer).Select(c => Decoded(result.NormalAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y))).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertNormalClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void IslandsInTwoTilesOfAClampedNormalMapEachGetTheirOwnNormals()
+        {
+            // NormalGradient clamps, while the albedo repeats. The islands are in tiles 0 and 1 on V.
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 0.1f, 1.1f, 0.4f, 1.4f) }), bumpy);
+            var before = Centroids(renderer).Select(SourceNormal).ToArray();
+
+            var result = Bake(renderer);
+
             var after = Centroids(renderer).Select(c => Decoded(result.NormalAtlas!.GetPixelBilinear(c.Uv.x, c.Uv.y))).ToArray();
             for (var k = 0; k < before.Length; k++)
                 AssertNormalClose(before[k], after[k], $"triangle {k}");

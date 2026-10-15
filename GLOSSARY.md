@@ -24,6 +24,10 @@ _Avoid_: Input shader
 A connected patch of an avatar's mesh surface that stays connected in UV space, and so occupies one contiguous region of a source texture.
 _Avoid_: Shell, UV chart, piece, UV group
 
+**Tile period**:
+How many whole UV tiles an island may move by and still sample the same texels in every channel its source material bakes. Islands outside the 0–1 tile move home by whole periods, so they can stack with islands they match. A texture that clamps, or whose tiling never lines up, has no period, and its islands stay where they are.
+_Avoid_: Wrap period, repeat
+
 **Chart**:
 One or more islands that would bake to identical atlas texels (same source texture, same tint, overlapping UVs), so they share one place in the atlas. Mirrored and stacked islands form one chart. So do islands of one mesh that meet only at a shared vertex, since apart they would give that vertex two atlas UVs.
 _Avoid_: Cluster, island group. xatlas uses "chart" to mean a single island, but this project does not.
