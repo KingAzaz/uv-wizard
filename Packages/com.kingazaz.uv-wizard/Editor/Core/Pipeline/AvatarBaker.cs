@@ -119,20 +119,20 @@ namespace UVWizard.Core.Pipeline
             }
 
             var emissionStrength = sizes[Channels.Emission] != null ? EmissionStrength(slots, flagged) : 1f;
-            Texture2D? Atlas(Channels channel, Func<ChannelTexture, Texture2D> bake) =>
-                sizes[channel] is { } texture ? cached?.Atlases[channel] ?? bake(texture) : null;
+            var atlases = new Dictionary<Channels, Texture2D>();
+            Texture2D? Atlas(Channels channel, Func<ChannelTexture, Texture2D> bake)
+            {
+                if (sizes[channel] is not { } texture) return null;
+                var made = cached?.Atlases[channel] ?? bake(texture);
+                made.name = $"UV Wizard {channel}";
+                atlases.Add(channel, made);
+                return made;
+            }
             var atlas = Atlas(Channels.Albedo, albedo =>
-                BakeChannel(new BakePlan(albedo.Size, slots.ConvertAll(AlbedoSource)), Channels.Albedo, albedo, options));
+                BakeChannel(new BakePlan(albedo.Size, slots.ConvertAll(AlbedoSource)), albedo, options));
             var emissionAtlas = Atlas(Channels.Emission, emission => EmissionAtlas(slots, emission, emissionStrength, options));
             var normalAtlas = Atlas(Channels.Normal, normal => NormalAtlas(slots, normal, options));
-            if (key is { } storeKey && cached == null)
-            {
-                var atlases = new Dictionary<Channels, Texture2D>();
-                if (atlas != null) atlases.Add(Channels.Albedo, atlas);
-                if (emissionAtlas != null) atlases.Add(Channels.Emission, emissionAtlas);
-                if (normalAtlas != null) atlases.Add(Channels.Normal, normalAtlas);
-                cache!.Store(storeKey, new CachedBake(sizes, placements, atlases));
-            }
+            if (key is { } storeKey && cached == null) cache!.Store(storeKey, new CachedBake(sizes, placements, atlases));
 
             UseAtlases(merged, options, atlas, emissionAtlas, emissionStrength, normalAtlas);
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
@@ -428,7 +428,7 @@ namespace UVWizard.Core.Pipeline
                 var divisor = Mathf.Max(strength, Intensity(emission.Tint));
                 var tint = new Color(linear.r / divisor, linear.g / divisor, linear.b / divisor, linear.a).gamma;
                 return Source(slot, new ChannelSource(emission.Texture, tint, emission.ScaleOffset, emission.UvChannel), Color.black);
-            })), Channels.Emission, texture, options);
+            })), texture, options);
 
         // The Normal channel, for slots of which some that draw have a normal map. Slots without one bake flat,
         // so the gutter fill can't spread another chart's bumps over theirs.
@@ -438,12 +438,11 @@ namespace UVWizard.Core.Pipeline
                 var normal = BakedNormal(slot.Reading);
                 var encoding = normal != null ? NormalMaps.EncodingOf(normal.Texture!, options.NormalEncoding) : NormalEncoding.RGorAG;
                 return Source(slot, normal, Color.white, normal?.Strength ?? 0, encoding);
-            }), options.NormalEncoding), Channels.Normal, texture, options);
+            }), options.NormalEncoding), texture, options);
 
-        static Texture2D BakeChannel(BakePlan plan, Channels channel, ChannelTexture texture, BakeOptions options)
+        static Texture2D BakeChannel(BakePlan plan, ChannelTexture texture, BakeOptions options)
         {
             var atlas = ChannelBaker.Bake(plan);
-            atlas.name = BakeCache.AtlasName(channel);
             if (options.Compress) AtlasCompressor.Compress(atlas, texture.Format);
             return atlas;
         }

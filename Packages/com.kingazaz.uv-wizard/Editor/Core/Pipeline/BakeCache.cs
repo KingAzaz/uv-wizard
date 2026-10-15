@@ -24,13 +24,13 @@ namespace UVWizard.Core.Pipeline
         const string Extension = ".bake";
 
         readonly string directory;
-        readonly int entries;
+        readonly int maxEntries;
 
-        /// <param name="entries">The most bakes kept. The least recently used go first.</param>
-        public BakeCache(string directory, int entries)
+        /// <param name="maxEntries">The most bakes kept. The least recently used go first.</param>
+        public BakeCache(string directory, int maxEntries)
         {
             this.directory = directory;
-            this.entries = entries;
+            this.maxEntries = maxEntries;
         }
 
         /// <summary>
@@ -63,11 +63,12 @@ namespace UVWizard.Core.Pipeline
                         reader.ReadSingle());
                 foreach (var (channel, texture) in textures)
                     atlases.Add(channel, ReadAtlas(reader, channel, texture, compressed));
-                File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+                MarkUsed(path);
                 return new CachedBake(sizes, placements, atlases);
             }
-            catch (Exception exception) when (exception is IOException or InvalidDataException or UnityException
-                                                  or ArgumentException or FormatException)
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                                                  or InvalidDataException or UnityException or ArgumentException
+                                                  or FormatException)
             {
                 foreach (var atlas in atlases.Values) Object.DestroyImmediate(atlas);
                 return null;
@@ -137,11 +138,23 @@ namespace UVWizard.Core.Pipeline
             File.Move(partial, path);
         }
 
+        // A read-only entry is still used, but it can't count as recently used.
+        static void MarkUsed(string path)
+        {
+            try
+            {
+                File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
         void Evict()
         {
             var stored = new DirectoryInfo(directory).GetFiles("*" + Extension);
             Array.Sort(stored, (a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
-            for (var e = entries; e < stored.Length; e++) stored[e].Delete();
+            for (var e = maxEntries; e < stored.Length; e++) stored[e].Delete();
         }
 
         string PathOf(Hash128 key) => Path.Combine(directory, key + Extension);
@@ -151,16 +164,12 @@ namespace UVWizard.Core.Pipeline
             var format = (TextureFormat)reader.ReadInt32();
             var mips = reader.ReadInt32();
             var texels = reader.ReadBytes(reader.ReadInt32());
-            var atlas = new Texture2D(texture.Size, texture.Size, format, mips,
-                linear: channel == Channels.Normal) { wrapMode = TextureWrapMode.Clamp, name = AtlasName(channel) };
+            var atlas = ChannelBaker.Atlas(texture.Size, format, mips, linear: channel == Channels.Normal);
             atlas.LoadRawTextureData(texels);
             atlas.Apply(updateMipmaps: false, makeNoLongerReadable: false);
             if (compressed) AtlasCompressor.StreamMips(atlas);
             return atlas;
         }
-
-        /// <summary>The name of the channel's atlas texture.</summary>
-        public static string AtlasName(Channels channel) => $"UV Wizard {channel}";
     }
 
     /// <summary>What a cached bake keeps: each channel's size and format, every chart's placement, and the atlas.</summary>
@@ -193,9 +202,12 @@ namespace UVWizard.Core.Pipeline
 
         public BakeKey()
         {
-            // A new UV Wizard, or any change to its code, may bake differently.
+            // A new UV Wizard, any change to its code or its bake shader, or another Unity, may bake differently.
             Add(PackageVersion);
             Add(typeof(BakeKey).Assembly.ManifestModule.ModuleVersionId.ToString());
+            var shader = AssetDatabase.GetAssetDependencyHash(ChannelBaker.ShaderPath);
+            hash.Append(ref shader);
+            Add(Application.unityVersion);
         }
 
         public Hash128? Hash => hashable ? hash : (Hash128?)null;

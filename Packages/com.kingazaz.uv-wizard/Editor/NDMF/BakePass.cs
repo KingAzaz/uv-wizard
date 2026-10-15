@@ -39,15 +39,15 @@ namespace UVWizard.NDMF
 #endif
 
         /// <summary>
-        /// Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing. Without animator
-        /// services, no slot counts as animated.
+        /// Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing, and give a null
+        /// result. Without animator services, no slot counts as animated.
         /// </summary>
-        internal static void Bake(GameObject root, BakeOptions? options, AnimatorServicesContext? animators = null)
+        internal static BakeResult? Bake(GameObject root, BakeOptions? options, AnimatorServicesContext? animators = null)
         {
             if (options == null)
             {
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.Error, Messages.NoToonStandard);
-                return;
+                return null;
             }
 
             var renderers = root.GetComponentsInChildren<Renderer>(true);
@@ -76,6 +76,7 @@ namespace UVWizard.NDMF
                     ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.TooManySlots,
                         result.MaterialSlots, budget.MaterialSlots);
             }
+            return result;
         }
     }
 }

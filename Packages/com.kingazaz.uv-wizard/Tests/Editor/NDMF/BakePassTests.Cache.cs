@@ -1,9 +1,9 @@
 #nullable enable
 
-using System;
 using System.IO;
-using System.Linq;
 using NUnit.Framework;
+using UnityEngine;
+using UVWizard.Core.Pipeline;
 
 namespace UVWizard.NDMF.Tests
 {
@@ -11,18 +11,19 @@ namespace UVWizard.NDMF.Tests
     public partial class BakePassTests
     {
         [Test]
-        public void AMobileBuildCachesItsBakeInTheProjectsLibrary()
+        public void ASecondMobileBakeOfTheSameAvatarComesFromTheProjectsLibrary()
         {
-            // An entry this build stores, or one it reads, which it marks as just used.
-            var start = DateTime.UtcNow.AddSeconds(-1);
-            var avatar = Avatar(withComponent: true);
+            BakeResult? BakeAnother()
+            {
+                var avatar = Avatar(withComponent: true);
+                return BakePass.Bake(avatar, ToonStandard.Options(Shader.Find(ToonStandardName), avatar.GetComponent<UVWizardAvatar>()));
+            }
+            BakeAnother();
 
-            MobileBuild.Override = true;
-            Build(avatar);
+            var second = BakeAnother();
 
-            var directory = new DirectoryInfo("Library/UVWizardCache");
-            var used = directory.Exists ? directory.GetFiles("*.bake").Where(file => file.LastWriteTimeUtc >= start) : null;
-            Assert.That(used, Is.Not.Null.And.Not.Empty);
+            Assert.That(second!.FromCache, Is.True);
+            Assert.That(Directory.GetFiles("Library/UVWizardCache", "*.bake"), Is.Not.Empty);
         }
     }
 }
