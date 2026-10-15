@@ -26,7 +26,10 @@ namespace UVWizard.Core.Pipeline
         // A source with no texture still needs a little atlas space to hold its tint.
         static readonly Vector2Int UntexturedSize = new Vector2Int(8, 8);
 
-        /// <summary>The priority of a chart on the head. Tuned by eye on the dev avatars.</summary>
+        /// <summary>
+        /// The priority of a chart on the head. A first value: both dev avatars fit at full detail at Excellent, so it
+        /// still needs tuning by eye on an avatar whose atlas has to shrink.
+        /// </summary>
         public const float HeadPriority = 2;
 
         // The most the merged material multiplies its Emission atlas by: Toon Standard's _EmissionStrength range.
@@ -239,24 +242,31 @@ namespace UVWizard.Core.Pipeline
             });
         }
 
-        // Which of the mesh's vertices follow the head or a bone below it: on a skinned mesh, the bone each is weighted
-        // to most, and on a rigid mesh, the renderer itself.
+        // Which of the mesh's vertices follow the head or a bone below it: on a skinned mesh, those with more than half
+        // their weight on such bones, and on a mesh without bone weights, every vertex when the renderer is below the
+        // head, since Unity draws such a mesh at the renderer's own transform.
         static bool[] OnHead(Renderer renderer, Mesh mesh, Transform head)
         {
             var flags = new bool[mesh.vertexCount];
-            if (renderer is not SkinnedMeshRenderer skinned)
+            using var bonesPerVertex = mesh.GetBonesPerVertex();
+            if (renderer is not SkinnedMeshRenderer skinned || bonesPerVertex.Length == 0)
             {
                 if (renderer.transform.IsChildOf(head)) Array.Fill(flags, true);
                 return flags;
             }
-            using var bonesPerVertex = mesh.GetBonesPerVertex();
-            if (bonesPerVertex.Length == 0) return flags;
             var boneOnHead = Array.ConvertAll(skinned.bones, bone => bone != null && bone.IsChildOf(head));
-            // Unity keeps each vertex's weights heaviest first.
             using var weights = mesh.GetAllBoneWeights();
-            for (int v = 0, first = 0; v < flags.Length; first += bonesPerVertex[v++])
-                flags[v] = weights[first].boneIndex < boneOnHead.Length
-                           && boneOnHead[weights[first].boneIndex];
+            for (int v = 0, w = 0; v < flags.Length; v++)
+            {
+                // A vertex without weights has a total of 0, so it isn't on the head.
+                float onHead = 0, total = 0;
+                for (var end = w + bonesPerVertex[v]; w < end; w++)
+                {
+                    total += weights[w].weight;
+                    if (weights[w].boneIndex < boneOnHead.Length && boneOnHead[weights[w].boneIndex]) onHead += weights[w].weight;
+                }
+                flags[v] = onHead * 2 > total;
+            }
             return flags;
         }
 

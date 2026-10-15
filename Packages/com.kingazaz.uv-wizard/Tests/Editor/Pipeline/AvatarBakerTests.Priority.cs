@@ -44,17 +44,73 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
-        public void ASkinnedMeshWithoutBoneWeightsGetsNoPriority()
+        public void AVertexWhoseWeightIsMostlyOnTheHeadAcrossSeveralBonesIsOnTheHead()
         {
-            var (_, head) = Skinned(face: Enumerable.Repeat(On(JawBone), 4).ToArray(), body: Enumerable.Repeat(On(JawBone), 4).ToArray());
-            var renderer = new GameObject("unweighted").AddComponent<SkinnedMeshRenderer>();
-            renderer.transform.SetParent(head);
-            renderer.sharedMesh = Mesh(new[] { Quad(0, 0.05f, 0.05f, 0.45f, 0.45f), Quad(0, 0.55f, 0.55f, 0.95f, 0.95f) });
-            renderer.sharedMaterials = new[] { Standard(Gradient(1024, 0), Color.white) };
+            // Each face vertex leans on the hips more than on any one bone, but more on the head and jaw together.
+            var spread = new BoneWeight { boneIndex0 = HipsBone, weight0 = 0.4f, boneIndex1 = HeadBone, weight1 = 0.3f,
+                boneIndex2 = JawBone, weight2 = 0.3f };
+            var (renderer, head) = Skinned(face: Enumerable.Repeat(spread, 4).ToArray(), body: Enumerable.Repeat(On(HipsBone), 4).ToArray());
 
-            Assert.That(() => BakeWithHead(StandardOptions(atlasSize: 512, padding: 0), head, renderer), Throws.Nothing);
+            BakeWithHead(StandardOptions(atlasSize: 512, padding: 0), head, renderer);
 
-            Assert.That(QuadWidth(renderer, 0) / QuadWidth(renderer, 1), Is.EqualTo(1).Within(0.05f));
+            Assert.That(QuadWidth(renderer, 0) / QuadWidth(renderer, 1), Is.EqualTo(AvatarBaker.HeadPriority).Within(0.05f));
+        }
+
+        [Test]
+        public void AVertexWithoutBoneWeightsIsntOnTheHead()
+        {
+            // The face's vertices have no bone weights; the body's all follow the head.
+            var (renderer, head) = Skinned(face: new BoneWeight[4], body: Enumerable.Repeat(On(HeadBone), 4).ToArray());
+
+            BakeWithHead(StandardOptions(atlasSize: 512, padding: 0), head, renderer);
+
+            Assert.That(QuadWidth(renderer, 1) / QuadWidth(renderer, 0), Is.EqualTo(AvatarBaker.HeadPriority).Within(0.05f));
+        }
+
+        [Test]
+        public void ASkinnedMeshWithoutBoneWeightsBelowTheHeadGetsPriority()
+        {
+            // Unity draws a skinned mesh without bone weights at its own transform, so this one moves with the head.
+            var hips = Keep(new GameObject("hips")).transform;
+            var head = new GameObject("head").transform;
+            head.SetParent(hips);
+            var lashes = new GameObject("lashes").AddComponent<SkinnedMeshRenderer>();
+            lashes.transform.SetParent(head);
+            lashes.sharedMesh = Mesh(new[] { Quad(0, 0.05f, 0.05f, 0.45f, 0.45f) });
+            lashes.sharedMaterials = new[] { Standard(Gradient(1024, 0), Color.white) };
+            var badge = MeshRenderer(Mesh(new[] { Quad(0, 0.55f, 0.55f, 0.95f, 0.95f) }), Standard(Gradient(1024, 1), Color.white));
+            badge.transform.SetParent(hips);
+
+            Assert.That(() => BakeWithHead(StandardOptions(atlasSize: 512, padding: 0), head, lashes, badge), Throws.Nothing);
+
+
+            Assert.That(Width(lashes.sharedMesh) / Width(Filter(badge).sharedMesh), Is.EqualTo(AvatarBaker.HeadPriority).Within(0.05f));
+        }
+
+        [Test]
+        public void AChartStackedFromSeveralRenderersIsOnTheHeadWhenMostOfItsVerticesAre()
+        {
+            // A strap on the hips and two layers of glasses on the head draw the same texels, so they share one chart.
+            var hips = Keep(new GameObject("hips")).transform;
+            var head = new GameObject("head").transform;
+            head.SetParent(hips);
+            var material = Standard(Gradient(1024, 0), Color.white);
+            MeshRenderer Layer(string name, Transform parent)
+            {
+                var layer = MeshRenderer(Mesh(new[] { Quad(0, 0.05f, 0.05f, 0.45f, 0.45f) }), material);
+                layer.name = name;
+                layer.transform.SetParent(parent);
+                return layer;
+            }
+            var strap = Layer("strap", hips);
+            var glasses = Layer("glasses", head);
+            var lenses = Layer("lenses", head);
+            var badge = MeshRenderer(Mesh(new[] { Quad(0, 0.55f, 0.55f, 0.95f, 0.95f) }), Standard(Gradient(1024, 1), Color.white));
+            badge.transform.SetParent(hips);
+
+            BakeWithHead(StandardOptions(atlasSize: 512, padding: 0), head, strap, glasses, lenses, badge);
+
+            Assert.That(Width(Filter(strap).sharedMesh) / Width(Filter(badge).sharedMesh), Is.EqualTo(AvatarBaker.HeadPriority).Within(0.05f));
         }
 
         [Test]
