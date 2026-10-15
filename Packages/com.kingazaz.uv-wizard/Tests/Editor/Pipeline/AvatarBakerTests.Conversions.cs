@@ -219,7 +219,7 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
-        public void OnAPlatformThatReadsNormalsFromAlphaAndGreenAConvertedSourceWithNoImporterBumpsAsItDid()
+        public void OnAPlatformThatReadsNormalsFromAlphaAndGreenAConvertedSourceWithNoImporterKeepsItsBumpAfterTheBake()
         {
             // The source is made in code, so it has no importer, and holds the platform's (y, y, y, x) texels.
             var source = NormalMapped(Standard(Gradient(16, 1), Color.white), InAgLayout(NormalGradient(16, 1)), 1);
