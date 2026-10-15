@@ -241,10 +241,10 @@ namespace UVWizard.Core.Tests.Packing
         }
 
         [Test]
-        public void TheWarmUpRunsEveryExactPackingJob()
+        public void TheWarmUpPackingFits()
         {
-            // A packing that fits has rasterized, scanned rows and placed charts, so Burst has
-            // compiled every job the exact search runs.
+            // A packing that fits has gone through rasterizing, the row scan and placing, so each of
+            // those jobs ran, and compiled, before the clock started.
             Assert.That(ScaleSearch.WarmUpExactPacker().Fits, Is.True);
         }
 
