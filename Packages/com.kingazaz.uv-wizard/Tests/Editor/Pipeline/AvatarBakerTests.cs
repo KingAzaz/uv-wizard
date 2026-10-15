@@ -852,9 +852,11 @@ namespace UVWizard.Core.Tests.Pipeline
 
         // Standard as the merged shader, with its normal-map keyword.
         static BakeOptions StandardOptions(int atlasSize = 2048, int padding = 8, bool compress = false,
-            NormalEncoding normalEncoding = NormalEncoding.RGorAG, Budget? budget = null, Channels channels = Channels.All) =>
+            NormalEncoding normalEncoding = NormalEncoding.RGorAG, Budget? budget = null, Channels channels = Channels.All,
+            string? cacheDirectory = null, int cacheEntries = 16) =>
             new BakeOptions(Shader.Find("Standard"), atlasSize, padding, compress, normalMapKeyword: "_NORMALMAP",
-                normalEncoding: normalEncoding, budget: budget, channels: channels);
+                normalEncoding: normalEncoding, budget: budget, channels: channels, cacheDirectory: cacheDirectory,
+                cacheEntries: cacheEntries);
 
         BakeResult Bake(BakeOptions options, params Renderer[] renderers) => Bake(options, null, renderers);
 

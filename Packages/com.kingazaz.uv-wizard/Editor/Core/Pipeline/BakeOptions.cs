@@ -25,6 +25,11 @@ namespace UVWizard.Core.Pipeline
         /// Null gives every channel <paramref name="atlasSize"/> and its finest format.
         /// </param>
         /// <param name="channels">The channels the atlas may carry.</param>
+        /// <param name="cacheDirectory">
+        /// Where bakes are cached, so a bake whose inputs haven't changed reuses the last one's packing and atlas.
+        /// Null bakes afresh every time.
+        /// </param>
+        /// <param name="cacheEntries">The most bakes the cache keeps. The least recently used go first.</param>
         /// <param name="rampProperty">The merged shader's shadow-ramp texture property.</param>
         /// <param name="defaultRamp">The ramp to use when no source has the merged shader to copy one from.</param>
         /// <param name="cullingProperty">The culling property merged slots are checked against, when both have it.</param>
@@ -39,8 +44,11 @@ namespace UVWizard.Core.Pipeline
         public BakeOptions(Shader mergedShader, int atlasSize = 2048, int padding = 8, bool compress = false,
             string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null,
             string cullingProperty = "_Culling", string normalMapKeyword = "USE_NORMAL_MAPS",
-            NormalEncoding? normalEncoding = null, Budget? budget = null, Channels channels = Channels.All)
+            NormalEncoding? normalEncoding = null, Budget? budget = null, Channels channels = Channels.All,
+            string? cacheDirectory = null, int cacheEntries = 16)
         {
+            CacheDirectory = cacheDirectory;
+            CacheEntries = cacheEntries;
             MergedShader = mergedShader;
             AtlasSize = atlasSize;
             Padding = padding;
@@ -67,5 +75,7 @@ namespace UVWizard.Core.Pipeline
         public string CullingProperty { get; }
         public string NormalMapKeyword { get; }
         public NormalEncoding NormalEncoding { get; }
+        public string? CacheDirectory { get; }
+        public int CacheEntries { get; }
     }
 }

@@ -24,13 +24,17 @@ namespace UVWizard.NDMF
         /// <summary>The shader, or null when the VRChat SDK in the project doesn't have it.</summary>
         public static Shader? Shader => AssetDatabase.LoadAssetAtPath<Shader>(AssetDatabase.GUIDToAssetPath(ShaderGuid));
 
+        // The project's Library, which Unity keeps out of version control and rebuilds as needed.
+        const string CacheDirectory = "Library/UVWizardCache";
+
         /// <summary>
         /// Atlas channels up to 2048, sized and compressed to ASTC so the avatar fits the component's preset, with
-        /// the channels it turns on.
+        /// the channels it turns on. Bakes are cached in the project's Library.
         /// </summary>
         public static BakeOptions Options(Shader shader, UVWizardAvatar avatar) => new BakeOptions(shader, atlasSize: 2048,
             padding: 8, compress: true, rampProperty: "_Ramp", defaultRamp: Resources.Load<Texture2D>(DefaultRamp),
-            representativeProperties: SharedProperties, budget: BudgetOf(avatar.preset), channels: ChannelsOf(avatar));
+            representativeProperties: SharedProperties, budget: BudgetOf(avatar.preset), channels: ChannelsOf(avatar),
+            cacheDirectory: CacheDirectory);
 
         static Budget BudgetOf(UVWizardAvatar.Preset preset) => preset switch
         {
