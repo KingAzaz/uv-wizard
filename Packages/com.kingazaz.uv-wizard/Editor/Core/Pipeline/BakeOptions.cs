@@ -38,6 +38,8 @@ namespace UVWizard.Core.Pipeline
         /// <param name="rampProperty">The merged shader's shadow-ramp texture property.</param>
         /// <param name="defaultRamp">The ramp to use when no source has the merged shader to copy one from.</param>
         /// <param name="cullingProperty">The culling property merged slots are checked against, when both have it.</param>
+        /// <param name="tintProperty">The merged shader's tint colour, set to white since the atlas carries every tint.</param>
+        /// <param name="vertexColourProperty">The merged shader's toggle that multiplies in vertex colour.</param>
         /// <param name="representativeProperties">
         /// Properties copied from the representative source: the merged-shader source with the most chart area.
         /// </param>
@@ -49,7 +51,8 @@ namespace UVWizard.Core.Pipeline
         /// </param>
         public BakeOptions(Shader mergedShader, int atlasSize = 2048, int padding = 8, bool compress = false,
             string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null,
-            string cullingProperty = "_Culling", string normalMapKeyword = "USE_NORMAL_MAPS",
+            string cullingProperty = "_Culling", string tintProperty = "_Color", string vertexColourProperty = "_VertexColor",
+            string normalMapKeyword = "USE_NORMAL_MAPS",
             NormalEncoding? normalEncoding = null, Budget? budget = null, Channels channels = Channels.All,
             string? cacheDirectory = null, int cacheEntries = 16, IReadOnlyCollection<string>? mobileShaders = null)
         {
@@ -66,6 +69,8 @@ namespace UVWizard.Core.Pipeline
             DefaultRamp = defaultRamp;
             RepresentativeProperties = representativeProperties ?? Array.Empty<string>();
             CullingProperty = cullingProperty;
+            TintProperty = tintProperty;
+            VertexColourProperty = vertexColourProperty;
             NormalMapKeyword = normalMapKeyword;
             NormalEncoding = normalEncoding ?? NormalMaps.PlatformEncoding;
         }
@@ -80,6 +85,8 @@ namespace UVWizard.Core.Pipeline
         public Texture? DefaultRamp { get; }
         public IReadOnlyList<string> RepresentativeProperties { get; }
         public string CullingProperty { get; }
+        public string TintProperty { get; }
+        public string VertexColourProperty { get; }
         public string NormalMapKeyword { get; }
         public NormalEncoding NormalEncoding { get; }
         public string? CacheDirectory { get; }

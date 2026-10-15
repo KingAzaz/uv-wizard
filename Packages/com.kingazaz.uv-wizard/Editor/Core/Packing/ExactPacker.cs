@@ -158,8 +158,6 @@ namespace UVWizard.Core.Packing
             var rowFits = new NativeArray<int>(gridSize, Allocator.TempJob);
             try
             {
-                state[PackingGrid.Free] = free;
-                state[PackingGrid.Remaining] = remaining;
                 state[PackingGrid.LowestFit] = long.MaxValue;
                 // In chunks, so a failing attempt stops scheduling soon after a chart fits nowhere.
                 for (var first = 0; first < order.Length && state[PackingGrid.Stopped] == 0; first += ChartsPerChunk)
@@ -174,7 +172,7 @@ namespace UVWizard.Core.Packing
                         }.Schedule(gridSize, RowsPerBatch, handle);
                         handle = new PlaceChartJob
                         {
-                            GridWords = gridWords, Step = step, Grid = grid, Bits = bits, Covered = covered,
+                            GridWords = gridWords, Step = step, Grid = grid, Bits = bits,
                             Infos = infos, Order = order, RowFits = rowFits, State = state,
                             Positions = positions, Turned = turned,
                         }.Schedule(handle);

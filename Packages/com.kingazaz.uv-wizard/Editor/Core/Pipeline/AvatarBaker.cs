@@ -348,14 +348,15 @@ namespace UVWizard.Core.Pipeline
                 }
                 if (!readings.TryGetValue(material, out var reading))
                     readings.Add(material, reading = SourceShaderReader.Read(material));
-                if (reading.Verdict == MaterialVerdict.Excluded)
+                var corners = Indices(data, s);
+                // An empty submesh is merged whatever its material, since it draws nothing to keep.
+                if (reading.Verdict == MaterialVerdict.Excluded && DrawsAny(corners))
                 {
                     Exclude(reading.Reason ?? "Its material can't be merged.");
                     continue;
                 }
 
                 uv0 ??= Uvs(data);
-                var corners = Indices(data, s);
                 // Triangles a later tool deletes take no atlas space.
                 var removed = removals == null ? null : Removed(corners, s, removals);
                 var triangles = removed == null ? corners : Kept(corners, removed);
@@ -370,10 +371,11 @@ namespace UVWizard.Core.Pipeline
                     Exclude("Part of it repeats its texture across more than two tiles, more than the atlas can hold.");
                     continue;
                 }
-                if (reading.Verdict == MaterialVerdict.Flagged && triangles.Length > 0)
+                var slot = new Slot(renderer, mesh, s, material, reading, uv0, sampled, corners, removed, triangles,
+                    islands, TextureSize(reading, channels));
+                if (reading.Verdict == MaterialVerdict.Flagged && slot.Draws)
                     flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? "It may look different after the bake."));
-                slots.Add(new Slot(renderer, mesh, s, material, reading, uv0, sampled, corners, removed, triangles,
-                    islands, TextureSize(reading, channels)));
+                slots.Add(slot);
             }
         }
 
@@ -400,6 +402,9 @@ namespace UVWizard.Core.Pipeline
             data.GetUVs(0, uvs);
             return uvs.ToArray();
         }
+
+        // True when the indices hold a triangle: a slot without one draws nothing.
+        static bool DrawsAny(int[] triangles) => triangles.Length > 0;
 
         static int[] Indices(Mesh.MeshData data, int submesh)
         {
@@ -584,9 +589,9 @@ namespace UVWizard.Core.Pipeline
                         area[slots[s].Material] = (area.TryGetValue(slots[s].Material, out var sum) ? sum : 0) + chart.FootprintTexels;
             }
             Material? best = null;
+            // Every slot that draws has charts, so it has an area.
             foreach (var slot in slots)
-                if (slot.Material.shader == mergedShader && area.TryGetValue(slot.Material, out var covered)
-                    && (best == null || covered > area[best]))
+                if (slot.Draws && slot.Material.shader == mergedShader && (best == null || area[slot.Material] > area[best]))
                     best = slot.Material;
             return best;
         }
@@ -595,7 +600,7 @@ namespace UVWizard.Core.Pipeline
         static void FlagWhatTheMergedMaterialChanges(List<Slot> slots, Material merged, BakeOptions options, List<SlotNote> flagged)
         {
             var culling = options.CullingProperty;
-            var vertexColourOn = merged.HasProperty("_VertexColor") && merged.GetFloat("_VertexColor") > 0.5f;
+            var vertexColourOn = merged.HasProperty(options.VertexColourProperty) && merged.GetFloat(options.VertexColourProperty) > 0.5f;
             var colouredVertices = new Dictionary<Mesh, bool[]?>();
             foreach (var slot in slots)
             {
@@ -642,14 +647,20 @@ namespace UVWizard.Core.Pipeline
         static Material MergedMaterial(BakeOptions options, Material? representative, bool vertexColour)
         {
             var material = new Material(options.MergedShader) { name = "UV Wizard merged" };
-            if (material.HasColor("_Color")) material.SetColor("_Color", Color.white);
-            if (material.HasFloat("_VertexColor")) material.SetFloat("_VertexColor", vertexColour ? 1 : 0);
+            SetTintAndVertexColour(material, options, vertexColour);
             if (representative != null)
                 foreach (var property in options.RepresentativeProperties)
                     CopyProperty(representative, material, property);
             else if (options.DefaultRamp != null && material.HasTexture(options.RampProperty))
                 material.SetTexture(options.RampProperty, options.DefaultRamp);
             return material;
+        }
+
+        // A white tint, since the textures carry each source's tint, and vertex colour on only for sources that use it.
+        static void SetTintAndVertexColour(Material material, BakeOptions options, bool vertexColour)
+        {
+            if (material.HasColor(options.TintProperty)) material.SetColor(options.TintProperty, Color.white);
+            if (material.HasFloat(options.VertexColourProperty)) material.SetFloat(options.VertexColourProperty, vertexColour ? 1 : 0);
         }
 
         // Points the merged material at the atlas's channels.
@@ -811,7 +822,7 @@ namespace UVWizard.Core.Pipeline
             public int[] Triangles { get; }
 
             /// <summary>False for an empty submesh: it's merged so it costs no material slot, but shows nothing.</summary>
-            public bool Draws => Triangles.Length > 0;
+            public bool Draws => DrawsAny(Triangles);
 
             public Island[] Islands { get; }
             public Vector2Int TextureSize { get; }

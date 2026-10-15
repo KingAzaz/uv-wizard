@@ -635,6 +635,22 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AnExcludedMaterialThatDrawsNothingIsMergedQuietly()
+        {
+            // Its reader excludes it for sampling UV1, but on an empty submesh there's nothing to sample.
+            var detailed = Standard(Gradient(16, 0), Color.white);
+            detailed.EnableKeyword("_DETAIL_MULX2");
+            detailed.SetFloat("_UVSec", 1);
+            var mesh = Mesh(Array.Empty<(Vector3[], Vector2[])>(), new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) });
+            var renderer = MeshRenderer(mesh, detailed, Standard(Gradient(16, 1), Color.white));
+
+            var result = Bake(renderer);
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
+            Assert.That(result.Excluded, Is.Empty);
+        }
+
+        [Test]
         public void AMergedShaderSourceThatDrawsNothingDoesntRepresent()
         {
             // The only Standard source sits on an empty submesh; the drawn one uses Unlit/Texture.
@@ -695,6 +711,32 @@ namespace UVWizard.Core.Tests.Pipeline
 
             Assert.That(result.Representative, Is.Null);
             Assert.That(result.MergedMaterial!.GetTexture("_DetailAlbedoMap"), Is.SameAs(ramp));
+        }
+
+        [Test]
+        public void TheMergedMaterialsTintIsTheOneTheOptionsName()
+        {
+            // Standard's emission colour, black by default, stands in for the tint. Nothing emits, so no emission
+            // atlas sets it.
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+            var options = new BakeOptions(Shader.Find("Standard"), tintProperty: "_EmissionColor");
+
+            var result = Bake(options, renderer);
+
+            Assume.That(result.EmissionAtlas, Is.Null);
+            Assert.That(result.MergedMaterial!.GetColor("_EmissionColor"), Is.EqualTo(Color.white));
+        }
+
+        [Test]
+        public void TheMergedMaterialsVertexColourToggleIsTheOneTheOptionsName()
+        {
+            // Standard's smoothness, 0.5 by default, stands in for the toggle. No Standard source uses vertex colour.
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+            var options = new BakeOptions(Shader.Find("Standard"), vertexColourProperty: "_Glossiness");
+
+            var result = Bake(options, renderer);
+
+            Assert.That(result.MergedMaterial!.GetFloat("_Glossiness"), Is.EqualTo(0));
         }
 
         [Test]

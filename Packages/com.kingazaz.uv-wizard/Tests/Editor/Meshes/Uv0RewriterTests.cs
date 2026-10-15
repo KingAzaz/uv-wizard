@@ -333,6 +333,45 @@ namespace UVWizard.Core.Tests.Meshes
             Assert.That(result.Mesh.GetUVDistributionMetric(0), Is.EqualTo(recalculated.GetUVDistributionMetric(0)).Within(1e-4f));
         }
 
+        [TestCase(false, false)]
+        [TestCase(true, true)]
+        [TestCase(true, false)]
+        public void TheOtherUvChannelsKeepTheSourcesDistributionMetric(bool split, bool splitVerticesStill)
+        {
+            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }), splitVerticesStill ? new[] { 1, 2 } : new int[0]);
+            for (var channel = 1; channel < 8; channel++) HalveUvs(source, channel);
+            source.RecalculateUVDistributionMetrics();
+
+            var result = Rewrite(source, split ? TwoCharts : OneChart);
+
+            Assume.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            for (var channel = 1; channel < 8; channel++)
+            {
+                Assume.That(source.GetUVDistributionMetric(channel), Is.Not.EqualTo(1).Within(1e-3f));
+                Assert.That(result.Mesh.GetUVDistributionMetric(channel),
+                    Is.EqualTo(source.GetUVDistributionMetric(channel)).Within(1e-4f), $"UV{channel}");
+            }
+        }
+
+        [TestCase(false, false)]
+        [TestCase(true, true)]
+        [TestCase(true, false)]
+        public void AMeshWithALineSubmeshKeepsTheSourcesUv0DistributionMetric(bool split, bool splitVerticesStill)
+        {
+            // Unity can't recalculate the metric of a mesh with line submeshes.
+            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }), splitVerticesStill ? new[] { 1, 2 } : new int[0]);
+            HalveUvs(source, 0);
+            source.RecalculateUVDistributionMetric(0);
+            source.subMeshCount = 2;
+            source.SetIndices(new[] { 0, 3 }, MeshTopology.Lines, 1);
+
+            var result = Rewrite(source, split ? TwoCharts : OneChart, null);
+
+            Assume.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            Assume.That(source.GetUVDistributionMetric(0), Is.Not.EqualTo(1).Within(1e-3f));
+            Assert.That(result.Mesh.GetUVDistributionMetric(0), Is.EqualTo(source.GetUVDistributionMetric(0)).Within(1e-4f));
+        }
+
         [TestCase(true)]
         [TestCase(false)]
         public void TheSourceMeshIsLeftAsItWas(bool split)
@@ -462,6 +501,9 @@ namespace UVWizard.Core.Tests.Meshes
             mesh.AddBlendShapeFrame("smile", 100, Deltas(4, still), Deltas(5, still), Deltas(6, still));
             return mesh;
         }
+
+        // Shrinks a UV channel to half its size, so its distribution metric isn't the 1 a new mesh has.
+        static void HalveUvs(Mesh mesh, int channel) => mesh.SetUVs(channel, Uvs(mesh, channel).Select(uv => uv * 0.5f).ToArray());
 
         // A square whose UV0 is stored in the given format, written stream by stream: SetVertices
         // and SetUVs would turn UV0 back into two Float32s.
