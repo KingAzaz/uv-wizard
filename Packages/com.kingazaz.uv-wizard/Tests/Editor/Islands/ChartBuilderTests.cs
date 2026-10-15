@@ -221,6 +221,20 @@ namespace UVWizard.Core.Tests.Islands
         }
 
         [Test]
+        public void IslandsThatShareAVertexOnALaterSurfaceShareAChart()
+        {
+            var surfaces = new[]
+            {
+                Surface(1, Rect.MinMaxRect(0.6f, 0.6f, 0.8f, 0.8f)),
+                BowTie(sharedVertex: true, new Vector2(0.2f, 0.2f)),
+            };
+
+            var charts = ChartBuilder.Build(surfaces);
+
+            Assert.That(charts.Select(c => c.Islands), Is.EqualTo(new[] { new[] { (0, 0) }, new[] { (1, 0), (1, 1) } }));
+        }
+
+        [Test]
         public void IslandsThatOnlyTouchAtOneCornerWithoutSharingAVertexStaySeparate()
         {
             var surfaces = new[] { BowTie(sharedVertex: false, new Vector2(0.2f, 0.2f)) };
