@@ -75,56 +75,84 @@ def compile_finished_since(state, since_ms):
     return False
 
 
-def refresh(port, deadline, settle_seconds):
-    """Refresh, request a compile, and wait until the editor is idle again on the new code."""
-    started = now_ms()
+def compilation_failed(port, deadline):
     reply = bridge.call(
-        port, "refresh_unity", {"mode": "force", "scope": "all", "compile": "request", "wait_for_ready": False},
-        deadline=deadline)
-    if reply.get("status") == "error" or (reply.get("result") or {}).get("success") is False:
-        raise RuntimeError("refresh failed: %s" % json.dumps(reply))
-    # A compile can start a moment after the refresh returns, so an idle editor
-    # only counts once a compile has finished since, or after settle_seconds
-    # with no compile at all (nothing to recompile).
-    idle_since = None
-    while True:
-        if time.monotonic() > deadline:
-            raise TimeoutError("editor not idle after the refresh")
-        try:
-            state = editor_state(port, deadline)
-        except bridge.BridgeError:
-            state = None
-        if state is not None and is_idle(state):
-            if compile_finished_since(state, started):
-                break
-            idle_since = idle_since or time.monotonic()
-            if time.monotonic() - idle_since >= settle_seconds:
-                break
-        else:
-            idle_since = None
-        time.sleep(1)
-    failed = bridge.result_of(bridge.call(
         port, "execute_code",
         {"action": "execute", "code": "return UnityEditor.EditorUtility.scriptCompilationFailed;"},
-        deadline=deadline))
-    if failed.get("result") is True:
+        deadline=deadline)
+    return bridge.result_of(reply).get("result") is True
+
+
+def refresh(port, deadline, compile_wait=180, poll=1.0):
+    """Refresh, request a compile, and wait until the editor is idle again on the new code.
+
+    A requested compile always ends in a compile or a domain reload, even with
+    nothing changed, but only seconds after the refresh returns (about 8 s on
+    the dev machine). So the wait ends only once one is seen: an idle editor
+    alone may still be on the old code.
+    """
+    started = now_ms()
+    try:
+        bridge.result_of(bridge.call(
+            port, "refresh_unity", {"mode": "force", "scope": "all", "compile": "request", "wait_for_ready": False},
+            deadline=deadline))
+    except bridge.BridgeError as error:
+        raise RuntimeError("refresh failed: %s" % error)
+    give_up = min(deadline, time.monotonic() + compile_wait)
+    while True:
+        try:
+            state = editor_state(port, give_up)
+        except bridge.BridgeError:
+            state = None
+        if state is not None and is_idle(state) and compile_finished_since(state, started):
+            break
+        if time.monotonic() > give_up:
+            if compilation_failed(port, deadline):
+                raise Failed("scripts failed to compile; the editor still runs the old code (see its console)")
+            raise TimeoutError("no compile or domain reload seen within %d s of the refresh" % compile_wait)
+        time.sleep(poll)
+    if compilation_failed(port, deadline):
         raise Failed("scripts failed to compile; the editor still runs the old code (see its console)")
     log("unity-tests: refreshed and compiled")
 
 
-def run(port, assemblies, group, deadline):
+def start_job(port, params, deadline, adopt_wait=10, poll=1.0):
+    """Start a test run and return its job id.
+
+    run_tests isn't safe to send twice, so it is never resent blind. If the
+    connection drops after the request goes out, or the editor answers that
+    tests are running, the job the editor started since this call is ours.
+    """
+    requested = now_ms()
+    try:
+        reply = bridge.call(port, "run_tests", params, deadline=deadline, resend=False)
+        if "tests_running" not in json.dumps(reply):
+            return bridge.result_of(reply)["job_id"]
+    except bridge.DroppedAfterSending as error:
+        log("unity-tests: %s; looking for the job it started" % error)
+    give_up = min(deadline, time.monotonic() + adopt_wait)
+    while True:
+        try:
+            tests = editor_state(port, deadline).get("tests") or {}
+        except bridge.BridgeError:
+            tests = {}
+        if tests.get("current_job_id") and (tests.get("started_unix_ms") or 0) >= requested:
+            return tests["current_job_id"]
+        if time.monotonic() > give_up:
+            raise RuntimeError("the editor is already running tests that this run didn't start")
+        time.sleep(poll)
+
+
+def run(port, assemblies, group, deadline, poll=2.0):
     params = {"mode": "EditMode", "assembly_names": assemblies, "include_failed_tests": True}
     if group:
         params["group_names"] = [group]
-    reply = bridge.call(port, "run_tests", params, deadline=deadline)
-    if "tests_running" in json.dumps(reply):
-        raise RuntimeError("the editor is already running tests")
-    job_id = bridge.result_of(reply)["job_id"]
+    job_id = start_job(port, params, deadline)
     log("unity-tests: started job %s" % job_id)
     while True:
         if time.monotonic() > deadline:
             raise TimeoutError("tests still running; job %s" % job_id)
-        time.sleep(2)
+        time.sleep(poll)
         try:
             job = bridge.result_of(bridge.call(
                 port, "get_test_job", {"job_id": job_id, "include_failed_tests": True}, deadline=deadline))
@@ -174,7 +202,6 @@ def main(argv=None):
     parser.add_argument("-a", "--assembly", action="append", help="test assembly to run (repeatable); default: all")
     parser.add_argument("-g", "--group", help="regex over test full names, e.g. 'Ns\\.Class\\.(TestA|TestB)'")
     parser.add_argument("-t", "--timeout", type=float, default=900, help="seconds before giving up (default 900)")
-    parser.add_argument("--settle", type=float, default=5, help="seconds idle with no compile before a refresh counts as done")
     parser.add_argument("--project", default="uv-wizard", help="Unity project name in the bridge status file")
     args = parser.parse_args(argv)
 
@@ -182,7 +209,7 @@ def main(argv=None):
     port = bridge.find_port(args.project)
     try:
         if not args.no_refresh:
-            refresh(port, deadline, args.settle)
+            refresh(port, deadline)
         if args.refresh_only:
             return 0
         report(run(port, args.assembly or test_assemblies(), args.group, deadline))

@@ -69,23 +69,40 @@ def call_once(port, kind, params, timeout):
             raise BridgeError("unexpected handshake: %r" % greeting)
         payload = json.dumps({"type": kind, "params": params}).encode("utf-8")
         sock.sendall(struct.pack(">Q", len(payload)) + payload)
-        (length,) = struct.unpack(">Q", _read_exact(sock, 8))
-        return json.loads(_read_exact(sock, length).decode("utf-8"))
+        try:
+            (length,) = struct.unpack(">Q", _read_exact(sock, 8))
+            return json.loads(_read_exact(sock, length).decode("utf-8"))
+        except OSError as error:
+            raise DroppedAfterSending("%s request sent, then: %s" % (kind, error))
 
 
-def call(port, kind, params=None, timeout=30.0, deadline=None):
-    """call_once, retried on dropped or refused connections until deadline (a time.monotonic() value)."""
+class DroppedAfterSending(BridgeError):
+    """The request went out but no reply came back: the editor may have acted on it."""
+
+
+def call(port, kind, params=None, timeout=30.0, deadline=None, resend=True):
+    """call_once, retried on dropped or refused connections until deadline (a time.monotonic() value).
+
+    With resend=False, a request that went out before the drop is not sent
+    again: DroppedAfterSending is raised for the caller to find out what the
+    editor did. Use it for requests that aren't safe to repeat, like run_tests.
+    """
     if deadline is None:
         deadline = time.monotonic() + 120
     delay = 0.5
     while True:
         try:
             return call_once(port, kind, params or {}, timeout)
-        except (OSError, ConnectionError) as error:
-            if time.monotonic() + delay > deadline:
-                raise BridgeError("bridge unreachable on port %d: %s" % (port, error))
-            time.sleep(delay)
-            delay = min(delay * 2, 5.0)
+        except DroppedAfterSending as dropped:
+            if not resend:
+                raise
+            error = dropped
+        except OSError as refused:
+            error = refused
+        if time.monotonic() + delay > deadline:
+            raise BridgeError("bridge unreachable on port %d: %s" % (port, error))
+        time.sleep(delay)
+        delay = min(delay * 2, 5.0)
 
 
 def result_of(reply):
