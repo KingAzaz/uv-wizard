@@ -342,15 +342,16 @@ namespace UVWizard.NDMF.Tests
             return renderer;
         }
 
-        // An FX layer that turns the named child on and off.
-        void Toggle(GameObject avatar, string child)
+        // An FX layer that turns the named children on and off together.
+        void Toggle(GameObject avatar, params string[] children)
         {
             var clip = Keep(new AnimationClip());
-            AnimationUtility.SetEditorCurve(clip, EditorCurveBinding.FloatCurve(child, typeof(GameObject), "m_IsActive"),
-                new AnimationCurve(new Keyframe(0, 1), new Keyframe(1, 0)));
+            foreach (var child in children)
+                AnimationUtility.SetEditorCurve(clip, EditorCurveBinding.FloatCurve(child, typeof(GameObject), "m_IsActive"),
+                    new AnimationCurve(new Keyframe(0, 1), new Keyframe(1, 0)));
             var controller = Keep(new AnimatorController());
-            controller.AddParameter(child, AnimatorControllerParameterType.Bool);
-            controller.AddLayer(child);
+            controller.AddParameter(children[0], AnimatorControllerParameterType.Bool);
+            controller.AddLayer(children[0]);
             controller.layers[0].stateMachine.AddState("Toggle").motion = clip;
             var descriptor = avatar.GetComponent<VRCAvatarDescriptor>();
             descriptor.customizeAnimationLayers = true;

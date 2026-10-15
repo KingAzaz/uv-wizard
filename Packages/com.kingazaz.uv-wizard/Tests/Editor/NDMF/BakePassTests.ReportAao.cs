@@ -65,6 +65,30 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void MeshesAvatarOptimizerMergesUnderOneToggleAreReportedAsToggled()
+        {
+            // Avatar Optimizer merges the shirt and pants, which share one toggle, into a new object and moves the
+            // toggle onto it. The outfit has more vertices than the torso and tail, so it mustn't be taken for the
+            // main mesh either.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var hips = avatar.transform.Find("Armature/Hips");
+            Skinned(avatar, "Shirt", hips, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.2f, 0.6f), Quad(4.1f, 0.2f, 0.5f, 0.3f, 0.6f),
+                Quad(4.2f, 0.3f, 0.5f, 0.4f, 0.6f), Quad(4.3f, 0.1f, 0.6f, 0.2f, 0.7f) }), Standard(Gradient(16, 4)));
+            Skinned(avatar, "Pants", hips, Mesh(new[] { Quad(5, 0.1f, 0.8f, 0.4f, 0.9f) }), Standard(Gradient(16, 5)));
+            Toggle(avatar, "Shirt", "Pants");
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            Assert.That(avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true), Has.Length.EqualTo(2),
+                "Avatar Optimizer merges the outfit into one mesh and the torso and tail into another");
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("Toggle"));
+        }
+
+        [Test]
         public void WithTheAvatarsOwnTraceAndOptimizeOffForMmdABodyMeshGetsItsRealReason()
         {
             // The Body is skinned to another root bone, so it stays apart for that, not for MMD worlds.

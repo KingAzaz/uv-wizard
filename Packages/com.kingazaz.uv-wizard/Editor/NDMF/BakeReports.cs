@@ -31,8 +31,8 @@ namespace UVWizard.NDMF
     }
 
     /// <summary>
-    /// One build's report so far, kept in NDMF's build state. The bake records what it did and what animations toggle;
-    /// the VRChat SDK's figures, and the renderers left apart, come from passes outside this assembly.
+    /// One build's report so far, kept in NDMF's build state. The bake records what it did; the
+    /// VRChat SDK's figures, and the renderers left apart and why, come from passes outside this assembly.
     /// </summary>
     internal sealed class ReportDraft
     {
@@ -41,9 +41,6 @@ namespace UVWizard.NDMF
         public ReportFigures? Before { get; set; }
         public ReportFigures? After { get; set; }
         public IReadOnlyList<LeftoverRenderer>? Leftovers { get; set; }
-
-        /// <summary>The objects animations turn on or off.</summary>
-        public ISet<GameObject> Toggled { get; set; } = new HashSet<GameObject>();
 
         /// <summary>
         /// True when the avatar's Trace and Optimize keeps a Body mesh apart for MMD worlds. False without one, since

@@ -33,7 +33,6 @@ namespace UVWizard.NDMF
             draft.Baked = true;
             draft.Result = result;
             draft.Target = ReportDraft.RankOf(avatar.preset);
-            draft.Toggled = MaterialAnimations.Toggled(animators, root);
             draft.Publish(root);
         }
 

@@ -2,6 +2,7 @@
 
 using System;
 using nadena.dev.ndmf;
+using nadena.dev.ndmf.animator;
 using UnityEngine;
 using UVWizard.Core.Reporting;
 using UVWizard.NDMF;
@@ -36,16 +37,19 @@ namespace UVWizard.VRChat
             InPhase(BuildPhase.Optimizing)
                 .AfterPlugin("com.kingazaz.uv-wizard")
                 .AfterPlugin("com.anatawa12.avatar-optimizer")
-                .Run("Measure after the build", context =>
+                // The toggles are read from the controllers as the build leaves them: Avatar Optimizer merges meshes
+                // that share a toggle into a new object, and moves the toggle onto it.
+                .WithRequiredExtension(typeof(AnimatorServicesContext), sequence => sequence.Run("Measure after the build", context =>
                 {
                     // By now the UV Wizard component may be gone, since it's editor-only; the bake marked the draft.
                     var draft = context.GetState<ReportDraft>();
                     if (!draft.Baked) return;
                     var root = context.AvatarRootObject;
                     draft.After = Measure(root);
-                    draft.Leftovers = LeftoverRenderers.Find(root, draft.Toggled, draft.MmdWorldCompatibility);
+                    var toggled = MaterialAnimations.Toggled(context.Extension<AnimatorServicesContext>(), root);
+                    draft.Leftovers = LeftoverRenderers.Find(root, toggled, draft.MmdWorldCompatibility);
                     draft.Publish(root);
-                });
+                }));
         }
 
         // The bake's own condition: a mobile build of an avatar with the UV Wizard component.
