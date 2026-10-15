@@ -201,6 +201,32 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void IslandsInTwoTilesOfAnEmissionMapTiledHalfAsOftenEachGetTheirOwnEmission()
+        {
+            // The albedo repeats once per tile, so on it alone the hat's islands in tiles 0 and 1 would stack into one
+            // chart. The emission map repeats every two tiles, so they glow with its left and right halves.
+            var avatar = Avatar(withComponent: true);
+            var toon = ToonStandardMaterial(Gradient(16, 4), culling: 2);
+            var glow = Gradient(16, 1);
+            toon.SetTexture("_EmissionMap", glow);
+            toon.SetTextureScale("_EmissionMap", new Vector2(0.5f, 1));
+            toon.SetColor("_EmissionColor", Color.white);
+            toon.SetFloat("_EmissionStrength", 1);
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(2, 0.1f, 0.1f, 0.4f, 0.4f), Quad(2, 1.1f, 0.1f, 1.4f, 0.4f) });
+            hat.GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
+            var before = Centroids(hat.gameObject).Select(c => glow.GetPixelBilinear(c.Uv.x * 0.5f, c.Uv.y)).ToArray();
+
+            BakePass.Bake(avatar, new BakeOptions(Shader.Find(ToonStandardName)));
+
+            var emission = (Texture2D)hat.GetComponent<MeshRenderer>().sharedMaterial.GetTexture("_EmissionMap");
+            var after = Centroids(hat.gameObject).Select(c => emission.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
+            for (var k = 0; k < before.Length; k++)
+            for (var channel = 0; channel < 3; channel++)
+                Assert.That(after[k][channel], Is.EqualTo(before[k][channel]).Within(0.08f), $"triangle {k}, channel {channel}");
+        }
+
+        [Test]
         public void AnAlbedoScaledToZeroStillBakesItsTiledNormalMap()
         {
             // The albedo's zero scale squeezes the hat's chart to a point, leaving the tiling ratio nothing to divide by.

@@ -20,10 +20,18 @@ namespace UVWizard.Core.Islands
         /// <summary>
         /// Returns the islands of one source surface: the UV0 coordinates of its mesh and the
         /// triangles of one material slot, three vertex indices per triangle. The wrap modes are
-        /// the source textures' on each axis, and decide how far islands may shift between tiles.
+        /// the source texture's on each axis, and decide how far islands may shift between tiles.
         /// </summary>
         public static Island[] Build(ReadOnlySpan<Vector2> uv0, ReadOnlySpan<int> triangles,
-            TextureWrapMode wrapU, TextureWrapMode wrapV)
+            TextureWrapMode wrapU, TextureWrapMode wrapV) =>
+            Build(uv0, triangles, TilePeriod.Of(wrapU), TilePeriod.Of(wrapV));
+
+        /// <summary>
+        /// Returns the islands of one source surface, as above, shifting them between tiles by
+        /// whole multiples of each axis's <see cref="TilePeriod"/>, and not at all where it is 0.
+        /// </summary>
+        public static Island[] Build(ReadOnlySpan<Vector2> uv0, ReadOnlySpan<int> triangles,
+            int periodU, int periodV)
         {
             var triangleCount = triangles.Length / 3;
             var unionFind = new UnionFind(triangleCount);
@@ -66,7 +74,7 @@ namespace UVWizard.Core.Islands
             for (var i = 0; i < islands.Count; i++)
             {
                 var bounds = UvBounds(uv0, triangles, islands[i]);
-                var tileShift = new Vector2Int(TileShift(bounds.xMin, wrapU), TileShift(bounds.yMin, wrapV));
+                var tileShift = new Vector2Int(TileShift(bounds.xMin, periodU), TileShift(bounds.yMin, periodV));
                 var exceedsRepeatLimit = TilesSpanned(bounds.xMin, bounds.xMax) > RepeatLimit
                     || TilesSpanned(bounds.yMin, bounds.yMax) > RepeatLimit;
                 result[i] = new Island(islands[i].ToArray(), bounds, tileShift, exceedsRepeatLimit);
@@ -90,17 +98,13 @@ namespace UVWizard.Core.Islands
             return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
         }
 
-        // Whole tiles that move an island starting at min, on one axis, into its home tile. Repeat
-        // samples every tile alike. Mirror flips every other tile, so it shifts by even tiles only.
-        static int TileShift(float min, TextureWrapMode wrap)
+        // Whole tiles that move an island starting at min, on one axis, into its home tile: the
+        // multiple of the period that brings it closest to tile 0 from above.
+        static int TileShift(float min, int period)
         {
+            if (period == 0) return 0;
             var tile = (int)Math.Floor(Snap(min));
-            switch (wrap)
-            {
-                case TextureWrapMode.Repeat: return -tile;
-                case TextureWrapMode.Mirror: return -2 * Mathf.FloorToInt(tile / 2f);
-                default: return 0;
-            }
+            return -period * (int)Math.Floor(tile / (double)period);
         }
 
         static int TilesSpanned(float min, float max)
