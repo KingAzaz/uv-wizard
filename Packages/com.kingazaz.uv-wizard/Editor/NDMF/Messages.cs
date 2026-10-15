@@ -28,11 +28,12 @@ namespace UVWizard.NDMF
                 "default settings, so AAO can merge the avatar's skinned meshes into one. Its defaults don't change how " +
                 "the avatar looks. To stop this, turn off Add Trace And Optimize on the UV Wizard component."),
             (Excluded, "Kept out of the atlas: {0}"),
-            (Excluded + ":description", "{2} The material stays on {1} as it was."),
+            (Excluded + ":description", "{2} It stays on {1}, on a Toon Standard material of its own."),
             (Flagged, "May look different after the bake: {0}"),
-            (Flagged + ":description", "{2} It's merged into the atlas on {1}."),
+            (Flagged + ":description", "{2} It's on {1}."),
             (NoFit, "Nothing was merged"),
-            (NoFit + ":description", "The materials don't fit in the atlas even at the lowest detail, so the avatar is unchanged."),
+            (NoFit + ":description", "The materials don't fit in the atlas even at the lowest detail, so none is merged. " +
+                "Each still gets a Toon Standard material of its own."),
             (NoToonStandard, "VRChat's Toon Standard shader is missing"),
             (OverBudget, "Over the preset's texture memory"),
             (OverBudget + ":description", "After the bake, the avatar's textures take {0} MB, more than the preset's " +

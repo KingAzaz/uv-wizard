@@ -49,9 +49,10 @@ namespace UVWizard.NDMF.Tests
         [Test]
         public void ABakeLeftOverItsBudgetSaysSo()
         {
-            // A kept 16 MB texture can't fit Excellent's 10 MB however small the atlas gets.
+            // A kept 16 MB texture can't fit Excellent's 10 MB however small the atlas gets. Its material's shader is
+            // one mobile allows, so it isn't converted.
             var avatar = Avatar(withComponent: true);
-            Kept(avatar, Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)));
+            Kept(avatar, Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)), "VRChat/Mobile/Standard Lite");
 
             var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
 
@@ -99,14 +100,14 @@ namespace UVWizard.NDMF.Tests
         }
 
         // Adds a renderer the bake excludes, since its mesh has no UV0, with a material on the texture.
-        void Kept(GameObject avatar, Texture2D texture)
+        void Kept(GameObject avatar, Texture2D texture, string shader = "Standard")
         {
             var mesh = Mesh(new[] { Quad(4, 0.1f, 0.1f, 0.6f, 0.7f) });
             mesh.uv = null;
             var kept = new GameObject("Kept");
             kept.transform.SetParent(avatar.transform);
             kept.AddComponent<MeshFilter>().sharedMesh = mesh;
-            kept.AddComponent<MeshRenderer>().sharedMaterials = new[] { Standard(texture) };
+            kept.AddComponent<MeshRenderer>().sharedMaterials = new[] { Keep(new Material(Shader.Find(shader)) { mainTexture = texture }) };
         }
 
         // Gives the hat 4096 albedo, emission and normal textures, which it samples across half their width: more

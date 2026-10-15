@@ -57,7 +57,11 @@ namespace UVWizard.NDMF
             var renderers = root.GetComponentsInChildren<Renderer>(true);
             var animated = animators != null ? MaterialAnimations.Find(animators, root, renderers) : null;
             var result = AvatarBaker.Bake(renderers, options, LaterMeshEdits(), animated, Head(root));
-            if (animators != null) MaterialAnimations.FollowMovedSlots(animators, root, result.MovedSlots);
+            if (animators != null)
+            {
+                MaterialAnimations.FollowMovedSlots(animators, root, result.MovedSlots);
+                MaterialAnimations.SwapInConverted(animators, root, result.ConvertedMaterials);
+            }
 
             // A mesh two renderers share is rewritten for each; NDMF tracks the first copy.
             var registered = new HashSet<Mesh>();

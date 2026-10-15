@@ -30,6 +30,11 @@ namespace UVWizard.Core.Pipeline
         /// Null bakes afresh every time.
         /// </param>
         /// <param name="cacheEntries">The most bakes the cache keeps. The least recently used go first.</param>
+        /// <param name="mobileShaders">
+        /// The names of the shaders mobile allows. A material left on a mesh renderer with any other shader, and one
+        /// an animation swaps into an excluded slot, gets its own material with the merged shader instead (ADR 0004).
+        /// Null leaves every material as it is.
+        /// </param>
         /// <param name="rampProperty">The merged shader's shadow-ramp texture property.</param>
         /// <param name="defaultRamp">The ramp to use when no source has the merged shader to copy one from.</param>
         /// <param name="cullingProperty">The culling property merged slots are checked against, when both have it.</param>
@@ -45,8 +50,9 @@ namespace UVWizard.Core.Pipeline
             string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null,
             string cullingProperty = "_Culling", string normalMapKeyword = "USE_NORMAL_MAPS",
             NormalEncoding? normalEncoding = null, Budget? budget = null, Channels channels = Channels.All,
-            string? cacheDirectory = null, int cacheEntries = 16)
+            string? cacheDirectory = null, int cacheEntries = 16, IReadOnlyCollection<string>? mobileShaders = null)
         {
+            MobileShaders = mobileShaders != null ? new HashSet<string>(mobileShaders) : null;
             CacheDirectory = cacheDirectory;
             CacheEntries = cacheEntries;
             MergedShader = mergedShader;
@@ -77,5 +83,6 @@ namespace UVWizard.Core.Pipeline
         public NormalEncoding NormalEncoding { get; }
         public string? CacheDirectory { get; }
         public int CacheEntries { get; }
+        public HashSet<string>? MobileShaders { get; }
     }
 }

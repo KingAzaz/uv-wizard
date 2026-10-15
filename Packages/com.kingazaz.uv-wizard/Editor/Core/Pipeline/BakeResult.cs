@@ -14,8 +14,9 @@ namespace UVWizard.Core.Pipeline
             IReadOnlyList<(Mesh Source, Mesh Rewritten)> replacedMeshes, IReadOnlyList<SlotNote> excluded,
             IReadOnlyList<SlotNote> flagged, Texture2D? emissionAtlas = null, float emissionStrength = 1,
             Texture2D? normalAtlas = null, IReadOnlyList<(Renderer Renderer, int[] SlotOf)>? movedSlots = null,
-            bool fromCache = false)
+            bool fromCache = false, IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null)
         {
+            ConvertedMaterials = convertedMaterials ?? Array.Empty<(Material, Material)>();
             FromCache = fromCache;
             NormalAtlas = normalAtlas;
             MovedSlots = movedSlots ?? Array.Empty<(Renderer, int[])>();
@@ -30,9 +31,11 @@ namespace UVWizard.Core.Pipeline
             Flagged = flagged;
         }
 
-        /// <summary>A bake that merged nothing and left every renderer as it was.</summary>
-        public static BakeResult Unchanged(bool fits, IReadOnlyList<SlotNote> excluded, IReadOnlyList<SlotNote> flagged) =>
-            new BakeResult(fits, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged);
+        /// <summary>A bake that merged nothing, and left every renderer as it was but for converted materials.</summary>
+        public static BakeResult Unchanged(bool fits, IReadOnlyList<SlotNote> excluded, IReadOnlyList<SlotNote> flagged,
+            IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null) =>
+            new BakeResult(fits, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged,
+                convertedMaterials: convertedMaterials);
 
         /// <summary>True when the packing and atlas came from the cache rather than a fresh bake.</summary>
         public bool FromCache { get; }
@@ -105,7 +108,13 @@ namespace UVWizard.Core.Pipeline
             return this;
         }
 
-        /// <summary>Slots kept out of the atlas: they keep their source material and UV0.</summary>
+        /// <summary>
+        /// Each source material that stays on the avatar or that an animation swaps in, with a shader mobile doesn't
+        /// allow, and the material with the merged shader that replaced it. Swaps still name the source.
+        /// </summary>
+        public IReadOnlyList<(Material Source, Material Converted)> ConvertedMaterials { get; }
+
+        /// <summary>Slots kept out of the atlas: they keep their UV0, and their source material or its conversion.</summary>
         public IReadOnlyList<SlotNote> Excluded { get; }
 
         /// <summary>Slots merged, but which may look different afterwards.</summary>

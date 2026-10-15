@@ -18,10 +18,10 @@ namespace UVWizard.Core.Pipeline
 {
     /// <summary>
     /// Bakes renderers' material slots into one atlas and one merged material, changing the renderers in
-    /// place: each merged slot gets the merged material and a rewritten mesh, and every other slot stays
-    /// as it was.
+    /// place: each merged slot gets the merged material and a rewritten mesh. Every other slot keeps its UVs, and
+    /// its material, or a conversion of it when mobile doesn't allow its shader.
     /// </summary>
-    internal static class AvatarBaker
+    internal static partial class AvatarBaker
     {
         // A source with no texture still needs a little atlas space to hold its tint.
         static readonly Vector2Int UntexturedSize = new Vector2Int(8, 8);
@@ -49,7 +49,13 @@ namespace UVWizard.Core.Pipeline
             foreach (var renderer in renderers)
                 CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
                     laterEdits, needs, options.Channels);
-            if (slots.Count == 0) return BakeResult.Unchanged(true, excluded, flagged).Measured(renderers, options.Budget);
+            var conversions = new Conversions(options);
+            if (slots.Count == 0)
+            {
+                conversions.Apply(renderers, null, animated);
+                return BakeResult.Unchanged(true, excluded, conversions.Flagged(flagged), conversions.Made)
+                    .Measured(renderers, options.Budget);
+            }
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
             var keyIds = new Dictionary<SourceKey, int>();
@@ -79,7 +85,7 @@ namespace UVWizard.Core.Pipeline
             var representative = Representative(slots, charts, options.MergedShader);
             var merged = MergedMaterial(options, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             var channels = Needed(slots, options.Channels);
-            var share = options.Budget is { } budget ? budget.Bytes - OutsideBytes(renderers, slots, merged) : (long?)null;
+            var share = options.Budget is { } budget ? budget.Bytes - OutsideBytes(renderers, slots, merged, conversions) : (long?)null;
             var cache = options.CacheDirectory is { } directory ? new BakeCache(directory, options.CacheEntries) : null;
             var key = cache != null ? Key(slots, surfaces, priorities, channels, share, options) : null;
             var cached = key is { } hash ? cache!.Load(hash, options.Compress) : null;
@@ -109,7 +115,9 @@ namespace UVWizard.Core.Pipeline
                 if (!search.Fits)
                 {
                     Object.DestroyImmediate(merged);
-                    return BakeResult.Unchanged(false, excluded, Array.Empty<SlotNote>()).Measured(renderers, options.Budget);
+                    conversions.Apply(renderers, null, animated);
+                    return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
+                        conversions.Made).Measured(renderers, options.Budget);
                 }
                 placements = search.Packing.Placements;
             }
@@ -145,8 +153,10 @@ namespace UVWizard.Core.Pipeline
             UseAtlases(merged, options, atlas, emissionAtlas, emissionStrength, normalAtlas);
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
             var (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
-            return new BakeResult(true, merged, atlas, representative, replaced, excluded, flagged, emissionAtlas,
-                emissionStrength, normalAtlas, moved, cached != null).Measured(renderers, options.Budget);
+            conversions.Apply(renderers, merged, animated);
+            return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
+                emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, conversions.Made)
+                .Measured(renderers, options.Budget);
         }
 
         // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.
@@ -198,8 +208,8 @@ namespace UVWizard.Core.Pipeline
         }
 
         // The texture memory of everything that stays on the avatar outside the atlas: materials on slots that aren't
-        // merged, and the merged material's own textures.
-        static long OutsideBytes(IReadOnlyList<Renderer> renderers, List<Slot> slots, Material merged)
+        // merged, as converted for mobile, and the merged material's own textures.
+        static long OutsideBytes(IReadOnlyList<Renderer> renderers, List<Slot> slots, Material merged, Conversions conversions)
         {
             var mergedSlots = new HashSet<(Renderer, int)>();
             foreach (var slot in slots) mergedSlots.Add((slot.Renderer, slot.Submesh));
@@ -209,7 +219,8 @@ namespace UVWizard.Core.Pipeline
                 if (TextureMemory.IsEditorOnly(renderer.transform)) continue;
                 var materials = renderer.sharedMaterials;
                 for (var s = 0; s < materials.Length; s++)
-                    if (materials[s] != null && !mergedSlots.Contains((renderer, s))) outside.Add(materials[s]);
+                    if (materials[s] != null && !mergedSlots.Contains((renderer, s)))
+                        outside.Add(conversions.Of(materials[s], renderer, s));
             }
             return TextureMemory.Bytes(outside);
         }
