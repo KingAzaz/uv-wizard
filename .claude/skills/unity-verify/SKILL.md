@@ -13,12 +13,16 @@ The cloud project-owner routine cannot run Unity, so this is the local check. It
 - `main`: `origin/main`.
 - No argument: each open PR labelled `needs-unity` (`gh pr list --label needs-unity --json number,headRefName`), oldest first, then `main`.
 
+## Before the first target
+
+`take` the checkout lease (AGENTS.md, **Checkout lease**) with your session's title. If it exits 1, stop and report its output: another run is using the checkout. `release` it after **Afterwards**, and on every early stop.
+
 ## For each target
 
 1. Record the current branch (`git branch --show-current`). Run `git status --porcelain`. If anything is listed, stop and report it: never stash or discard the user's work.
 2. Never switch to a `prototype/*` branch. `git fetch origin`, then `git switch <headRefName>` and `git reset --hard origin/<headRefName>` only if that local branch has no unpushed commits (`git log origin/<headRefName>..<headRefName>` is empty; otherwise stop and report). For `main`, use `git switch --detach origin/main`. Say which branch Unity now compiles.
 3. Call `refresh_unity`, wait for the compile, then `read_console` for errors. Compile errors fail the target. Report them and skip the tests.
-4. `run_tests` with mode EditMode and every test assembly, naming each one in `assembly_names`. List them with `find Packages/com.kingazaz.uv-wizard/Tests -name '*.asmdef'`. Today that's `UVWizard.Core.Editor.Tests`, plus the gated ones that CI compiles out: `UVWizard.Core.Editor.Tests.VRChat` (VRChat SDK), `UVWizard.Core.Editor.Tests.Poiyomi` (Poiyomi Toon), `UVWizard.Core.Editor.Tests.LilToon` (lilToon) and `UVWizard.NDMF.Editor.Tests` (NDMF; the bake pass's integration tests). Poll `get_test_job` until it finishes. Report the result count per assembly, so a missing assembly shows up.
+4. `run_tests` with mode EditMode and every test assembly, naming each one in `assembly_names`. List them with `find Packages/com.kingazaz.uv-wizard/Tests -name '*.asmdef'`. Today that's `UVWizard.Core.Editor.Tests`, plus the gated ones that CI compiles out: `UVWizard.Core.Editor.Tests.VRChat` (VRChat SDK), `UVWizard.Core.Editor.Tests.Poiyomi` (Poiyomi Toon), `UVWizard.Core.Editor.Tests.LilToon` (lilToon) and `UVWizard.NDMF.Editor.Tests` (NDMF; the bake pass's integration tests). Wait for the run as AGENTS.md (**Dev environment → Tests**) says, by the `Editor.log` count, then call `get_test_job` once. Report the result count per assembly, so a missing assembly shows up.
 5. Post the result:
    - For a PR, use `gh pr comment <n>`. Start with `> *Local Unity check (unity-verify).*`, then: commit SHA, Unity version, pass/fail counts, each failing test with its message, and any console errors. On failure, first add `unity-failed` (`gh pr edit <n> --add-label unity-failed`; create it with `gh label create unity-failed --force` if missing). Then, in a separate command, remove `needs-unity` (`gh pr edit <n> --remove-label needs-unity`). Adding before removing keeps a hold label on the PR throughout, so the Merge gate never passes a PR that just failed. On success, only remove `needs-unity`.
    - For `main`, comment only on failure: open an issue titled `main fails in Unity: <short cause>` with labels `bug` and `needs-triage`.
