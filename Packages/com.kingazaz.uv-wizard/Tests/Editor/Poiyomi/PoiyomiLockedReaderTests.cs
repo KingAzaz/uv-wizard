@@ -30,9 +30,9 @@ namespace UVWizard.Core.Tests.Poiyomi
         [TearDown]
         public void DeleteAssets()
         {
-            foreach (var path in AssetDatabase.FindAssets("t:Material", new[] { folder }))
+            foreach (var guid in AssetDatabase.FindAssets("t:Material", new[] { folder }))
             {
-                var material = AssetDatabase.LoadAssetAtPath<Material>(AssetDatabase.GUIDToAssetPath(path));
+                var material = AssetDatabase.LoadAssetAtPath<Material>(AssetDatabase.GUIDToAssetPath(guid));
                 var shaderPath = AssetDatabase.GetAssetPath(material.shader);
                 // Locking writes the locked shader into ThryEditor's cache, one folder per lock.
                 if (shaderPath.StartsWith(LockedShaderCache + "/"))
@@ -86,29 +86,19 @@ namespace UVWizard.Core.Tests.Poiyomi
         }
 
         // Older locks keep only the renamed property and strip the properties of modules that are off. One
-        // shader is recognised by its name alone, the other by _ShaderOptimizerEnabled defaulting to 1.
-        [TestCase("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "")]
-        [TestCase(".poiyomi/Poiyomi Toon (locked test)", "_ShaderOptimizerEnabled (\"\", Int) = 1")]
+        // shader is recognised by its name alone, the other by _ShaderOptimizerEnabled defaulting to 1. A
+        // lock that used the default suffix (the material's name back then) recorded no suffix tag at all.
+        [TestCase("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "", "Furyon")]
+        [TestCase(".poiyomi/Poiyomi Toon (locked test)", "_ShaderOptimizerEnabled (\"\", Int) = 1", "Furyon")]
+        [TestCase("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "", null)]
         public void AnOlderLockReadsTheRenamedPropertyAndTreatsStrippedModulesAsOff(string shaderName,
-            string optimizerProperty)
+            string optimizerProperty, string? suffixTag)
         {
-            var shader = Track(ShaderUtil.CreateShaderAsset($@"Shader ""{shaderName}""
-{{
-    Properties
-    {{
-        {optimizerProperty}
-        _MainTex (""Texture"", 2D) = ""white"" {{}}
-        _MainTexUV (""UV"", Int) = 0
-        _MainTexPan (""Panning"", Vector) = (0, 0, 0, 0)
-        _Color_Furyon (""Color"", Color) = (1, 1, 1, 1)
-        _Mode (""Rendering Preset"", Int) = 0
-    }}
-    SubShader {{ Pass {{ }} }}
-}}", false));
-            var material = Track(new Material(shader));
+            var material = Track(new Material(OlderLock(shaderName, optimizerProperty,
+                @"_Color_Furyon (""Color"", Color) = (1, 1, 1, 1)")));
             material.SetOverrideTag("_ColorAnimated", "2");
             // Only the older tag: a lock recorded thry_locked_rename_suffix only from ThryEditor 2.x on.
-            material.SetOverrideTag("thry_rename_suffix", "Furyon");
+            if (suffixTag != null) material.SetOverrideTag("thry_rename_suffix", suffixTag);
             material.SetColor("_Color_Furyon", new Color(0f, 1f, 0f, 1f));
 
             var reading = SourceShaderReader.Read(material);
@@ -119,6 +109,36 @@ namespace UVWizard.Core.Tests.Poiyomi
             Assert.That(reading.Emission, Is.Null, "emission was stripped");
             Assert.That(reading.Normal, Is.Null, "the normal map was stripped");
         }
+
+        [Test]
+        public void ARenamedPropertyWithNoRecordedSuffixAndSeveralCandidatesIsFlagged()
+        {
+            var material = Track(new Material(OlderLock("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "",
+                @"_Color_Body (""Color"", Color) = (1, 1, 1, 1)
+        _Color_Face (""Color"", Color) = (1, 1, 1, 1)")));
+            material.SetOverrideTag("_ColorAnimated", "2");
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.Contain("_Color"));
+        }
+
+        // A hand-written stand-in for a shader an older ThryEditor locked.
+        Shader OlderLock(string shaderName, string optimizerProperty, string colourProperties) =>
+            Track(ShaderUtil.CreateShaderAsset($@"Shader ""{shaderName}""
+{{
+    Properties
+    {{
+        {optimizerProperty}
+        _MainTex (""Texture"", 2D) = ""white"" {{}}
+        _MainTexUV (""UV"", Int) = 0
+        _MainTexPan (""Panning"", Vector) = (0, 0, 0, 0)
+        {colourProperties}
+        _Mode (""Rendering Preset"", Int) = 0
+    }}
+    SubShader {{ Pass {{ }} }}
+}}", false));
 
         Material MaterialAsset()
         {

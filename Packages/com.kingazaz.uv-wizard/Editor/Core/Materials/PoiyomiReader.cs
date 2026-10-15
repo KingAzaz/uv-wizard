@@ -52,9 +52,14 @@ namespace UVWizard.Core.Materials
                 reasons.Add("Cutout becomes opaque: Toon Standard has no alpha cutoff.");
             else if (mode != Opaque)
                 reasons.Add("Transparent becomes opaque: Toon Standard has no transparency.");
-            foreach (var (channel, texture, _) in textures)
-                if (properties.Pan(texture) != Vector2.zero)
+            // An unset texture samples its plain default, so panning it moves nothing.
+            foreach (var (channel, texture, source) in textures)
+                if (source.Texture != null && properties.Pan(texture) != Vector2.zero)
                     reasons.Add($"{channel} pans: the scrolling becomes static.");
+            reasons.AddRange(Unbaked(properties, emission != null));
+            if (properties.Unresolved.Count > 0)
+                reasons.Add($"Renamed {string.Join(", ", properties.Unresolved)} can't be told apart: " +
+                            "the lock recorded no suffix, so the saved values are baked.");
             var reading = new SourceMaterialReading(albedo, emission, normal,
                 reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged,
                 reasons.Count == 0 ? null : string.Join(" ", reasons), usesVertexColour);
@@ -80,6 +85,25 @@ namespace UVWizard.Core.Materials
             return tint.maxColorComponent > 0 ? Source(properties, "_EmissionMap", tint) : null;
         }
 
+        // Features that change the colours Poiyomi renders in ways the bake doesn't reproduce.
+        static IEnumerable<string> Unbaked(Properties properties, bool emits)
+        {
+            if (properties.Float("_ColorThemeIndex", 0) != 0)
+                yield return "Albedo takes a theme colour: the saved colour is baked.";
+            if (emits)
+            {
+                if (properties.Float("_EmissionColorThemeIndex", 0) != 0)
+                    yield return "Emission takes a theme colour: the saved colour is baked.";
+                if (properties.Float("_EmissionBaseColorAsMap", 0) > 0.5f)
+                    yield return "Emission takes the base colour: only the emission colour is baked.";
+                if (properties.Texture("_EmissionMask") != null)
+                    yield return "Emission is masked: the mask isn't baked.";
+            }
+            for (var i = 1; i <= 3; i++)
+                if (properties.Float($"_EnableEmission{i}", 0) > 0.5f)
+                    yield return $"Emission {i} isn't baked: only the first emission is.";
+        }
+
         // A texture as Poiyomi samples it: with its own _ST, from the mesh UVs its {texture}UV selector names.
         static ChannelSource Source(Properties properties, string texture, Color tint, float strength = 1)
         {
@@ -100,17 +124,21 @@ namespace UVWizard.Core.Materials
         sealed class Properties
         {
             readonly Material material;
+            readonly bool locked;
             readonly string? renameSuffix;
+            readonly SortedSet<string> unresolved = new SortedSet<string>();
 
             public Properties(Material material)
             {
                 this.material = material;
+                locked = IsLocked(material.shader);
                 // The suffix comes from the tags only, never from the material's name: NDMF clones can be
                 // renamed.
-                renameSuffix = IsLocked(material.shader)
-                    ? Tag("thry_locked_rename_suffix") ?? Tag("thry_rename_suffix")
-                    : null;
+                renameSuffix = Tag("thry_locked_rename_suffix") ?? Tag("thry_rename_suffix");
             }
+
+            /// <summary>Renamed properties read so far whose new name matched more than one property.</summary>
+            public IReadOnlyCollection<string> Unresolved => unresolved;
 
             public float Float(string property, float fallback) =>
                 Name(property) is { } name ? material.GetFloat(name) : fallback;
@@ -130,10 +158,32 @@ namespace UVWizard.Core.Materials
             // The name the shader declares the property under, or null when locking stripped it.
             string? Name(string property)
             {
-                if (renameSuffix != null && Tag(property + "Animated") == "2" &&
-                    material.HasProperty($"{property}_{renameSuffix}"))
-                    return $"{property}_{renameSuffix}";
+                if (locked && Tag(property + "Animated") == "2")
+                {
+                    if (renameSuffix != null)
+                    {
+                        if (material.HasProperty($"{property}_{renameSuffix}")) return $"{property}_{renameSuffix}";
+                    }
+                    // Without a recorded suffix the lock used the material's name back then, so the renamed
+                    // property is the one {property}_* the shader declares.
+                    else
+                    {
+                        var renamed = Renamed(property);
+                        if (renamed.Count == 1) return renamed[0];
+                        if (renamed.Count > 1) unresolved.Add(property);
+                    }
+                }
                 return material.HasProperty(property) ? property : null;
+            }
+
+            List<string> Renamed(string property)
+            {
+                var shader = material.shader;
+                var renamed = new List<string>();
+                for (var i = 0; i < shader.GetPropertyCount(); i++)
+                    if (shader.GetPropertyName(i).StartsWith(property + "_"))
+                        renamed.Add(shader.GetPropertyName(i));
+                return renamed;
             }
 
             string? Tag(string tag) => material.GetTag(tag, false, "") is { Length: > 0 } value ? value : null;

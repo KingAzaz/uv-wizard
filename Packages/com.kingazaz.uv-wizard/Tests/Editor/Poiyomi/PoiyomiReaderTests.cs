@@ -139,6 +139,7 @@ namespace UVWizard.Core.Tests.Poiyomi
         public void APanningTextureIsFlaggedBecauseScrollingBecomesStatic()
         {
             var material = Material(PoiyomiToon);
+            material.SetTexture("_MainTex", Texture());
             material.SetVector("_MainTexPan", new Vector4(0.1f, 0, 0, 0));
 
             var reading = SourceShaderReader.Read(material);
@@ -147,14 +148,63 @@ namespace UVWizard.Core.Tests.Poiyomi
             Assert.That(reading.Reason, Does.Contain("Albedo"));
         }
 
-        [Test]
-        public void PanningOnAChannelThatIsntBakedIsIgnored()
+        // An unset texture samples its plain default, so panning it moves nothing.
+        [TestCase("_MainTexPan")]
+        [TestCase("_BumpMapPan")]
+        public void PanningAnUnsetTextureIsIgnored(string pan)
         {
             var material = Material(PoiyomiToon);
-            material.SetVector("_BumpMapPan", new Vector4(0.1f, 0, 0, 0));
+            material.SetVector(pan, new Vector4(0.1f, 0, 0, 0));
 
-            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged),
-                "no normal map, so its panning bakes nothing");
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        // Each changes the colours the shader renders in a way the bake doesn't reproduce.
+        [TestCase("_ColorThemeIndex", "Albedo")]
+        [TestCase("_EnableEmission1", "Emission")]
+        [TestCase("_EnableEmission3", "Emission")]
+        [TestCase("_EmissionColorThemeIndex", "Emission")]
+        [TestCase("_EmissionBaseColorAsMap", "Emission")]
+        public void FeaturesTheBakeCantReproduceAreFlagged(string property, string reason)
+        {
+            var material = EmittingMaterial();
+            material.SetFloat(property, 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith(reason));
+        }
+
+        [Test]
+        public void AnEmissionMaskIsFlagged()
+        {
+            var material = EmittingMaterial();
+            material.SetTexture("_EmissionMask", Texture());
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission"));
+        }
+
+        [Test]
+        public void EmissionOptionsAreIgnoredWhileEmissionIsOff()
+        {
+            var material = Material(PoiyomiToon);
+            material.SetFloat("_EmissionBaseColorAsMap", 1);
+            material.SetFloat("_EmissionColorThemeIndex", 1);
+            material.SetTexture("_EmissionMask", Texture());
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        Material EmittingMaterial()
+        {
+            var material = Material(PoiyomiToon);
+            material.SetFloat("_EnableEmission", 1);
+            material.SetFloat("_EmissionStrength", 1);
+            return material;
         }
 
         [TestCase(1, "Cutout")]
