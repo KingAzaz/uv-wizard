@@ -151,7 +151,8 @@ def report(job):
                                      (failure.get("message") or "").strip().replace("\n", "\n  ")))
         if (job.get("progress") or {}).get("failures_capped"):
             print("(only the first %d failures are listed)" % len(failures))
-        raise Failed("%d or more test(s) failed" % max(len(failures), 1))
+            raise Failed("%d or more tests failed" % len(failures))
+        raise Failed("%d test(s) failed" % max(len(failures), 1))
     if status != "succeeded":
         raise RuntimeError("test job %s: %s" % (status, error))
     summary = (job.get("result") or {}).get("summary") or {}
