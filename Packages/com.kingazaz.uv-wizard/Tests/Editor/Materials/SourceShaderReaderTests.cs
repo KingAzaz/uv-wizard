@@ -148,6 +148,33 @@ namespace UVWizard.Core.Tests.Materials
         }
 
         [Test]
+        public void AStandardMaterialWithDetailMapsOnUv0IsFlagged()
+        {
+            var material = Material("Standard");
+            material.EnableKeyword("_DETAIL_MULX2");
+            material.SetFloat("_UVSec", 0);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.Contain("Detail maps"));
+        }
+
+        [Test]
+        public void ATransparentStandardMaterialWithDetailMapsOnUv0NamesBothInItsReason()
+        {
+            var material = Material("Standard");
+            material.SetFloat("_Mode", StandardTransparent);
+            material.EnableKeyword("_DETAIL_MULX2");
+            material.SetFloat("_UVSec", 0);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.Contain("Transparent").And.Contain("Detail maps"));
+        }
+
+        [Test]
         public void AStandardMaterialWithDetailMapsOffIsMergedWhateverItsSecondaryUvSet()
         {
             var material = Material("Standard");
