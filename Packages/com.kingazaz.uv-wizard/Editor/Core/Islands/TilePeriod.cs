@@ -24,7 +24,6 @@ namespace UVWizard.Core.Islands
         /// </summary>
         public static int Of(TextureWrapMode wrap, float ratio = 1)
         {
-            ratio = Mathf.Abs(ratio);
             if (ratio == 0) return 1;
             var repeats = wrap switch
             {

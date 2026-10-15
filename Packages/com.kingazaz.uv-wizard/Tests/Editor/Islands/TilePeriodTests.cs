@@ -23,6 +23,7 @@ namespace UVWizard.Core.Tests.Islands
         [TestCase(0.25f, 4)]
         [TestCase(1 / 3f, 3)]
         [TestCase(0.4f, 5)]
+        [TestCase(1 / 16f, 16)]
         public void ARepeatingTextureLinesUpAfterWholeRepeats(float ratio, int period)
         {
             Assert.That(TilePeriod.Of(TextureWrapMode.Repeat, ratio), Is.EqualTo(period));
@@ -56,6 +57,7 @@ namespace UVWizard.Core.Tests.Islands
         [TestCase(4, 6, 12)]
         [TestCase(2, 0, 0)]
         [TestCase(0, 3, 0)]
+        [TestCase(0, 0, 0)]
         public void TwoTexturesLineUpAfterTheShortestShiftBothAllow(int a, int b, int both)
         {
             Assert.That(TilePeriod.Both(a, b), Is.EqualTo(both));

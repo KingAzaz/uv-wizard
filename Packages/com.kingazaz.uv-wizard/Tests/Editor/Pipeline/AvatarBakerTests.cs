@@ -284,9 +284,9 @@ namespace UVWizard.Core.Tests.Pipeline
         [Test]
         public void IslandsInTwoTilesOfAClampedNormalMapEachGetTheirOwnNormals()
         {
-            // NormalGradient clamps, while the albedo repeats.
+            // NormalGradient clamps, while the albedo repeats. The islands are in tiles 0 and 1 on V.
             var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
-            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 1.1f, 0.1f, 1.4f, 0.4f) }), bumpy);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 0.1f, 1.1f, 0.4f, 1.4f) }), bumpy);
             var before = Centroids(renderer).Select(SourceNormal).ToArray();
 
             var result = Bake(renderer);
