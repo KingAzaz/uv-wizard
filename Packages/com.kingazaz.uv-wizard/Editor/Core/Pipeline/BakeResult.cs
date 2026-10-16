@@ -43,8 +43,22 @@ namespace UVWizard.Core.Pipeline
             new BakeResult(fits, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged,
                 convertedMaterials: convertedMaterials, unconverted: unconverted);
 
+        /// <summary>A bake with no channel to bake, which left every renderer as it was.</summary>
+        public static BakeResult Nothing()
+        {
+            var result = Unchanged(true, Array.Empty<SlotNote>(), Array.Empty<SlotNote>());
+            result.NothingToBake = true;
+            return result;
+        }
+
         /// <summary>True when the packing and atlas came from the cache rather than a fresh bake.</summary>
         public bool FromCache { get; }
+
+        /// <summary>
+        /// True when no channel the bake was given has anything to bake: every channel is off, or only those no slot
+        /// has are on. The renderers then stay as they were, materials and all.
+        /// </summary>
+        public bool NothingToBake { get; private set; }
 
         /// <summary>False when the charts fit the atlas at no scale. Nothing is merged then.</summary>
         public bool Fits { get; }

@@ -56,6 +56,32 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.EmissionAtlas, Is.Not.Null);
         }
 
+        // With every channel off, or only channels no slot has, an atlas would hold nothing, so the bake leaves the
+        // renderers as they were (#84).
+        [TestCase((int)Channels.None)]
+        [TestCase((int)(Channels.Emission | Channels.Normal))]
+        public void WithNoChannelToBakeTheRenderersStayAsTheyWere(int channels)
+        {
+            var renderer = Plain(Gradient(16, 0));
+            var material = renderer.sharedMaterial;
+            var mesh = Filter(renderer).sharedMesh;
+
+            var result = Bake(StandardOptions(preset: Preset.Good, channels: (Channels)channels), renderer);
+
+            Assert.That(result.NothingToBake, Is.True);
+            Assert.That(result.MergedMaterial, Is.Null);
+            Assert.That(renderer.sharedMaterial, Is.SameAs(material));
+            Assert.That(Filter(renderer).sharedMesh, Is.SameAs(mesh));
+        }
+
+        [Test]
+        public void ABakeWithAChannelToBakeHasSomethingToBake()
+        {
+            var result = Bake(StandardOptions(channels: Channels.Albedo), Plain(Gradient(16, 0)));
+
+            Assert.That(result.NothingToBake, Is.False);
+        }
+
         [Test]
         public void TexturesOutsideTheAtlasShrinkItsShare()
         {

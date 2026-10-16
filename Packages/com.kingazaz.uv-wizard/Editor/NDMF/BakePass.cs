@@ -73,6 +73,7 @@ namespace UVWizard.NDMF
             foreach (var (source, rewritten) in result.ReplacedMeshes)
                 if (registered.Add(source)) ObjectRegistry.RegisterReplacedObject(source, rewritten);
 
+            if (result.NothingToBake) ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.Information, Messages.NothingToBake);
             if (!result.Fits) ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.NoFit);
             foreach (var note in result.Excluded)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Excluded,

@@ -18,6 +18,7 @@ namespace UVWizard.NDMF
         public const string Excluded = "uvwizard.excluded";
         public const string Flagged = "uvwizard.flagged";
         public const string NoFit = "uvwizard.no-fit";
+        public const string NothingToBake = "uvwizard.nothing-to-bake";
         public const string NoToonStandard = "uvwizard.no-toon-standard";
         public const string OverBudget = "uvwizard.over-budget";
         public const string OverBudgetLowerRank = "uvwizard.over-budget-lower-rank";
@@ -39,6 +40,10 @@ namespace UVWizard.NDMF
             (NoFit, "Nothing was merged"),
             (NoFit + ":description", "The materials don't fit in the atlas even at the lowest detail, so none is merged. " +
                 "Each still gets a Toon Standard material of its own."),
+            (NothingToBake, "Nothing to bake"),
+            (NothingToBake + ":description", "Albedo, Emission and Normal are all off, or the ones on have nothing " +
+                "to bake: no material emits or has a normal map. UV Wizard left the avatar as it is, materials and " +
+                "all. Turn on Albedo to bake the atlas."),
             (NoToonStandard, "VRChat's Toon Standard shader is missing"),
             (OverBudget, "Over the preset's texture memory"),
             (OverBudget + ":description", "After the build, the avatar's textures take {0} MB, more than the preset's " +
