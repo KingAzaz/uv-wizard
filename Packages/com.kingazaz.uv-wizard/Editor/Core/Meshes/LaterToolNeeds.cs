@@ -12,9 +12,7 @@ namespace UVWizard.Core.Meshes
         /// The tool reads the source UV0, but the bake can't keep it where the tool would find it, such as when
         /// the mesh has no free channel to keep it in. The renderer stays as it is.
         /// </summary>
-        public static readonly LaterToolNeeds CantKeepSourceUv0 = new LaterToolNeeds(null, false, cantKeepSourceUv0: true);
-
-        readonly bool cantKeepSourceUv0;
+        public static readonly LaterToolNeeds CantKeepSourceUv0 = new LaterToolNeeds(null, false, keepsRendererOut: true);
 
         /// <param name="keepSourceUv0In">
         /// A UV channel, 1 to 7, that the mesh doesn't use, to hold every copy's UV0 as the source has it, for a
@@ -27,11 +25,11 @@ namespace UVWizard.Core.Meshes
         {
         }
 
-        LaterToolNeeds(int? keepSourceUv0In, bool keepSubmeshes, bool cantKeepSourceUv0)
+        LaterToolNeeds(int? keepSourceUv0In, bool keepSubmeshes, bool keepsRendererOut)
         {
             KeepSourceUv0In = keepSourceUv0In;
             KeepSubmeshes = keepSubmeshes;
-            this.cantKeepSourceUv0 = cantKeepSourceUv0;
+            KeepsRendererOut = keepsRendererOut;
         }
 
         /// <summary>The UV channel to keep the source UV0 in, or null to keep no copy.</summary>
@@ -40,7 +38,7 @@ namespace UVWizard.Core.Meshes
         /// <summary>Whether every merged submesh keeps its own place.</summary>
         public bool KeepSubmeshes { get; }
 
-        /// <summary>False for <see cref="CantKeepSourceUv0"/>: the renderer stays out of the bake.</summary>
-        public bool CanKeepSourceUv0 => !cantKeepSourceUv0;
+        /// <summary>True only for <see cref="CantKeepSourceUv0"/>: the renderer stays out of the bake.</summary>
+        public bool KeepsRendererOut { get; }
     }
 }

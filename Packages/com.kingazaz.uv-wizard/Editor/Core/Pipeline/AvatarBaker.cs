@@ -294,7 +294,7 @@ namespace UVWizard.Core.Pipeline
             var mesh = MeshOf(renderer);
             if (mesh == null) return;
             var rendererNeeds = laterEdits?.Needs(renderer) ?? default;
-            if (rendererNeeds.CanKeepSourceUv0) needs[renderer] = rendererNeeds;
+            if (!rendererNeeds.KeepsRendererOut) needs[renderer] = rendererNeeds;
             else
             {
                 var sources = renderer.sharedMaterials;
