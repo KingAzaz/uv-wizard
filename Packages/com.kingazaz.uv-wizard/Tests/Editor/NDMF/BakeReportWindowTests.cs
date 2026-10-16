@@ -14,18 +14,30 @@ using Object = UnityEngine.Object;
 
 namespace UVWizard.NDMF.Tests
 {
-    // The report window (#99): it draws every section of a published report without an exception or a layout error,
-    // including after the build's objects are gone.
+    // The report window (#99): repainting a published report, with every section filled in, raises no exception or
+    // layout error, including after the build's objects are gone. What each section shows isn't checked.
     public class BakeReportWindowTests
     {
         readonly List<Object> created = new List<Object>();
         BakeReportWindow? window;
+        bool wasOpen;
+        BakeReport? userReport;
+
+        [SetUp]
+        public void SetUp()
+        {
+            if (Application.isBatchMode)
+                Assert.Ignore("A batch-mode editor has no window views, so the report window never repaints.");
+            wasOpen = EditorWindow.HasOpenInstances<BakeReportWindow>();
+            userReport = BakeReports.Latest;
+        }
 
         [TearDown]
         public void TearDown()
         {
-            if (window != null) window.Close();
-            BakeReports.Clear();
+            if (window != null && !wasOpen) window.Close();
+            if (userReport != null) BakeReports.Publish(userReport);
+            else BakeReports.Clear();
             foreach (var o in created)
                 if (o != null) Object.DestroyImmediate(o);
             created.Clear();
