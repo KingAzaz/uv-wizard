@@ -74,6 +74,48 @@ namespace UVWizard.NDMF.Tests
             Assert.That(BakeReports.Link(BakeReports.Latest!.Materials.Single().Material), Is.SameAs(source));
         }
 
+        // As Modular Avatar does when it moves an object: NDMF's registry keeps where the build first saw it.
+        [Test]
+        public void ARendererTheBuildMovedLinksToTheOriginalAvatarsRenderer()
+        {
+            var (_, hat, _) = AvatarWithFlaggedHat();
+            var clone = UploadClone(hat.transform.root.gameObject);
+            var cloneHat = clone.transform.Find("Hat");
+
+            using (new ObjectRegistryScope(new ObjectRegistry(clone.transform)))
+            {
+                ObjectRegistry.GetReference(cloneHat.GetComponent<Renderer>());
+                cloneHat.SetParent(clone.transform.Find("Body"));
+                BuildAndDestroy(clone);
+            }
+
+            Assert.That(BakeReports.Link(BakeReports.Latest!.Materials.Single().Renderers.Single()), Is.SameAs(hat));
+        }
+
+        // An asset outlives the build, whatever the original renderer holds.
+        [Test]
+        public void AnAssetMaterialLinksToItself()
+        {
+            const string folder = "Assets/UVWizardReportLinkTests";
+            var (_, hat, doubleSided) = AvatarWithFlaggedHat();
+            var clone = UploadClone(hat.transform.root.gameObject);
+            AssetDatabase.CreateFolder("Assets", "UVWizardReportLinkTests");
+            try
+            {
+                var asset = new Material(doubleSided);
+                AssetDatabase.CreateAsset(asset, folder + "/Hat.mat");
+                clone.transform.Find("Hat").GetComponent<Renderer>().sharedMaterials = new[] { asset };
+
+                BuildAndDestroy(clone);
+
+                Assert.That(BakeReports.Link(BakeReports.Latest!.Materials.Single().Material), Is.SameAs(asset));
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(folder);
+            }
+        }
+
         [Test]
         public void AnAvatarBuiltInPlaceLinksToItsOwnRenderers()
         {
