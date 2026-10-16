@@ -71,12 +71,15 @@ namespace UVWizard.Core.Tests.Reporting
             Assert.That(check.MmdBody, Is.Null);
         }
 
-        [Test]
-        public void AMeshKeptApartForAnotherReasonIsOver()
+        [TestCase(LeftoverReason.Toggle)]
+        [TestCase(LeftoverReason.StaticMesh)]
+        [TestCase(LeftoverReason.BoundsOrRootBone)]
+        [TestCase(LeftoverReason.Other)]
+        public void AMeshKeptApartForAnotherReasonIsOver(LeftoverReason reason)
         {
-            var toggled = new LeftoverRenderer(Skinned("Body", slots: 1), LeftoverReason.Toggle);
+            var apart = new LeftoverRenderer(Skinned("Body", slots: 1), reason);
 
-            Assert.That(BudgetCheck.Slots(2, Budget.Good, new[] { toggled }).Outcome, Is.EqualTo(SlotOutcome.Over));
+            Assert.That(BudgetCheck.Slots(2, Budget.Good, new[] { apart }).Outcome, Is.EqualTo(SlotOutcome.Over));
         }
 
         [Test]

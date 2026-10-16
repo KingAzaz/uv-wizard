@@ -78,7 +78,7 @@ namespace UVWizard.NDMF.Tests
             Assert.That(BakeReports.Latest!.After!.MaterialSlots, Is.EqualTo(2));
             Assert.That(OwnReports(errors), Has.Member((ErrorSeverity.Information, (string?)Messages.SlotsKeptForMmd)));
             Assert.That(OwnReports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)));
-            Assert.That(Texts(errors), Has.Some.Contains("Body"));
+            Assert.That(Texts(errors), Has.Some.StartsWith("Body keeps"), "the title names the Body");
         }
 
         [Test]
