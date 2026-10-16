@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Unity.Jobs.LowLevel.Unsafe;
 using UnityEngine;
 
 namespace UVWizard.Core.Packing
@@ -47,21 +48,24 @@ namespace UVWizard.Core.Packing
             Search(charts, settings, priorities, ExactPackerChartLimit, TimeBudget);
 
         internal static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? priorities,
-            int exactPackerChartLimit, TimeSpan timeBudget)
+            int exactPackerChartLimit, TimeSpan timeBudget) =>
+            Search(charts, settings, priorities, exactPackerChartLimit, timeBudget, ExactPackerWarmUp.Shared, StartClock);
+
+        /// <param name="startClock">Starts timing the search against the given budget, and returns whether it is out of time.</param>
+        internal static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? priorities,
+            int exactPackerChartLimit, TimeSpan timeBudget, ExactPackerWarmUp warmUp, Func<TimeSpan, Func<bool>> startClock)
         {
             // The clock starts once Burst has compiled the packing jobs, so the same charts get the
             // same packing whether or not the editor has packed since its last domain reload.
-            if (charts.Count <= exactPackerChartLimit && !exactPackerWarm)
-            {
-                WarmUpExactPacker();
-                exactPackerWarm = true;
-            }
-            var clock = Stopwatch.StartNew();
-            return Search(charts, settings, priorities, exactPackerChartLimit, () => clock.Elapsed > timeBudget);
+            if (charts.Count <= exactPackerChartLimit) warmUp.EnsureWarm();
+            return Search(charts, settings, priorities, exactPackerChartLimit, startClock(timeBudget));
         }
 
-        // Static fields reset on each domain reload, as Burst's loaded jobs do.
-        static bool exactPackerWarm;
+        static Func<bool> StartClock(TimeSpan budget)
+        {
+            var clock = Stopwatch.StartNew();
+            return () => clock.Elapsed > budget;
+        }
 
         /// <summary>
         /// Packs one small chart with the exact packer's parallel row scan, as the search does. Its
@@ -102,12 +106,13 @@ namespace UVWizard.Core.Packing
 
             // The largest scale up to 1 at which the packer fits the charts. It tries 1 first. Below
             // that it starts from the seed's fit, or else halves until something fits, then bisects
-            // geometrically between the last fit and the last failure until Precision or out of time.
-            Bracket Climb(Packer packer, Func<Bracket?> seed, Func<bool> budgetSpent)
+            // geometrically between the last fit and the last failure until Precision or, for the exact
+            // packer, out of time.
+            Bracket Climb(Packer packer, Func<Bracket?> seed)
             {
-                bool TimeUp()
+                bool OutOfTime()
                 {
-                    if (!budgetSpent()) return false;
+                    if (packer == Packer.Shelf || !outOfTime()) return false;
                     ranOutOfTime = true;
                     return true;
                 }
@@ -124,7 +129,7 @@ namespace UVWizard.Core.Packing
                     var best = top;
                     while (true)
                     {
-                        if (TimeUp()) return new Bracket(best, packer, 0, hi);
+                        if (OutOfTime()) return new Bracket(best, packer, 0, hi);
                         if ((best = attempt(lo)).Fits) break;
                         hi = lo;
                         lo /= 2;
@@ -134,7 +139,7 @@ namespace UVWizard.Core.Packing
                 }
                 while (found.FailedScale / found.Scale > Precision)
                 {
-                    if (TimeUp()) break;
+                    if (OutOfTime()) break;
                     var mid = (float)Math.Sqrt((double)found.Scale * found.FailedScale);
                     var packing = attempt(mid);
                     found = packing.Fits
@@ -143,11 +148,11 @@ namespace UVWizard.Core.Packing
                 }
                 return found;
             }
-            Bracket Shelf() => Climb(Packer.Shelf, () => null, () => false);
+            Bracket Shelf() => Climb(Packer.Shelf, () => null);
 
             var result = charts.Count > exactPackerChartLimit
                 ? Shelf()
-                : Climb(Packer.Exact, () => Shelf(), outOfTime);
+                : Climb(Packer.Exact, () => Shelf());
             return new ScaleSearchResult(result.Packing, result.Packer, result.Scale, result.FailedScale, ranOutOfTime, attempts);
         }
 
@@ -166,6 +171,40 @@ namespace UVWizard.Core.Packing
             public Packer Packer { get; }
             public float Scale { get; }
             public float FailedScale { get; }
+        }
+    }
+
+    /// <summary>
+    /// Runs <see cref="ScaleSearch.WarmUpExactPacker"/> before a timed search: once after each domain
+    /// reload, and again whenever Burst compilation has been switched on or off since, so a search
+    /// doesn't spend its budget compiling jobs. Other Burst options, such as safety checks, can
+    /// still recompile the jobs without a warm-up.
+    /// </summary>
+    internal sealed class ExactPackerWarmUp
+    {
+        // Static fields reset on each domain reload, as Burst's loaded jobs do. The Jobs menu's Burst
+        // toggle sets JobCompilerEnabled without a domain reload.
+        public static readonly ExactPackerWarmUp Shared =
+            new ExactPackerWarmUp(() => JobsUtility.JobCompilerEnabled, () => ScaleSearch.WarmUpExactPacker());
+
+        readonly Func<bool> burstEnabled;
+        readonly Action warmUp;
+
+        // Whether Burst was on at the last warm-up, or null before the first.
+        bool? warmedWithBurst;
+
+        public ExactPackerWarmUp(Func<bool> burstEnabled, Action warmUp)
+        {
+            this.burstEnabled = burstEnabled;
+            this.warmUp = warmUp;
+        }
+
+        public void EnsureWarm()
+        {
+            var burst = burstEnabled();
+            if (warmedWithBurst == burst) return;
+            warmUp();
+            warmedWithBurst = burst;
         }
     }
 

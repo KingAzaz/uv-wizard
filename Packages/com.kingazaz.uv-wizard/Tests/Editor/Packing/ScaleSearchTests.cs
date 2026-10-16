@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -15,7 +16,7 @@ namespace UVWizard.Core.Tests.Packing
             var charts = Enumerable.Repeat(Rectangle(20, 20), 12).ToArray();
             var settings = new PackSettings(atlasSize: 64, padding: 2);
 
-            var result = ScaleSearch.Search(charts, settings);
+            var result = Untimed(charts, settings);
 
             Assert.That(result.Fits, Is.True);
             Assert.That(result.FitsAtFullDetail, Is.False);
@@ -32,7 +33,7 @@ namespace UVWizard.Core.Tests.Packing
         {
             var charts = new[] { Rectangle(10, 10), Rectangle(12, 6) };
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 2));
+            var result = Untimed(charts, new PackSettings(atlasSize: 64, padding: 2));
 
             Assert.That(result.Fits, Is.True);
             Assert.That(result.FitsAtFullDetail, Is.True);
@@ -49,8 +50,8 @@ namespace UVWizard.Core.Tests.Packing
             var stacked = new ChartShape(Enumerable.Repeat(single.Corners, 4).SelectMany(c => c).ToArray());
             var settings = new PackSettings(atlasSize: 64, padding: 0);
 
-            var one = ScaleSearch.Search(new[] { single, Rectangle(30, 30) }, settings);
-            var four = ScaleSearch.Search(new[] { stacked, Rectangle(30, 30) }, settings);
+            var one = Untimed(new[] { single, Rectangle(30, 30) }, settings);
+            var four = Untimed(new[] { stacked, Rectangle(30, 30) }, settings);
 
             Assert.That(one.FitsAtFullDetail, Is.False);
             Assert.That(four.Scale, Is.EqualTo(one.Scale));
@@ -63,7 +64,7 @@ namespace UVWizard.Core.Tests.Packing
             var priorities = Enumerable.Repeat(1f, 12).ToArray();
             priorities[3] = 0.5f;
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 2), priorities);
+            var result = Untimed(charts, new PackSettings(atlasSize: 64, padding: 2), priorities);
 
             Assert.That(result.Fits, Is.True);
             Assert.That(result.Packing.Placements[3].Scale, Is.EqualTo(result.Scale * 0.5f));
@@ -77,7 +78,7 @@ namespace UVWizard.Core.Tests.Packing
             // A priority of 3 never upscales its chart, even when the search's scale is above 1/3.
             var charts = new[] { Rectangle(10, 10), Rectangle(10, 10) };
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 0), new[] { 3f, 1f });
+            var result = Untimed(charts, new PackSettings(atlasSize: 64, padding: 0), new[] { 3f, 1f });
 
             Assert.That(result.Scale, Is.EqualTo(1));
             Assert.That(result.Packing.Placements[0].Scale, Is.EqualTo(1));
@@ -89,7 +90,7 @@ namespace UVWizard.Core.Tests.Packing
             // A 64 px atlas has 256 cells of 4 px, and every chart takes at least one.
             var charts = Enumerable.Repeat(Rectangle(10, 10), 300).ToArray();
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 0));
+            var result = Untimed(charts, new PackSettings(atlasSize: 64, padding: 0));
 
             Assert.That(result.Fits, Is.False);
             Assert.That(result.Scale, Is.EqualTo(0));
@@ -99,7 +100,7 @@ namespace UVWizard.Core.Tests.Packing
         [Test]
         public void NoChartsFitAtFullDetail()
         {
-            var result = ScaleSearch.Search(new ChartShape[0], new PackSettings(atlasSize: 64, padding: 0));
+            var result = Untimed(new ChartShape[0], new PackSettings(atlasSize: 64, padding: 0));
 
             Assert.That(result.FitsAtFullDetail, Is.True);
             Assert.That(result.Packing.Placements, Is.Empty);
@@ -132,8 +133,8 @@ namespace UVWizard.Core.Tests.Packing
             var charts = Enumerable.Range(0, 12).Select(i => Rectangle(10 + i, 24 - i)).ToArray();
             var settings = new PackSettings(atlasSize: 64, padding: 2);
 
-            var first = ScaleSearch.Search(charts, settings, null, ScaleSearch.ExactPackerChartLimit, System.TimeSpan.MaxValue);
-            var second = ScaleSearch.Search(charts, settings, null, ScaleSearch.ExactPackerChartLimit, System.TimeSpan.MaxValue);
+            var first = Untimed(charts, settings);
+            var second = Untimed(charts, settings);
 
             Assert.That(second.Scale, Is.EqualTo(first.Scale));
             Assert.That(second.Attempts, Is.EqualTo(first.Attempts));
@@ -147,16 +148,21 @@ namespace UVWizard.Core.Tests.Packing
 
         static readonly PackSettings NestingSettings = new PackSettings(atlasSize: 64, padding: 0);
 
+        // A search the clock can't cut, so its result doesn't depend on the machine's speed.
+        static ScaleSearchResult Untimed(ChartShape[] charts, PackSettings settings, float[] priorities = null,
+            int exactPackerChartLimit = ScaleSearch.ExactPackerChartLimit) =>
+            ScaleSearch.Search(charts, settings, priorities, exactPackerChartLimit, System.TimeSpan.MaxValue);
+
         static ScaleSearchResult ShelfOnly(ChartShape[] charts, PackSettings settings) =>
-            ScaleSearch.Search(charts, settings, null, exactPackerChartLimit: 0, timeBudget: System.TimeSpan.MaxValue);
+            Untimed(charts, settings, exactPackerChartLimit: 0);
 
         [Test]
         public void AboveTheChartCountThresholdOnlyTheShelfPackerPacks()
         {
             var charts = NestingCharts();
 
-            var shelf = ScaleSearch.Search(charts, NestingSettings, null, exactPackerChartLimit: 7, timeBudget: System.TimeSpan.MaxValue);
-            var exact = ScaleSearch.Search(charts, NestingSettings, null, exactPackerChartLimit: 8, timeBudget: System.TimeSpan.MaxValue);
+            var shelf = Untimed(charts, NestingSettings, exactPackerChartLimit: 7);
+            var exact = Untimed(charts, NestingSettings, exactPackerChartLimit: 8);
 
             Assert.That(shelf.Packer, Is.EqualTo(Packer.Shelf));
             Assert.That(shelf.Fits, Is.True);
@@ -217,7 +223,7 @@ namespace UVWizard.Core.Tests.Packing
             var charts = new[] { Rectangle(100, 10) };
             var settings = new PackSettings(atlasSize: 64, padding: 0);
 
-            var result = ScaleSearch.Search(charts, settings, null, exactPackerChartLimit: 100, timeBudget: System.TimeSpan.MaxValue);
+            var result = Untimed(charts, settings, exactPackerChartLimit: 100);
 
             Assert.That(result.Packer, Is.EqualTo(Packer.Shelf));
             Assert.That(result.RanOutOfTime, Is.False);
@@ -248,6 +254,53 @@ namespace UVWizard.Core.Tests.Packing
             Assert.That(ScaleSearch.WarmUpExactPacker().Fits, Is.True);
         }
 
+        // Runs a search with a stand-in warm-up and clock, logging "warm-up" and "clock" as each starts.
+        static void LoggedSearch(ExactPackerWarmUp warmUp, List<string> log, int exactPackerChartLimit = ScaleSearch.ExactPackerChartLimit) =>
+            ScaleSearch.Search(new[] { Rectangle(10, 10) }, new PackSettings(atlasSize: 64, padding: 0), null,
+                exactPackerChartLimit, System.TimeSpan.MaxValue, warmUp, budget =>
+                {
+                    log.Add("clock");
+                    return () => false;
+                });
+
+        [Test]
+        public void TheSearchWarmsUpOnceBeforeTheClockStarts()
+        {
+            var log = new List<string>();
+            var warmUp = new ExactPackerWarmUp(() => true, () => log.Add("warm-up"));
+
+            LoggedSearch(warmUp, log);
+            LoggedSearch(warmUp, log);
+
+            Assert.That(log, Is.EqualTo(new[] { "warm-up", "clock", "clock" }));
+        }
+
+        [Test]
+        public void AboveTheChartLimitTheSearchSkipsTheWarmUp()
+        {
+            var log = new List<string>();
+            var warmUp = new ExactPackerWarmUp(() => true, () => log.Add("warm-up"));
+
+            LoggedSearch(warmUp, log, exactPackerChartLimit: 0);
+
+            Assert.That(log, Is.EqualTo(new[] { "clock" }));
+        }
+
+        [Test]
+        public void SwitchingBurstOnAfterTheWarmUpWarmsUpAgain()
+        {
+            var log = new List<string>();
+            var burst = false;
+            var warmUp = new ExactPackerWarmUp(() => burst, () => log.Add("warm-up"));
+
+            LoggedSearch(warmUp, log);
+            burst = true;
+            LoggedSearch(warmUp, log);
+            LoggedSearch(warmUp, log);
+
+            Assert.That(log, Is.EqualTo(new[] { "warm-up", "clock", "warm-up", "clock", "clock" }));
+        }
+
         [Test]
         public void TheExactSearchNeverEndsBelowTheShelfSearch()
         {
@@ -257,7 +310,7 @@ namespace UVWizard.Core.Tests.Packing
                 var rng = new System.Random(seed);
                 var charts = Enumerable.Range(0, 40).Select(_ => Irregular(rng)).ToArray();
 
-                var result = ScaleSearch.Search(charts, settings);
+                var result = Untimed(charts, settings);
 
                 Assert.That(result.Scale, Is.GreaterThanOrEqualTo(ShelfOnly(charts, settings).Scale), $"seed {seed}");
             }

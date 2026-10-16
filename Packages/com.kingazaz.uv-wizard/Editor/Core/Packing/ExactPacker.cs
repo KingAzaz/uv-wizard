@@ -44,8 +44,7 @@ namespace UVWizard.Core.Packing
         {
             if (scales.Count != charts.Count)
                 throw new ArgumentException($"{scales.Count} scales for {charts.Count} charts.", nameof(scales));
-            var block = settings.BlockSize;
-            var gridSize = settings.AtlasSize / block;
+            var gridSize = settings.AtlasSize / settings.BlockSize;
             var gridWords = (gridSize + 63) / 64;
 
             var boxes = new ChartBox[charts.Count];
@@ -60,7 +59,7 @@ namespace UVWizard.Core.Packing
                 var box = boxes[i] = ChartBox.Of(charts[i], scales[i], settings);
                 var info = new MaskInfo
                 {
-                    CellsPerTexel = scales[i] / block,
+                    CellsPerTexel = box.Scale / box.BlockSize,
                     CornerStart = cornerStart - charts[i].Corners.Count,
                     CornerCount = charts[i].Corners.Count,
                     Min = box.Min,
