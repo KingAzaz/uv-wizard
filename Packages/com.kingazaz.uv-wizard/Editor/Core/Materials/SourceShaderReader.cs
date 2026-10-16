@@ -31,10 +31,8 @@ namespace UVWizard.Core.Materials
         static SourceMaterialReading ReadByShader(Material material)
         {
             if (ReadersByShader.TryGetValue(material.shader.name, out var read)) return read(material);
-#if UVWIZARD_POIYOMI
             // Locking a Poiyomi material gives it a shader of its own, so Poiyomi is matched by name prefix.
             if (PoiyomiReader.Reads(material.shader)) return PoiyomiReader.Read(material);
-#endif
 #if UVWIZARD_LILTOON
             // lilToon picks its rendering mode by switching between its own shaders.
             if (LilToonReader.Reads(material.shader)) return LilToonReader.Read(material);

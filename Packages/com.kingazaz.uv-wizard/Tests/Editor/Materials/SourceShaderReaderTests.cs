@@ -330,6 +330,59 @@ namespace UVWizard.Core.Tests.Materials
             Assert.That(albedo.ScaleOffset, Is.EqualTo(new Vector4(1, 1, 0, 0)));
         }
 
+        // A locked Poiyomi shader runs without the Poiyomi package, so its materials are read without it too.
+        [Test]
+        public void ALockedPoiyomiMaterialIsReadWithoutThePoiyomiPackage()
+        {
+            var emissionMap = Texture();
+            var normalMap = Texture();
+            var material = Track(new Material(LockedPoiyomi()));
+            material.SetFloat("_EnableEmission", 1);
+            material.SetTexture("_EmissionMap", emissionMap);
+            material.SetFloat("_EmissionStrength", 1);
+            material.SetTexture("_BumpMap", normalMap);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Emission?.Texture, Is.SameAs(emissionMap), "emission");
+            Assert.That(reading.Normal?.Texture, Is.SameAs(normalMap), "normal");
+        }
+
+        [Test]
+        public void ALockedPoiyomiMaterialMappedOffUv0IsExcludedWithoutThePoiyomiPackage()
+        {
+            var material = Track(new Material(LockedPoiyomi()));
+            material.SetTexture("_MainTex", Texture());
+            material.SetFloat("_MainTexUV", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
+            Assert.That(reading.Reason, Does.Contain("UV1"));
+        }
+
+        // A hand-written stand-in for a shader Poiyomi's lock generated, as an avatar ships it.
+        Shader LockedPoiyomi() =>
+            Track(ShaderUtil.CreateShaderAsset(@"
+                Shader ""Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef""
+                {
+                    Properties
+                    {
+                        _MainTex (""Texture"", 2D) = ""white"" {}
+                        _MainTexUV (""UV"", Int) = 0
+                        _Color (""Color"", Color) = (1, 1, 1, 1)
+                        _EnableEmission (""Emission"", Float) = 0
+                        _EmissionMap (""Emission Map"", 2D) = ""white"" {}
+                        _EmissionColor (""Emission Color"", Color) = (1, 1, 1, 1)
+                        _EmissionStrength (""Emission Strength"", Float) = 0
+                        _BumpMap (""Normal Map"", 2D) = ""bump"" {}
+                        _BumpScale (""Normal Intensity"", Float) = 1
+                        _Mode (""Rendering Preset"", Int) = 0
+                    }
+                    SubShader { Pass { } }
+                }", false));
+
         [TestCase("Standard")]
         [TestCase("Unlit/Texture")]
         public void StandardAndUnknownShadersDontUseVertexColour(string shader)

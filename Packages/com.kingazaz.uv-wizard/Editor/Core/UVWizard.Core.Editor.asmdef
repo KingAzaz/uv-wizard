@@ -17,11 +17,6 @@
     "defineConstraints": [],
     "versionDefines": [
         {
-            "name": "com.poiyomi.toon",
-            "expression": "",
-            "define": "UVWIZARD_POIYOMI"
-        },
-        {
             "name": "jp.lilxyzw.liltoon",
             "expression": "",
             "define": "UVWIZARD_LILTOON"
