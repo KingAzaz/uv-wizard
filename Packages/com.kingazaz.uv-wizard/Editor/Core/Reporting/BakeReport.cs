@@ -67,9 +67,13 @@ namespace UVWizard.Core.Reporting
         {
             if (result == null) return new List<MaterialRow>();
             IEnumerable<MaterialRow> Grouped(IEnumerable<SlotNote> notes, MaterialOutcome outcome) =>
-                notes.GroupBy(note => note.Material).Select(group => new MaterialRow(outcome, group.Key,
-                    group.Select(note => note.Renderer).Distinct().ToList(),
-                    string.Join(" ", group.Select(note => note.Reason).Distinct())));
+                notes.GroupBy(note => note.Material).Select(group =>
+                {
+                    var onRenderers = group.GroupBy(note => note.Renderer).Select(byRenderer => byRenderer.First()).ToList();
+                    return new MaterialRow(outcome, group.Key, onRenderers.Select(note => note.Renderer).ToList(),
+                        onRenderers.Select(note => note.RendererName).ToList(),
+                        string.Join(" ", group.Select(note => note.Reason).Distinct()));
+                });
             return Grouped(result.Excluded, MaterialOutcome.Excluded)
                 .Concat(Grouped(result.Flagged, MaterialOutcome.Flagged)).ToList();
         }
@@ -138,12 +142,13 @@ namespace UVWizard.Core.Reporting
     /// <summary>One excluded or flagged material, every renderer it's on, and why.</summary>
     internal sealed class MaterialRow
     {
-        public MaterialRow(MaterialOutcome outcome, Material material, IReadOnlyList<Renderer> renderers, string reason)
+        public MaterialRow(MaterialOutcome outcome, Material material, IReadOnlyList<Renderer> renderers,
+            IReadOnlyList<string> rendererNames, string reason)
         {
             Outcome = outcome;
             Material = material;
             Renderers = renderers;
-            RendererNames = renderers.Select(renderer => renderer.name).ToList();
+            RendererNames = rendererNames;
             Reason = reason;
         }
 

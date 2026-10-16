@@ -168,12 +168,16 @@ namespace UVWizard.Core.Pipeline
         public SlotNote(Renderer renderer, int slot, Material material, string reason)
         {
             Renderer = renderer;
+            RendererName = renderer.name;
             Slot = slot;
             Material = material;
             Reason = reason;
         }
 
         public Renderer Renderer { get; }
+
+        /// <summary>The renderer's name, kept for when a later tool, such as Merge Skinned Mesh, destroys it.</summary>
+        public string RendererName { get; }
         public int Slot { get; }
         public Material Material { get; }
         public string Reason { get; }

@@ -117,9 +117,7 @@ namespace UVWizard.NDMF.Tests
             body.sharedMesh.uv2 = body.sharedMesh.vertices.Select(p => new Vector2(p.z, 7)).ToArray();
             body.sharedMaterials = new[] { Standard(big), Standard(small) };
             var textures = SourceTextures(avatar);
-            var mask = Keep(new Texture2D(16, 16, TextureFormat.RGBA32, mipChain: false));
-            mask.SetPixels32(Enumerable.Range(0, 256).Select(i => i % 16 >= 8 && i / 16 >= 8 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255)).ToArray());
-            mask.Apply();
+            var mask = QuadrantMask();
             var removal = body.gameObject.AddComponent<RemoveMeshByMask>();
             removal.Initialize(1);
             removal.Materials = new[]
@@ -148,6 +146,163 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void RemoveMeshByMaskOnAMergeSkinnedMeshTargetDeletesTheRightTriangles()
+        {
+            // Merge Skinned Mesh merges the torso and tail into a new renderer whose mask, on its first slot, reads
+            // the merged UV0. The torso's first slot has one quad under the mask's white and one under its black;
+            // its second slot's quad lies under the white too, but the mask isn't on that slot.
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var torso = avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>();
+            var tail = avatar.transform.Find("Tail").GetComponent<SkinnedMeshRenderer>();
+            torso.sharedMesh = Mesh(new[] { Quad(0, 0.05f, 0.05f, 0.45f, 0.45f), Quad(2, 0.55f, 0.55f, 0.95f, 0.95f) },
+                new[] { Quad(5, 0.6f, 0.6f, 0.9f, 0.9f) });
+            torso.sharedMesh.boneWeights = Enumerable.Repeat(new BoneWeight { boneIndex0 = 0, weight0 = 1 }, torso.sharedMesh.vertexCount).ToArray();
+            torso.sharedMesh.bindposes = new[] { torso.bones[0].worldToLocalMatrix * torso.transform.localToWorldMatrix };
+            var textures = SourceTextures(avatar);
+            var target = MergeInto(avatar, "Merged", torso, tail);
+            var mask = QuadrantMask();
+            var removal = target.gameObject.AddComponent<RemoveMeshByMask>();
+            removal.Initialize(1);
+            removal.Materials = new[]
+            {
+                new RemoveMeshByMask.MaterialSlot { Enabled = true, Mask = mask, Mode = RemoveMeshByMask.RemoveMode.RemoveWhite },
+                new RemoveMeshByMask.MaterialSlot { Enabled = false },
+                new RemoveMeshByMask.MaterialSlot { Enabled = false },
+            };
+
+            var warnings = new List<string>();
+            void Collect(string message, string _, LogType type)
+            {
+                if (type == LogType.Warning) warnings.Add(message);
+            }
+            MobileBuild.Override = true;
+            Application.logMessageReceived += Collect;
+            List<ErrorContext> errors;
+            try { errors = BesidesSlots(Build(avatar)); }
+            finally { Application.logMessageReceived -= Collect; }
+
+            Assert.That(warnings, Has.None.Contains("before initialization"));
+            Assert.That(Debug.unityLogger.logEnabled, Is.True, "logging is back on");
+            // AAO also reports that Remove Mesh By Mask doesn't support a Merge Skinned Mesh target.
+            Assert.That(OwnReports(errors), Has.Exactly(3).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)),
+                "each source slot is excluded");
+            var mesh = target.sharedMesh;
+            var positions = mesh.vertices;
+            var drawn = Enumerable.Range(0, mesh.subMeshCount).SelectMany(s => mesh.GetIndices(s));
+            Assert.That(drawn.Select(i => positions[i].z).Distinct().OrderBy(z => z), Is.EqualTo(new[] { 0f, 3f, 5f }),
+                "the mask deleted the first slot's quad under its white, and only it");
+            AssertKeepsColours(target, textures);
+        }
+
+        [Test]
+        public void TheSourcesOfAMergeSkinnedMeshTargetThatReadsNoUvsAreBaked()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var textures = SourceTextures(avatar);
+            var target = MergeInto(avatar, "Merged", avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>(),
+                avatar.transform.Find("Tail").GetComponent<SkinnedMeshRenderer>());
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(OwnReports(errors), Has.None.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            Assert.That(target.sharedMaterials.Distinct().Count(), Is.EqualTo(1), "every slot is on the merged material");
+            AssertKeepsColours(target, textures);
+        }
+
+        [Test]
+        public void RemoveMeshByMaskOnTheOuterTargetOfNestedMergesDeletesTheRightTriangles()
+        {
+            // The torso and tail merge into Inner, and Inner into Outer, whose mask reads the merged UV0. The
+            // torso's first slot has one quad under the mask's white and one under its black.
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var torso = avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>();
+            torso.sharedMesh = Mesh(new[] { Quad(0, 0.05f, 0.05f, 0.45f, 0.45f), Quad(2, 0.55f, 0.55f, 0.95f, 0.95f) },
+                new[] { Quad(5, 0.6f, 0.6f, 0.9f, 0.9f) });
+            torso.sharedMesh.boneWeights = Enumerable.Repeat(new BoneWeight { boneIndex0 = 0, weight0 = 1 }, torso.sharedMesh.vertexCount).ToArray();
+            torso.sharedMesh.bindposes = new[] { torso.bones[0].worldToLocalMatrix * torso.transform.localToWorldMatrix };
+            var inner = MergeInto(avatar, "Inner", torso, avatar.transform.Find("Tail").GetComponent<SkinnedMeshRenderer>());
+            var outer = MergeInto(avatar, "Outer", inner);
+            var removal = outer.gameObject.AddComponent<RemoveMeshByMask>();
+            removal.Initialize(1);
+            removal.Materials = new[]
+            {
+                new RemoveMeshByMask.MaterialSlot { Enabled = true, Mask = QuadrantMask(), Mode = RemoveMeshByMask.RemoveMode.RemoveWhite },
+                new RemoveMeshByMask.MaterialSlot { Enabled = false },
+                new RemoveMeshByMask.MaterialSlot { Enabled = false },
+            };
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(OwnReports(errors), Has.Exactly(3).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            var mesh = outer.sharedMesh;
+            var positions = mesh.vertices;
+            var drawn = Enumerable.Range(0, mesh.subMeshCount).SelectMany(s => mesh.GetIndices(s));
+            Assert.That(drawn.Select(i => positions[i].z).Distinct().OrderBy(z => z), Is.EqualTo(new[] { 0f, 3f, 5f }),
+                "the mask deleted the first slot's quad under its white, and only it");
+        }
+
+        [Test]
+        public void RemoveMeshByUvTileOnAMergeSkinnedMeshTargetStillDeletesPerMaterialSlot()
+        {
+            // Every quad lies in UV1's tile 1, but only the target's first slot deletes that tile. Baked sources
+            // would share the merged material, and Merge Skinned Mesh would merge their slots into one.
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var torso = avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>();
+            var tail = avatar.transform.Find("Tail").GetComponent<SkinnedMeshRenderer>();
+            foreach (var source in new[] { torso, tail })
+                source.sharedMesh.uv2 = Enumerable.Repeat(new Vector2(1.5f, 0.5f), source.sharedMesh.vertexCount).ToArray();
+            var target = MergeInto(avatar, "Merged", torso, tail);
+            var tiles = new SerializedObject(target.gameObject.AddComponent(typeof(TraceAndOptimize).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile")));
+            var slots = tiles.FindProperty("materials");
+            slots.arraySize = 3;
+            for (var s = 0; s < 3; s++)
+            {
+                slots.GetArrayElementAtIndex(s).FindPropertyRelative("uvChannel").enumValueIndex = 1;
+                slots.GetArrayElementAtIndex(s).FindPropertyRelative("removeTile1").boolValue = s == 0;
+            }
+            tiles.ApplyModifiedPropertiesWithoutUndo();
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(OwnReports(errors), Has.Exactly(3).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            var mesh = target.sharedMesh;
+            var positions = mesh.vertices;
+            var drawn = Enumerable.Range(0, mesh.subMeshCount).SelectMany(s => mesh.GetIndices(s));
+            Assert.That(drawn.Select(i => positions[i].z).Distinct().OrderBy(z => z), Is.EqualTo(new[] { 1f, 3f }),
+                "only the first slot's quad is deleted");
+        }
+
+        [Test]
+        public void RemoveMeshByMaskOnAMergeSkinnedMeshTargetDeletesTheRightTrianglesOfAStaticSource()
+        {
+            // The glasses have one quad under the mask's white and one under its black.
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var glasses = new GameObject("Glasses");
+            glasses.transform.SetParent(avatar.transform);
+            glasses.AddComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(5, 0.55f, 0.55f, 0.95f, 0.95f), Quad(6, 0.05f, 0.05f, 0.45f, 0.45f) });
+            var renderer = glasses.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = new[] { Standard(Gradient(16, 5)) };
+            var target = MergeInto(avatar, "Merged", renderer);
+            var mask = QuadrantMask();
+            var removal = target.gameObject.AddComponent<RemoveMeshByMask>();
+            removal.Initialize(1);
+            removal.Materials = new[] { new RemoveMeshByMask.MaterialSlot { Enabled = true, Mask = mask, Mode = RemoveMeshByMask.RemoveMode.RemoveWhite } };
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(OwnReports(errors), Has.Exactly(1).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            var mesh = target.sharedMesh;
+            var positions = mesh.vertices;
+            var drawn = Enumerable.Range(0, mesh.subMeshCount).SelectMany(s => mesh.GetIndices(s));
+            Assert.That(drawn.Select(i => positions[i].z).Distinct(), Is.EqualTo(new[] { 6f }),
+                "the mask deleted the quad under its white, and only it");
+        }
+
+        [Test]
         public void AStaticMeshWithRemoveMeshByMaskIsKeptOutAndTheMaskDeletesTheRightTriangles()
         {
             // AAO runs Remove Mesh By Mask on a MeshRenderer too, but can't be told where the bake keeps its
@@ -161,9 +316,7 @@ namespace UVWizard.NDMF.Tests
             var renderer = glasses.AddComponent<MeshRenderer>();
             var materials = new[] { Standard(Gradient(16, 5)), Standard(Gradient(16, 7)) };
             renderer.sharedMaterials = materials;
-            var mask = Keep(new Texture2D(16, 16, TextureFormat.RGBA32, mipChain: false));
-            mask.SetPixels32(Enumerable.Range(0, 256).Select(i => i % 16 >= 8 && i / 16 >= 8 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255)).ToArray());
-            mask.Apply();
+            var mask = QuadrantMask();
             var removal = glasses.AddComponent<RemoveMeshByMask>();
             removal.Initialize(1);
             removal.Materials = new[]
@@ -251,15 +404,16 @@ namespace UVWizard.NDMF.Tests
             return textures;
         }
 
-        // Every triangle the renderer draws samples the colour its source sampled at its centroid.
+        // Every triangle the renderer draws samples the colour its source sampled at its centroid, from the
+        // atlas or from the texture of a slot the bake left out.
         void AssertKeepsColours(SkinnedMeshRenderer renderer, Dictionary<float, Texture2D> textures)
         {
             var mesh = renderer.sharedMesh;
             var positions = mesh.vertices;
             var uvs = mesh.uv;
-            var atlas = Readable((Texture2D)renderer.sharedMaterial.mainTexture);
             for (var s = 0; s < mesh.subMeshCount; s++)
             {
+                var atlas = Readable((Texture2D)renderer.sharedMaterials[s].mainTexture);
                 var indices = mesh.GetIndices(s);
                 for (var k = 0; k < indices.Length; k += 3)
                 {
@@ -342,6 +496,35 @@ namespace UVWizard.NDMF.Tests
             renderer.localBounds = new Bounds(Vector3.zero, Vector3.one * 4);
             renderer.sharedMaterials = materials;
             return renderer;
+        }
+
+        // A Merge Skinned Mesh target of the sources, set up by its fields as the inspector does, so AAO warns if
+        // its API is read before Initialize.
+        static SkinnedMeshRenderer MergeInto(GameObject avatar, string name, params Renderer[] sources)
+        {
+            var merged = new GameObject(name);
+            merged.transform.SetParent(avatar.transform);
+            var target = merged.AddComponent<SkinnedMeshRenderer>();
+            var merge = new SerializedObject(merged.AddComponent<MergeSkinnedMesh>());
+            void Set(string set, Renderer[] renderers)
+            {
+                var property = merge.FindProperty(set + ".mainSet");
+                property.arraySize = renderers.Length;
+                for (var r = 0; r < renderers.Length; r++) property.GetArrayElementAtIndex(r).objectReferenceValue = renderers[r];
+            }
+            Set("renderersSet", sources.OfType<SkinnedMeshRenderer>().ToArray<Renderer>());
+            Set("staticRenderersSet", sources.OfType<MeshRenderer>().ToArray<Renderer>());
+            merge.ApplyModifiedPropertiesWithoutUndo();
+            return target;
+        }
+
+        // A 16 px mask, white in the quarter above 0.5 in both U and V, black elsewhere.
+        Texture2D QuadrantMask()
+        {
+            var mask = Keep(new Texture2D(16, 16, TextureFormat.RGBA32, mipChain: false));
+            mask.SetPixels32(Enumerable.Range(0, 256).Select(i => i % 16 >= 8 && i / 16 >= 8 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255)).ToArray());
+            mask.Apply();
+            return mask;
         }
 
         // An FX layer that turns the named children on and off together.
