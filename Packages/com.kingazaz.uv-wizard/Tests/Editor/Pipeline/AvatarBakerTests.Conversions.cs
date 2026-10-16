@@ -379,7 +379,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var result = Bake(Converting(atlasSize: 64, preset: Preset.Excellent, representativeProperties: new[] { "_Glossiness" }),
                 new Renderer[] { renderer }, new AnimatedSlot(renderer, 1, new Reason("A"), new[] { red }));
 
-            Assume.That(result.Fits, Is.False);
+            Assert.That(result.Fits, Is.False);
             Assert.That(result.ConvertedMaterials.Select(c => c.Source), Is.EquivalentTo(new[] { many, eyes, red }));
             Assert.That(result.ConvertedMaterials.Select(c => c.Converted.GetFloat("_Glossiness")), Has.All.EqualTo(0.2f));
         }

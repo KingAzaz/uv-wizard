@@ -38,7 +38,7 @@ namespace UVWizard.Core.Pipeline
             readonly Dictionary<Material, Material> converted = new Dictionary<Material, Material>();
             readonly List<SlotNote> flagged = new List<SlotNote>();
             // Each renderer and source whose animated properties have been checked.
-            readonly HashSet<(Renderer, Material)> flaggedAnimated = new HashSet<(Renderer, Material)>();
+            readonly HashSet<(Renderer, Material)> checkedAnimated = new HashSet<(Renderer, Material)>();
 
             public Conversions(BakeOptions options, IReadOnlyList<AnimatedSlot>? animated)
             {
@@ -86,7 +86,7 @@ namespace UVWizard.Core.Pipeline
                 }
                 // The conversion is flagged on each renderer whose properties an animation changes, once, whichever
                 // renderer converted the source.
-                if (made != source && flaggedAnimated.Add((renderer, source))
+                if (made != source && checkedAnimated.Add((renderer, source))
                     && animated.Any(a => a.Renderer == renderer && a.EverySlot))
                     flagged.Add(new SlotNote(renderer, slot, source, new Reason(ReasonText.AnimatedProperties)));
                 return made;
