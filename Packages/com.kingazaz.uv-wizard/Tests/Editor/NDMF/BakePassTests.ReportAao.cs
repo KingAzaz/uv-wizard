@@ -296,6 +296,31 @@ namespace UVWizard.NDMF.Tests
             Assert.That(BakeReports.Latest.Leftovers[0].Reason.ToString(), Is.EqualTo("BoundsOrRootBone"));
         }
 
+        [Test]
+        public void AMeshAChildAnimatorTurnsOnAndOffIsKeptApartForItsToggle()
+        {
+            // The child Animator's curve paths start at its own object, not at the avatar root.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var props = new GameObject("Props");
+            props.transform.SetParent(avatar.transform);
+            var outfit = Skinned(avatar, "Outfit", avatar.transform.Find("Armature/Hips"),
+                Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
+            outfit.transform.SetParent(props.transform);
+            var clip = Keep(new AnimationClip { name = "Outfit" });
+            AnimationUtility.SetEditorCurve(clip, EditorCurveBinding.FloatCurve("Outfit", typeof(GameObject), "m_IsActive"),
+                new AnimationCurve(new Keyframe(0, 1), new Keyframe(1, 0)));
+            WithAnimator(props, clip);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Renderer, Is.SameAs(outfit));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("Toggle"));
+        }
+
         public enum BuildKind { PcBuild, NoComponent, Baked }
 
         // Avatar Optimizer replaces the controllers when it duplicates the avatar's assets. Reading them through
