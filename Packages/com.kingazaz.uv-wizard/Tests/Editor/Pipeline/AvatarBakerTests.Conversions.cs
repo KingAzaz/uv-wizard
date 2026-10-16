@@ -304,17 +304,18 @@ namespace UVWizard.Core.Tests.Pipeline
                 AssertClose(before[k], after[k], $"triangle {k}");
         }
 
-        [Test]
-        public void EachSideOfAConvertedTextureIsClampedToTheAtlasSize()
+        [TestCase(512, 128, 256, 128)]
+        [TestCase(128, 512, 128, 256)]
+        public void EachSideOfAConvertedTextureIsClampedToTheAtlasSize(int width, int height, int bakedWidth, int bakedHeight)
         {
-            var strip = Standard(Gradient(512, 128, 1), Color.white);
+            var strip = Standard(Gradient(width, height, 1), Color.white);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
                 Standard(Gradient(16, 0), Color.white), strip);
 
             Bake(Converting(atlasSize: 256), renderer);
 
             var converted = (Texture2D)renderer.sharedMaterials[1].mainTexture;
-            Assert.That((converted.width, converted.height), Is.EqualTo((256, 128)));
+            Assert.That((converted.width, converted.height), Is.EqualTo((bakedWidth, bakedHeight)));
         }
 
         // Standard as the merged shader, converting every material whose shader isn't one of the given ones.
