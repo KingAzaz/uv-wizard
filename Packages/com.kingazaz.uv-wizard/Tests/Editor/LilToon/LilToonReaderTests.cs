@@ -488,17 +488,20 @@ namespace UVWizard.Core.Tests.LilToon
 
         // An imported map's importer says whether it keeps alpha: DXT1, which the importer picks for a map
         // without alpha, declares an alpha channel anyway.
-        [TestCase(TextureImporterAlphaSource.FromInput, true)]
-        [TestCase(TextureImporterAlphaSource.None, false)]
-        public void AnImportedEmissionMapIsFlaggedWhenItsImporterKeepsAlpha(TextureImporterAlphaSource alphaSource,
-            bool flagged)
+        [TestCase(true, TextureImporterAlphaSource.FromInput, true)]
+        [TestCase(true, TextureImporterAlphaSource.None, false)]
+        [TestCase(false, TextureImporterAlphaSource.FromInput, false)]
+        [TestCase(false, TextureImporterAlphaSource.FromGrayScale, true)]
+        public void AnImportedEmissionMapIsFlaggedWhenItsImporterKeepsAlpha(bool sourceHasAlpha,
+            TextureImporterAlphaSource alphaSource, bool flagged)
         {
             const string folder = "Assets/UVWizardLilToonReaderTests";
             const string path = folder + "/emission.png";
             Directory.CreateDirectory(folder);
             try
             {
-                var image = Track(new Texture2D(4, 4, TextureFormat.RGBA32, false));
+                var image = Track(new Texture2D(4, 4,
+                    sourceHasAlpha ? TextureFormat.RGBA32 : TextureFormat.RGB24, false));
                 image.SetPixels(Enumerable.Repeat(new Color(1, 1, 1, 0.5f), 16).ToArray());
                 File.WriteAllBytes(path, image.EncodeToPNG());
                 AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
