@@ -134,8 +134,10 @@ namespace UVWizard.Core.Pipeline
                 }
                 if (!search.Fits)
                 {
-                    Object.DestroyImmediate(merged);
+                    // Materials converted from here on take the merged material's shared settings, as those converted
+                    // for the budget did, so it goes only once they're made.
                     conversions.Apply(renderers, null);
+                    Object.DestroyImmediate(merged);
                     return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
                         conversions.Made, conversions.Unconverted).Measured(renderers, options.Preset, null);
                 }
