@@ -159,6 +159,14 @@ namespace UVWizard.Core.Tests.Baking
             AssertColour(new Color32(0, 0, 255, 255), wide ? Texel(atlas, 10, 2) : Texel(atlas, 2, 10), "gutter texel nearer blue");
         }
 
+        [TestCase(0, 4)]
+        [TestCase(4, 0)]
+        public void APlanNeedsAPositiveWidthAndHeight(int width, int height)
+        {
+            Assert.That(() => new BakePlan(width, height, Array.Empty<BakeSource>()),
+                Throws.TypeOf<ArgumentOutOfRangeException>());
+        }
+
         [Test]
         public void AChartAtTheAtlasEdgeDoesntBlendWithTheOppositeEdge()
         {
