@@ -16,7 +16,7 @@ namespace UVWizard.Core.Pipeline
         /// renderers, such as particles, keep theirs, and the bake reports any that mobile doesn't allow.
         /// </summary>
         internal static bool ConvertsMaterialsOf(Renderer renderer) =>
-            renderer is MeshRenderer or SkinnedMeshRenderer && !TextureMemory.IsEditorOnly(renderer.transform);
+            renderer is MeshRenderer or SkinnedMeshRenderer && !UploadedRenderers.IsEditorOnly(renderer.transform);
 
         /// <summary>
         /// Gives each source material that stays on the avatar with a shader mobile doesn't allow its own material with
@@ -60,7 +60,7 @@ namespace UVWizard.Core.Pipeline
             public Material Of(Material source, Renderer renderer, int slot)
             {
                 if (options.MobileShaders == null || options.MobileShaders.Contains(source.shader.name)
-                    || TextureMemory.IsEditorOnly(renderer.transform))
+                    || UploadedRenderers.IsEditorOnly(renderer.transform))
                     return source;
                 if (!ConvertsMaterialsOf(renderer))
                 {

@@ -46,14 +46,14 @@ namespace UVWizard.NDMF
         /// </summary>
         public static BakeOptions Options(Shader shader, UVWizardAvatar avatar) => new BakeOptions(shader, atlasSize: 2048,
             padding: 8, compress: true, rampProperty: "_Ramp", defaultRamp: Resources.Load<Texture2D>(DefaultRamp),
-            representativeProperties: SharedProperties, budget: BudgetOf(avatar.preset), channels: ChannelsOf(avatar),
+            representativeProperties: SharedProperties, preset: PresetOf(avatar.preset), channels: ChannelsOf(avatar),
             cacheDirectory: CacheDirectory, mobileShaders: MobileShaders);
 
-        static Budget BudgetOf(UVWizardAvatar.Preset preset) => preset switch
+        static Preset PresetOf(UVWizardAvatar.Preset preset) => preset switch
         {
-            UVWizardAvatar.Preset.Excellent => Budget.Excellent,
-            UVWizardAvatar.Preset.Medium => Budget.Medium,
-            _ => Budget.Good,
+            UVWizardAvatar.Preset.Excellent => Preset.Excellent,
+            UVWizardAvatar.Preset.Medium => Preset.Medium,
+            _ => Preset.Good,
         };
 
         static Channels ChannelsOf(UVWizardAvatar avatar) =>

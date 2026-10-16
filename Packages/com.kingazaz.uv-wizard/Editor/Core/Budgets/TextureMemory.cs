@@ -46,7 +46,7 @@ namespace UVWizard.Core.Budgets
         /// The bytes every texture on every material of the renderers takes, each texture counted once. Renderers
         /// tagged EditorOnly, or under an object that is, are skipped, since they don't upload.
         /// </summary>
-        public static long Bytes(IEnumerable<Renderer> renderers) => Bytes(Materials(renderers));
+        public static long Bytes(IEnumerable<Renderer> renderers) => Bytes(UploadedRenderers.Materials(renderers));
 
         /// <summary>The bytes every texture on the materials takes, each texture counted once.</summary>
         public static long Bytes(IEnumerable<Material> materials)
@@ -59,27 +59,6 @@ namespace UVWizard.Core.Budgets
             long bytes = 0;
             foreach (var texture in textures) bytes += Bytes(texture);
             return bytes;
-        }
-
-        /// <summary>Every material on the renderers that upload, each once.</summary>
-        public static HashSet<Material> Materials(IEnumerable<Renderer> renderers)
-        {
-            var materials = new HashSet<Material>();
-            foreach (var renderer in renderers)
-            {
-                if (IsEditorOnly(renderer.transform)) continue;
-                foreach (var material in renderer.sharedMaterials)
-                    if (material != null) materials.Add(material);
-            }
-            return materials;
-        }
-
-        /// <summary>True when the object, or one above it, is tagged EditorOnly, so it doesn't upload.</summary>
-        public static bool IsEditorOnly(Transform? transform)
-        {
-            for (; transform != null; transform = transform.parent)
-                if (transform.CompareTag("EditorOnly")) return true;
-            return false;
         }
 
         // The SDK 3.10.5's table, MeshPerformanceScanner._texture2DBytesPerPixelLookup, read by reflection. It's

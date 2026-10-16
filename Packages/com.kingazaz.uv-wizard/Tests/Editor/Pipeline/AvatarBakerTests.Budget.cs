@@ -16,15 +16,15 @@ namespace UVWizard.Core.Tests.Pipeline
         [TestCase("Medium")]
         public void EachPresetStaysWithinItsBudgetWithEveryChannelOn(string preset)
         {
-            var budget = preset switch { "Excellent" => Budget.Excellent, "Good" => Budget.Good, _ => Budget.Medium };
+            var target = preset switch { "Excellent" => Preset.Excellent, "Good" => Preset.Good, _ => Preset.Medium };
             var renderer = Detailed();
 
-            var result = Bake(StandardOptions(compress: true, budget: budget), renderer);
+            var result = Bake(StandardOptions(compress: true, preset: target), renderer);
 
             Assert.That(result.Atlas, Is.Not.Null);
             Assert.That(result.EmissionAtlas, Is.Not.Null);
             Assert.That(result.NormalAtlas, Is.Not.Null);
-            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(budget.Bytes), preset);
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(target.BudgetBytes), preset);
         }
 
         [Test]
@@ -32,8 +32,8 @@ namespace UVWizard.Core.Tests.Pipeline
         {
             // At Excellent, all three channels at 2048 come to 10.08 MB, so one must give: the Normal channel, the
             // largest, takes a coarser format before it would lose half its size.
-            var allOn = Bake(StandardOptions(compress: true, budget: Budget.Excellent), Detailed());
-            var emissionOff = Bake(StandardOptions(compress: true, budget: Budget.Excellent,
+            var allOn = Bake(StandardOptions(compress: true, preset: Preset.Excellent), Detailed());
+            var emissionOff = Bake(StandardOptions(compress: true, preset: Preset.Excellent,
                 channels: Channels.Albedo | Channels.Normal), Detailed());
 
             Assert.That((allOn.NormalAtlas!.width, allOn.NormalAtlas.format), Is.EqualTo((2048, TextureFormat.ASTC_5x5)));
@@ -42,13 +42,13 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(emissionOff.MergedMaterial!.GetTexture("_EmissionMap"), Is.Null);
             Assert.That(TextureMemory.Bytes(emissionOff.Atlas!) + TextureMemory.Bytes(emissionOff.NormalAtlas!),
                 Is.GreaterThan(TextureMemory.Bytes(allOn.Atlas!) + TextureMemory.Bytes(allOn.NormalAtlas!)));
-            Assert.That(emissionOff.TextureBytes, Is.LessThanOrEqualTo(Budget.Excellent.Bytes));
+            Assert.That(emissionOff.TextureBytes, Is.LessThanOrEqualTo(Preset.Excellent.BudgetBytes));
         }
 
         [Test]
         public void WithAlbedoOffTheMergedMaterialHasNoMainTexture()
         {
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Good,
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Good,
                 channels: Channels.Emission | Channels.Normal), Detailed());
 
             Assert.That(result.Atlas, Is.Null);
@@ -63,18 +63,18 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = Detailed();
             var kept = Kept(Keep(new Texture2D(1536, 1536, TextureFormat.RGBA32, mipChain: false)));
 
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Good), renderer, kept);
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Good), renderer, kept);
 
             Assert.That(result.Excluded.Select(note => note.Renderer), Does.Contain(kept));
-            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Good.Bytes));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Preset.Good.BudgetBytes));
         }
 
         [Test]
         public void APresetWithinReachSizesTheAtlasForItself()
         {
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), Detailed());
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Excellent), Detailed());
 
-            Assert.That(result.SizedFor, Is.SameAs(Budget.Excellent));
+            Assert.That(result.SizedFor, Is.SameAs(Preset.Excellent));
         }
 
         [Test]
@@ -82,7 +82,7 @@ namespace UVWizard.Core.Tests.Pipeline
         {
             var kept = Kept(Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)));
 
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), kept);
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Excellent), kept);
 
             Assert.That(result.MergedMaterial, Is.Null);
             Assert.That(result.SizedFor, Is.Null);
@@ -95,7 +95,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var quads = Enumerable.Range(0, 320).Select(i => Quad(0, (i % 20) / 20f, (i / 20) / 16f, (i % 20 + 0.4f) / 20f, (i / 20 + 0.4f) / 16f)).ToArray();
             var renderer = MeshRenderer(Mesh(quads), Standard(Gradient(1024, 0), Color.white));
 
-            var result = Bake(new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 0, budget: Budget.Good), renderer);
+            var result = Bake(new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 0, preset: Preset.Good), renderer);
 
             Assert.That(result.Fits, Is.False);
             Assert.That(result.SizedFor, Is.Null);
@@ -104,12 +104,12 @@ namespace UVWizard.Core.Tests.Pipeline
         [Test]
         public void ABudgetTighterThanEveryPresetIsKeptWhenWithinReach()
         {
-            var tight = new Budget(4, 1);
+            var tight = new Preset(4, 1);
 
-            var result = Bake(StandardOptions(compress: true, budget: tight), Detailed());
+            var result = Bake(StandardOptions(compress: true, preset: tight), Detailed());
 
             Assert.That(result.SizedFor, Is.SameAs(tight));
-            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(tight.Bytes));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(tight.BudgetBytes));
         }
 
         [Test]
@@ -119,11 +119,11 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = Detailed();
             var kept = Kept(Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)));
 
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Excellent), renderer, kept);
 
-            Assert.That(result.SizedFor, Is.SameAs(Budget.Good));
-            Assert.That(result.TextureBytes, Is.GreaterThan(Budget.Excellent.Bytes));
-            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Good.Bytes));
+            Assert.That(result.SizedFor, Is.SameAs(Preset.Good));
+            Assert.That(result.TextureBytes, Is.GreaterThan(Preset.Excellent.BudgetBytes));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Preset.Good.BudgetBytes));
             Assert.That(result.Atlas!.width, Is.GreaterThan(AtlasSizing.MinSize), "the atlas keeps the detail Good's 2 MB affords");
         }
 
@@ -134,10 +134,10 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = Detailed();
             var kept = Kept(Keep(new Texture2D(2304, 2304, TextureFormat.RGBA32, mipChain: false)));
 
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Excellent), renderer, kept);
 
-            Assert.That(result.SizedFor, Is.SameAs(Budget.Medium));
-            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Medium.Bytes));
+            Assert.That(result.SizedFor, Is.SameAs(Preset.Medium));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Preset.Medium.BudgetBytes));
         }
 
         [Test]
@@ -147,7 +147,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = Detailed();
             var kept = Kept(Keep(new Texture2D(2592, 2592, TextureFormat.RGBA32, mipChain: false)));
 
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Excellent), renderer, kept);
 
             Assert.That(result.SizedFor, Is.Null);
             Assert.That((result.Atlas!.width, result.Atlas.format), Is.EqualTo((2048, TextureFormat.ASTC_6x6)));
@@ -161,7 +161,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(64, 0), Color.white));
             var kept = Kept(Keep(new Texture2D(2592, 2592, TextureFormat.RGBA32, mipChain: false)));
 
-            var result = Bake(StandardOptions(budget: Budget.Excellent), renderer, kept);
+            var result = Bake(StandardOptions(preset: Preset.Excellent), renderer, kept);
 
             Assert.That(result.SizedFor, Is.Null);
             Assert.That(result.Atlas!.width, Is.LessThan(2048));
@@ -173,7 +173,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(64, 0), Color.white));
             var before = Centroids(renderer).Select(SourceColour).ToArray();
 
-            var result = Bake(StandardOptions(budget: Budget.Good), renderer);
+            var result = Bake(StandardOptions(preset: Preset.Good), renderer);
 
             Assert.That(result.Atlas!.width, Is.LessThan(2048));
             var after = Centroids(renderer).Select(c => result.Atlas.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
@@ -191,7 +191,7 @@ namespace UVWizard.Core.Tests.Pipeline
             NormalMapped(material, Keep(new Texture2D(1024, 1024, TextureFormat.RGBA32, mipChain: false, linear: true)), 1);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.05f, 0.05f, 0.95f, 0.95f) }), material);
 
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer);
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Excellent), renderer);
 
             Assert.That((result.NormalAtlas!.width, result.NormalAtlas.format), Is.EqualTo((1024, TextureFormat.ASTC_4x4)));
         }
@@ -204,7 +204,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = Detailed(Quad(0, 0.05f, 0.05f, 0.45f, 0.95f), Quad(0, 0.55f, 0.05f, 0.95f, 0.95f));
             var kept = Kept(Keep(new Texture2D(1254, 1254, TextureFormat.RGBA32, mipChain: false)));
 
-            var result = Bake(StandardOptions(budget: Budget.Excellent), renderer, kept);
+            var result = Bake(StandardOptions(preset: Preset.Excellent), renderer, kept);
 
             Assert.That(result.NormalAtlas!.width, Is.EqualTo(1024));
             Assert.That(result.Atlas!.width, Is.EqualTo(2048));
@@ -227,11 +227,11 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = Detailed();
             var kept = Kept(Keep(new Texture2D(1100, 1100, TextureFormat.RGBA32, mipChain: false)));
 
-            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+            var result = Bake(StandardOptions(compress: true, preset: Preset.Excellent), renderer, kept);
 
             Assert.That(result.EmissionAtlas!.format, Is.EqualTo(TextureFormat.ASTC_8x8));
             Assert.That(result.Atlas!.format, Is.EqualTo(TextureFormat.ASTC_6x6));
-            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Excellent.Bytes));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Preset.Excellent.BudgetBytes));
         }
 
         [Test]
@@ -242,7 +242,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var material = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(256, 0), 1);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), material);
 
-            var result = Bake(StandardOptions(budget: Budget.Good, channels: Channels.Albedo | Channels.Emission), renderer);
+            var result = Bake(StandardOptions(preset: Preset.Good, channels: Channels.Albedo | Channels.Emission), renderer);
 
             Assert.That(result.NormalAtlas, Is.Null);
             Assert.That(result.Atlas!.width, Is.EqualTo(AtlasSizing.MinSize));
@@ -254,7 +254,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var merged = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
             var kept = Kept(Gradient(16, 1));
 
-            var good = Bake(StandardOptions(budget: Budget.Good), merged, kept);
+            var good = Bake(StandardOptions(preset: Preset.Good), merged, kept);
 
             Assert.That(good.MaterialSlots, Is.EqualTo(2));
             Assert.That(good.WithinMaterialSlots, Is.False);
@@ -266,7 +266,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var merged = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
             var kept = Kept(Gradient(16, 1));
 
-            var medium = Bake(StandardOptions(budget: Budget.Medium), merged, kept);
+            var medium = Bake(StandardOptions(preset: Preset.Medium), merged, kept);
 
             Assert.That(medium.MaterialSlots, Is.EqualTo(2));
             Assert.That(medium.WithinMaterialSlots, Is.True);

@@ -53,11 +53,12 @@ namespace UVWizard.Core.Budgets
         }
 
         /// <summary>
-        /// The budget to size the atlas for: <paramref name="budget"/> when <paramref name="outside"/>, the bytes of
-        /// textures that stay outside the atlas, leave room in it for the smallest atlas; otherwise the first lower
-        /// rank's budget that does. Null when none does, since then no atlas size reaches a better rank.
+        /// The preset whose budget to size the atlas for: <paramref name="preset"/> when <paramref name="outside"/>,
+        /// the bytes of textures that stay outside the atlas, leave room in its budget for the smallest atlas;
+        /// otherwise the first lower rank whose budget does. Null when none does, since then no atlas size reaches a
+        /// better rank.
         /// </summary>
-        public static Budget? SizedFor(Budget budget, long outside, Channels channels)
+        public static Preset? SizedFor(Preset preset, long outside, Channels channels)
         {
             var smallest = new Dictionary<Channels, ChannelTexture>();
             foreach (var channel in GivesWayFirst)
@@ -67,9 +68,9 @@ namespace UVWizard.Core.Budgets
                     smallest.Add(channel, new ChannelTexture(MinSize, formats[formats.Length - 1]));
                 }
             var needed = outside + Bytes(smallest);
-            if (needed <= budget.Bytes) return budget;
-            foreach (var lower in Budget.Ranks)
-                if (needed <= lower.Bytes) return lower;
+            if (needed <= preset.BudgetBytes) return preset;
+            foreach (var lower in Preset.Ranks)
+                if (needed <= lower.BudgetBytes) return lower;
             return null;
         }
 
