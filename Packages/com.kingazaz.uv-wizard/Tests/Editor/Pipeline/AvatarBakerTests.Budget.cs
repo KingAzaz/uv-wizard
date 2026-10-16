@@ -77,6 +77,17 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void WhenNothingMergesNoBudgetIsSizedFor()
+        {
+            var kept = Kept(Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), kept);
+
+            Assert.That(result.MergedMaterial, Is.Null);
+            Assert.That(result.SizedFor, Is.Null);
+        }
+
+        [Test]
         public void ABudgetTighterThanEveryPresetIsKeptWhenWithinReach()
         {
             var tight = new Budget(4, 1);

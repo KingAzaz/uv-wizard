@@ -55,7 +55,7 @@ namespace UVWizard.Core.Pipeline
             {
                 conversions.Apply(renderers, null);
                 return BakeResult.Unchanged(true, excluded, conversions.Flagged(flagged), conversions.Made,
-                    conversions.Unconverted).Measured(renderers, options.Budget);
+                    conversions.Unconverted).Measured(renderers, options.Budget, null);
             }
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -124,7 +124,7 @@ namespace UVWizard.Core.Pipeline
                     Object.DestroyImmediate(merged);
                     conversions.Apply(renderers, null);
                     return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
-                        conversions.Made, conversions.Unconverted).Measured(renderers, options.Budget, sizedFor);
+                        conversions.Made, conversions.Unconverted).Measured(renderers, options.Budget, null);
                 }
                 placements = search.Packing.Placements;
                 packing = new PackingOutcome(search.Packer, search.Scale, search.RanOutOfTime);

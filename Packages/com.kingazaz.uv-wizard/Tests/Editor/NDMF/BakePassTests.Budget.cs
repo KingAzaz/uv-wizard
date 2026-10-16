@@ -6,6 +6,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
+using VRC.SDK3.Avatars.Components;
 using VRC.SDKBase.Validation.Performance;
 using VRC.SDKBase.Validation.Performance.Stats;
 
@@ -56,7 +57,24 @@ namespace UVWizard.NDMF.Tests
 
             var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
 
+            Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudgetLowerRank)));
+            Assert.That(Texts(errors), Has.Some.Contains("sized the atlas for Good's 18 MB"));
+            Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverEveryBudget)));
+        }
+
+        [Test]
+        public void ABakeThatMergesNothingSaysItsOverBudgetWithoutNamingAnAtlas()
+        {
+            // Only the kept renderer, so no slot merges and no atlas is sized.
+            var avatar = Keep(new GameObject("Avatar"));
+            avatar.AddComponent<VRCAvatarDescriptor>();
+            avatar.AddComponent<UVWizardAvatar>().addTraceAndOptimize = false;
+            Kept(avatar, Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)), "VRChat/Mobile/Standard Lite");
+
+            var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
+
             Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudget)));
+            Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudgetLowerRank)));
             Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverEveryBudget)));
         }
 
@@ -70,7 +88,9 @@ namespace UVWizard.NDMF.Tests
             var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
 
             Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverEveryBudget)));
+            Assert.That(Texts(errors), Has.Some.Contains("the lowest preset's 25 MB"));
             Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudget)));
+            Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudgetLowerRank)));
         }
 
         [Test]
