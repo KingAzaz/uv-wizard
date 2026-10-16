@@ -4,6 +4,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UVWizard.Core.Materials;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Tests.Materials
 {
@@ -104,10 +105,10 @@ namespace UVWizard.Core.Tests.Materials
             Assert.That(SourceShaderReader.Read(material).Normal, Is.Null);
         }
 
-        [TestCase(StandardCutout, "cutout")]
-        [TestCase(StandardFade, "transparent")]
-        [TestCase(StandardTransparent, "transparent")]
-        public void AStandardMaterialThatIsNotOpaqueIsFlaggedBecauseItBecomesOpaque(float mode, string named)
+        [TestCase(StandardCutout, ReasonText.CutoutDropped)]
+        [TestCase(StandardFade, ReasonText.TransparencyDropped)]
+        [TestCase(StandardTransparent, ReasonText.TransparencyDropped)]
+        public void AStandardMaterialThatIsNotOpaqueIsFlaggedBecauseItBecomesOpaque(float mode, string reason)
         {
             var material = Material("Standard");
             material.SetFloat("_Mode", mode);
@@ -115,14 +116,14 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain(named).IgnoreCase);
+            Assert.That(reading.Reason!.Keys, Is.EqualTo(new[] { reason }));
         }
 
         // A script can set the blend keywords without the inspector's _Mode, and the shader follows the keywords.
-        [TestCase("_ALPHATEST_ON", "cutout")]
-        [TestCase("_ALPHABLEND_ON", "transparent")]
-        [TestCase("_ALPHAPREMULTIPLY_ON", "transparent")]
-        public void AStandardMaterialWithAnAlphaKeywordIsFlaggedWhateverItsMode(string keyword, string named)
+        [TestCase("_ALPHATEST_ON", ReasonText.CutoutDropped)]
+        [TestCase("_ALPHABLEND_ON", ReasonText.TransparencyDropped)]
+        [TestCase("_ALPHAPREMULTIPLY_ON", ReasonText.TransparencyDropped)]
+        public void AStandardMaterialWithAnAlphaKeywordIsFlaggedWhateverItsMode(string keyword, string reason)
         {
             var material = Material("Standard");
             material.SetFloat("_Mode", StandardOpaque);
@@ -131,7 +132,7 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain(named).IgnoreCase);
+            Assert.That(reading.Reason!.Keys, Is.EqualTo(new[] { reason }));
         }
 
         [Test]
@@ -144,7 +145,7 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain("UV1"));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.DetailMapsOffMainUvs, 1)));
         }
 
         [Test]
@@ -157,7 +158,7 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Detail maps"));
+            Assert.That(reading.Reason!.Keys, Is.EqualTo(new[] { ReasonText.DetailMapsDropped }));
         }
 
         [Test]
@@ -171,7 +172,7 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Transparent").And.Contain("Detail maps"));
+            Assert.That(reading.Reason!.Keys, Is.EqualTo(new[] { ReasonText.TransparencyDropped, ReasonText.DetailMapsDropped }));
         }
 
         [Test]
@@ -284,7 +285,7 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Unlit/Texture"), "the reason names the shader");
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.UnknownShader, "Unlit/Texture")), "the reason names the shader");
             Assert.That(reading.Albedo!.Texture, Is.SameAs(texture));
             AssertColour(Color.white, reading.Albedo.Tint);
             Assert.That(reading.Albedo.ScaleOffset, Is.EqualTo(new Vector4(1, 1, 0.5f, 0)));
@@ -344,7 +345,7 @@ namespace UVWizard.Core.Tests.Materials
 
             var reading = SourceShaderReader.Read(material);
 
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{reading.Reason}");
             Assert.That(reading.Emission?.Texture, Is.SameAs(emissionMap), "emission");
             Assert.That(reading.Normal?.Texture, Is.SameAs(normalMap), "normal");
         }
@@ -359,7 +360,7 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain("UV1"));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.ChannelOffMainUvs, ReasonText.Channel(Channel.Albedo), 1)));
         }
 
         [Test]
@@ -372,7 +373,7 @@ namespace UVWizard.Core.Tests.Materials
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain("UV mode 11"));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.ChannelMappedWithoutUvs, ReasonText.Channel(Channel.Albedo), new ReportLine(ReasonText.UvMode, 11))));
         }
 
         // ThryEditor cleans a thry_rename_suffix before renaming: it drops spaces and hex-encodes the UTF-8

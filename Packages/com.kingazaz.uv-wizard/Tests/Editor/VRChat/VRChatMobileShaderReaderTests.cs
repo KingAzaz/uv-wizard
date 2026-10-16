@@ -3,6 +3,7 @@
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Materials;
+using UVWizard.Core.Reporting;
 using UVWizard.Core.Tests.Materials;
 
 namespace UVWizard.Core.Tests.VRChat
@@ -194,7 +195,7 @@ namespace UVWizard.Core.Tests.VRChat
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain("UV1"), "the reason names the UV channel");
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.ChannelOffMainUvs, ReasonText.Channel(Channel.Emission), 1)), "the reason names the UV channel");
         }
 
         [Test]
@@ -273,18 +274,20 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That(normal!.Strength, Is.EqualTo(0.25f));
         }
 
-        [TestCase(StandardLite, "_DETAIL", "_UVSec")]
-        [TestCase(ToonStandard, "USE_DETAIL_MAPS", "_DetailUV")]
-        public void DetailMapsOnUv1ExcludeTheMaterial(string shader, string detailKeyword, string uvProperty)
+        [TestCase(StandardLite, "_DETAIL", "_UVSec", 1)]
+        [TestCase(ToonStandard, "USE_DETAIL_MAPS", "_DetailUV", 1)]
+        [TestCase(ToonStandard, "USE_DETAIL_MAPS", "_DetailUV", 3)]
+        public void DetailMapsOffUv0ExcludeTheMaterialAndNameTheirUvChannel(string shader, string detailKeyword,
+            string uvProperty, int uv)
         {
             var material = Material(shader);
             material.EnableKeyword(detailKeyword);
-            material.SetFloat(uvProperty, 1);
+            material.SetFloat(uvProperty, uv);
 
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain("UV1"));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.DetailMapsOffMainUvs, uv)));
         }
 
         [TestCase(StandardLite, "_DETAIL", "_UVSec")]
@@ -350,7 +353,7 @@ namespace UVWizard.Core.Tests.VRChat
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Hue shift"));
+            Assert.That(reading.Reason!.Keys, Does.Contain(ReasonText.HueShiftDropped));
         }
 
         [TestCase("_HueShift")]
@@ -363,7 +366,7 @@ namespace UVWizard.Core.Tests.VRChat
             material.DisableKeyword("USE_HUE_SHIFT");
             material.SetFloat(hueShift, 1.5f);
 
-            Assert.That(SourceShaderReader.Read(material).Reason ?? "", Does.Not.Contain("Hue shift"));
+            Assert.That($"{SourceShaderReader.Read(material).Reason}", Does.Not.Contain(ReasonText.HueShiftDropped));
         }
 
         [Test]
@@ -373,7 +376,7 @@ namespace UVWizard.Core.Tests.VRChat
             material.SetColor("_EmissionColor", Color.black);
             material.SetFloat("_EmissionHueShift", 1.5f);
 
-            Assert.That(SourceShaderReader.Read(material).Reason ?? "", Does.Not.Contain("Hue shift"));
+            Assert.That($"{SourceShaderReader.Read(material).Reason}", Does.Not.Contain(ReasonText.HueShiftDropped));
         }
 
         [Test]
@@ -410,7 +413,7 @@ namespace UVWizard.Core.Tests.VRChat
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Colour mask"));
+            Assert.That(reading.Reason!.Keys, Does.Contain(ReasonText.ColourMaskDropped));
         }
 
         [Test]
@@ -433,7 +436,7 @@ namespace UVWizard.Core.Tests.VRChat
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Matcap"));
+            Assert.That(reading.Reason!.Keys, Does.Contain(ReasonText.MatcapDropped));
         }
 
         [TestCase(StandardLite, "_DETAIL", "_UVSec")]
@@ -448,7 +451,7 @@ namespace UVWizard.Core.Tests.VRChat
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Detail maps"));
+            Assert.That(reading.Reason!.Keys, Does.Contain(ReasonText.DetailMapsDropped));
         }
 
         [Test]
@@ -504,7 +507,7 @@ namespace UVWizard.Core.Tests.VRChat
 
             var reason = SourceShaderReader.Read(material).Reason;
 
-            Assert.That(reason, Does.Contain("Hue shift").And.Contain("Colour mask").And.Contain("Matcap"));
+            Assert.That(reason!.Keys, Is.EqualTo(new[] { ReasonText.HueShiftDropped, ReasonText.ColourMaskDropped, ReasonText.MatcapDropped }));
         }
 
         [Test]
@@ -519,10 +522,10 @@ namespace UVWizard.Core.Tests.VRChat
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain("UV1"));
-            Assert.That(reading.FlaggedReason, Does.Contain("Hue shift"),
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.DetailMapsOffMainUvs, 1)));
+            Assert.That(reading.FlaggedReason!.Keys, Does.Contain(ReasonText.HueShiftDropped),
                 "a conversion drops the hue shift the same way");
-            Assert.That(reading.FlaggedReason, Does.Not.Contain("Detail maps"), "the exclusion already names them");
+            Assert.That($"{reading.FlaggedReason}", Does.Not.Contain(ReasonText.DetailMapsDropped), "the exclusion already names them");
         }
 
         [Test]
@@ -551,8 +554,8 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That(reading.Emission?.Texture, Is.SameAs(emissionMap));
             Assert.That(reading.Normal?.Texture, Is.SameAs(normalMap));
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("outline").IgnoreCase);
-            Assert.That(reading.Reason, Does.Not.Contain("Unknown shader"));
+            Assert.That(reading.Reason!.Keys, Does.Contain(ReasonText.OutlineDropped));
+            Assert.That($"{reading.Reason}", Does.Not.Contain(ReasonText.UnknownShader));
         }
     }
 }

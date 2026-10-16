@@ -6,6 +6,7 @@ using UnityEngine;
 using UVWizard.Core.Baking;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Materials;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Pipeline
 {
@@ -64,7 +65,7 @@ namespace UVWizard.Core.Pipeline
                     return source;
                 if (!ConvertsMaterialsOf(renderer))
                 {
-                    Leave(source, renderer, slot, "UV Wizard converts the materials of mesh renderers only.");
+                    Leave(source, renderer, slot, new Reason(ReasonText.MeshRenderersOnly));
                     return source;
                 }
                 if (converted.TryGetValue(source, out var made)) return made;
@@ -73,8 +74,8 @@ namespace UVWizard.Core.Pipeline
                 if (reading.Albedo == null)
                 {
                     converted.Add(source, source);
-                    Leave(source, renderer, slot, (reading.Reason != null ? reading.Reason + " " : "") +
-                                                  "It has no surface of its own to convert.");
+                    var noSurface = new Reason(ReasonText.NoSurface);
+                    Leave(source, renderer, slot, reading.Reason?.Then(noSurface) ?? noSurface);
                     return source;
                 }
                 converted.Add(source, made = Convert(source, reading, renderer, slot));
@@ -83,7 +84,7 @@ namespace UVWizard.Core.Pipeline
             }
 
             // Notes a source left on a slot with a shader mobile doesn't allow, once per source.
-            void Leave(Material source, Renderer renderer, int slot, string reason)
+            void Leave(Material source, Renderer renderer, int slot, Reason reason)
             {
                 if (!Unconverted.Exists(note => note.Material == source))
                     Unconverted.Add(new SlotNote(renderer, slot, source, reason));
@@ -141,11 +142,10 @@ namespace UVWizard.Core.Pipeline
             // A material with the merged shader, set up as the merged material is, that draws what the source does.
             Material Convert(Material source, SourceMaterialReading reading, Renderer renderer, int slot)
             {
-                void Flag(string reason) => flagged.Add(new SlotNote(renderer, slot, source, reason));
+                void Flag(Reason reason) => flagged.Add(new SlotNote(renderer, slot, source, reason));
                 if (reading.FlaggedReason != null) Flag(reading.FlaggedReason);
                 if (animated.Any(a => a.Renderer == renderer && a.EverySlot))
-                    Flag("An animation changes this renderer's material properties, which its Toon Standard material " +
-                         "may not have, or may show differently.");
+                    Flag(new Reason(ReasonText.AnimatedProperties));
 
                 var material = new Material(options.MergedShader) { name = $"{source.name} (UV Wizard)" };
                 if (Merged != null)
@@ -166,22 +166,19 @@ namespace UVWizard.Core.Pipeline
                 var albedo = reading.Albedo;
                 if (albedo is { UvChannel: not 0 })
                 {
-                    Flag("Its main texture isn't sampled from UV0, the only UVs its Toon Standard material samples it " +
-                         "from, so only its colour is kept.");
+                    Flag(new Reason(ReasonText.ConvertedAlbedoOffMainUvs));
                     albedo = new ChannelSource(null, albedo.Tint, Identity, 0);
                 }
                 var emission = (options.Channels & Channels.Emission) != 0 ? BakedEmission(reading) : null;
                 if (emission is { UvChannel: > 0 } && (emission.UvChannel > 1 || !material.HasFloat("_EmissionUV")))
                 {
-                    Flag("Its emission isn't sampled from UV0 or UV1, the UVs its Toon Standard material can sample " +
-                         "it from, so it doesn't glow.");
+                    Flag(new Reason(ReasonText.ConvertedEmissionOffUvs));
                     emission = null;
                 }
                 var normal = (options.Channels & Channels.Normal) != 0 ? BakedNormal(reading) : null;
                 if (normal is { UvChannel: not 0 })
                 {
-                    Flag("Its normal map isn't sampled from UV0, the only UVs its Toon Standard material samples it " +
-                         "from, so it's left out.");
+                    Flag(new Reason(ReasonText.ConvertedNormalOffMainUvs));
                     normal = null;
                 }
 
@@ -190,7 +187,7 @@ namespace UVWizard.Core.Pipeline
                 {
                     var intensity = Intensity(emission.Tint);
                     strength = Mathf.Clamp(intensity, 1, MaxEmissionStrength);
-                    if (intensity > MaxEmissionStrength) Flag(GlowsLess(intensity, "its Toon Standard material"));
+                    if (intensity > MaxEmissionStrength) Flag(GlowsLess(intensity, ReasonText.GlowsLessConverted));
                 }
 
                 var albedoTexture = (options.Channels & Channels.Albedo) != 0 && albedo != null

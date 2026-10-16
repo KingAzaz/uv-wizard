@@ -34,7 +34,8 @@ namespace UVWizard.NDMF.Tests
             Assert.That(report.AvatarName, Is.EqualTo("Avatar"));
             Assert.That(report.Materials.Select(row => (row.Outcome, row.Material, row.Renderers.Single())),
                 Is.EqualTo(new[] { (MaterialOutcome.Flagged, doubleSided, (Renderer)hat) }));
-            Assert.That(report.Materials[0].Reason, Does.Contain("cull"));
+            Assert.That(report.Materials[0].Reason.Text(Messages.Text),
+                Does.StartWith("It culls no faces, but the merged material culls back faces"));
             Assert.That(report.PackingLines.Select(line => line.Key), Is.EqualTo(new[] { ReportText.ExactPacker }));
             Assert.That(report.Target, Is.EqualTo(PerformanceRank.Good));
         }
@@ -92,6 +93,38 @@ namespace UVWizard.NDMF.Tests
             foreach (var key in keys)
                 Assert.That(Messages.Localizer.TryGetLocalizedString(key, out _), Is.True, key);
         }
+
+        [Test]
+        public void EveryReasonHasEnglish()
+        {
+            foreach (var key in ReasonKeys())
+                Assert.That(Messages.Localizer.TryGetLocalizedString(key, out _), Is.True, key);
+        }
+
+        [Test]
+        public void AReasonOfSeveralSentencesReadsEachInTurn()
+        {
+            var reason = new Reason(ReasonText.TransparencyDropped).Then(new Reason(ReasonText.Pans,
+                ReasonText.Channel(Core.Materials.Channel.Emission)));
+
+            Assert.That(reason.Text(Messages.Text), Is.EqualTo("Transparent becomes opaque: Toon Standard has no " +
+                "transparency. Emission pans: the scrolling becomes static."));
+        }
+
+        // A creator reads these without knowing how the bake splits a mesh up or numbers its UV maps.
+        [Test]
+        public void NoReasonUsesTheBakesOwnTerms()
+        {
+            foreach (var key in ReasonKeys())
+                Assert.That(Messages.Text(key), Does.Not.Contain("island").IgnoreCase.And.Not.Contain("chart").IgnoreCase
+                    .And.Not.Contain("submesh").IgnoreCase.And.Not.Contain("UV0").IgnoreCase, key);
+        }
+
+        static System.Collections.Generic.IEnumerable<string> ReasonKeys() =>
+            typeof(ReasonText).GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue())
+                .Concat(((Core.Materials.Channel[])System.Enum.GetValues(typeof(Core.Materials.Channel)))
+                    .Select(channel => ReasonText.Channel(channel).Key));
 
         [Test]
         public void ClickingAListedMaterialSelectsIt()

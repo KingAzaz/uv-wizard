@@ -7,6 +7,7 @@ using nadena.dev.ndmf.animator;
 using UnityEditor;
 using UnityEngine;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.NDMF
 {
@@ -40,9 +41,7 @@ namespace UVWizard.NDMF
                 }
                 foreach (var ((renderer, slot), materials) in swaps)
                     animated.Add(new AnimatedSlot(renderer, slot,
-                        $"The animation \"{clip.Name}\" swaps the material in Element {slot} of this renderer's " +
-                        "materials, so that slot keeps its own UVs. In a slot no animation swaps, the same material can " +
-                        "still be merged.",
+                        new Reason(ReasonText.AnimationSwapsSlot, clip.Name, slot),
                         materials));
 
                 var properties = new Dictionary<Renderer, string>();
@@ -56,8 +55,7 @@ namespace UVWizard.NDMF
                 }
                 foreach (var (renderer, property) in properties)
                     animated.Add(new AnimatedSlot(renderer, null,
-                        $"The animation \"{clip.Name}\" changes {property} on this renderer's materials, which would " +
-                        "change every merged material on it."));
+                        new Reason(ReasonText.AnimationChangesProperty, clip.Name, property)));
             }
             return animated;
         }

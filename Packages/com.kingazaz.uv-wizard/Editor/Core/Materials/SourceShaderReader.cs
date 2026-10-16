@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Materials
 {
@@ -49,8 +50,8 @@ namespace UVWizard.Core.Materials
                          { (Channel.Albedo, reading.Albedo), (Channel.Emission, reading.Emission),
                            (Channel.Normal, reading.Normal) })
                 if (source != null && source.UvChannel != 0)
-                    return reading.Excluded(
-                        $"{channel} is sampled from UV{source.UvChannel}: the atlas remaps UV0 only.");
+                    return reading.Excluded(new Reason(ReasonText.ChannelOffMainUvs, ReasonText.Channel(channel),
+                        source.UvChannel));
             return reading;
         }
 
@@ -64,7 +65,7 @@ namespace UVWizard.Core.Materials
                 : new ChannelSource(material.GetTexture(mainTexture), tint,
                     MaterialProperties.ScaleOffset(material, mainTexture), 0);
             return new SourceMaterialReading(albedo, null, null, MaterialVerdict.Flagged,
-                $"Unknown shader {material.shader.name}: only its main texture and colour are baked.");
+                new Reason(ReasonText.UnknownShader, material.shader.name));
         }
 
         // The texture property marked [MainTexture], or _MainTex, or null when the shader has neither.

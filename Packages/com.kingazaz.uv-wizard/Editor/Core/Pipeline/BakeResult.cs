@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Packing;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Pipeline
 {
@@ -167,7 +168,7 @@ namespace UVWizard.Core.Pipeline
     /// <summary>One material slot of one renderer, and why it's excluded or flagged.</summary>
     internal readonly struct SlotNote
     {
-        public SlotNote(Renderer renderer, int slot, Material material, string reason)
+        public SlotNote(Renderer renderer, int slot, Material material, Reason reason)
         {
             Renderer = renderer;
             RendererName = renderer.name;
@@ -182,6 +183,6 @@ namespace UVWizard.Core.Pipeline
         public string RendererName { get; }
         public int Slot { get; }
         public Material Material { get; }
-        public string Reason { get; }
+        public Reason Reason { get; }
     }
 }

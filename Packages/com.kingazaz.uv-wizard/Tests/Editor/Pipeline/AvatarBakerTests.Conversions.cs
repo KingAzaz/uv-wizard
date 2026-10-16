@@ -6,6 +6,7 @@ using UnityEngine;
 using UVWizard.Core.Baking;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Tests.Pipeline
 {
@@ -49,7 +50,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), eyes);
 
             var result = Bake(Converting(), new Renderer[] { renderer },
-                new AnimatedSlot(renderer, 1, "A", new[] { eyes, red }), new AnimatedSlot(renderer, 1, "B", new[] { red }));
+                new AnimatedSlot(renderer, 1, new Reason("A"), new[] { eyes, red }), new AnimatedSlot(renderer, 1, new Reason("B"), new[] { red }));
 
             Assert.That(result.ConvertedMaterials.Select(c => c.Source), Is.EquivalentTo(new[] { eyes, red }));
             Assert.That(renderer.sharedMaterials[1], Is.SameAs(result.ConvertedMaterials.Single(c => c.Source == eyes).Converted));
@@ -86,7 +87,7 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.ConvertedMaterials, Is.Empty);
             Assert.That(result.Unconverted.Select(note => (note.Renderer, note.Material)), Is.EqualTo(new[] { ((Renderer)line, drawn) }),
                 "the line's shader would stop the upload; the editor-only renderer doesn't upload");
-            Assert.That(result.Unconverted[0].Reason, Does.Contain("mesh renderers only"));
+            Assert.That(result.Unconverted[0].Reason, Is.EqualTo(new Reason(ReasonText.MeshRenderersOnly)));
         }
 
         [Test]
@@ -130,8 +131,8 @@ namespace UVWizard.Core.Tests.Pipeline
 
             var result = Bake(Converting(), renderer);
 
-            Assert.That(result.Flagged.Select(note => (note.Material, note.Reason)),
-                Has.Some.Matches<(Material Material, string Reason)>(n => n.Material == glass && n.Reason.Contains("Transparent")));
+            Assert.That(result.Flagged.Where(note => note.Material == glass).SelectMany(note => note.Reason.Keys),
+                Has.Some.EqualTo(ReasonText.TransparencyDropped));
         }
 
         [Test]
@@ -147,8 +148,8 @@ namespace UVWizard.Core.Tests.Pipeline
             var result = Bake(Converting(), renderer);
 
             Assert.That(result.ConvertedMaterials.Select(c => c.Source), Is.EqualTo(new[] { glass }));
-            Assert.That(result.Flagged.Select(note => (note.Material, note.Reason)),
-                Has.Some.Matches<(Material Material, string Reason)>(n => n.Material == glass && n.Reason.Contains("Transparent")));
+            Assert.That(result.Flagged.Where(note => note.Material == glass).SelectMany(note => note.Reason.Keys),
+                Has.Some.EqualTo(ReasonText.TransparencyDropped));
         }
 
         [Test]
@@ -157,11 +158,11 @@ namespace UVWizard.Core.Tests.Pipeline
             var glowing = Standard(Gradient(16, 1), Color.white);
             var renderer = MeshRenderer(Mesh(new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
 
-            var result = Bake(Converting(), new Renderer[] { renderer }, new AnimatedSlot(renderer, null, "Glows in \"Glow\"."));
+            var result = Bake(Converting(), new Renderer[] { renderer }, new AnimatedSlot(renderer, null, new Reason("Glows in \"Glow\".")));
 
             Assert.That(renderer.sharedMaterial, Is.Not.SameAs(glowing));
-            Assert.That(result.Flagged.Select(note => (note.Material, note.Reason)),
-                Has.Some.Matches<(Material Material, string Reason)>(n => n.Material == glowing && n.Reason.Contains("material properties")));
+            Assert.That(result.Flagged.Where(note => note.Material == glowing).SelectMany(note => note.Reason.Keys),
+                Has.Some.EqualTo(ReasonText.AnimatedProperties));
         }
 
         // The channels as an int: the enum is internal, and a test's parameters must be public.
@@ -262,8 +263,8 @@ namespace UVWizard.Core.Tests.Pipeline
             AssertClose(new Color(2, 2, 2).gamma, converted.GetColor("_EmissionColor"), "the strength");
             var map = (Texture2D)converted.GetTexture("_EmissionMap");
             AssertClose(new Color(1, 0.5f, 0.2f).gamma, map.GetPixelBilinear(0.5f, 0.5f), "the map");
-            Assert.That(result.Flagged.Select(note => (note.Material, note.Reason)),
-                Has.Some.Matches<(Material Material, string Reason)>(n => n.Material == bright && n.Reason.Contains("glows less")));
+            Assert.That(result.Flagged.Where(note => note.Material == bright).SelectMany(note => note.Reason.Keys),
+                Has.Some.EqualTo(ReasonText.GlowsLessConverted));
         }
 
         [Test]

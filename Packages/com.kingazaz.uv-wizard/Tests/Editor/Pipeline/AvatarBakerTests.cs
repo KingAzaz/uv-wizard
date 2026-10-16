@@ -11,6 +11,7 @@ using UVWizard.Core.Baking;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Meshes;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Pipeline
@@ -149,7 +150,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var centroid = Centroids(renderer).First();
             AssertClose(new Color(1, 0.5f, 0.2f).gamma, result.EmissionAtlas!.GetPixelBilinear(centroid.Uv.x, centroid.Uv.y), "centroid");
             Assert.That(result.Flagged.Select(note => note.Material), Is.EqualTo(new[] { blinding }));
-            Assert.That(result.Flagged[0].Reason, Does.Contain("emission"));
+            Assert.That(result.Flagged[0].Reason.Keys, Is.EqualTo(new[] { ReasonText.GlowsLessMerged }));
         }
 
         [Test]
@@ -504,7 +505,7 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(CornerUvs(rewritten, 1), Is.EqualTo(CornerUvs(mesh, 1)));
             Assert.That(result.Excluded.Select(note => (note.Renderer, note.Slot, note.Material)),
                 Is.EqualTo(new[] { ((Renderer)renderer, 1, repeated) }));
-            Assert.That(result.Excluded[0].Reason, Does.Contain("repeat"));
+            Assert.That(result.Excluded[0].Reason.Keys, Is.EqualTo(new[] { ReasonText.RepeatsTooOften }));
         }
 
         [Test]
@@ -522,7 +523,7 @@ namespace UVWizard.Core.Tests.Pipeline
 
             Assert.That(second.sharedMaterials, Is.EqualTo(new[] { detailed }));
             Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(new[] { detailed }));
-            Assert.That(result.Excluded[0].Reason, Does.Contain("UV1"));
+            Assert.That(result.Excluded[0].Reason, Is.EqualTo(new Reason(ReasonText.DetailMapsOffMainUvs, 1)));
         }
 
         [Test]
@@ -535,7 +536,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var result = Bake(renderer);
 
             Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { tiled }));
-            Assert.That(result.Excluded.Select(note => note.Reason), Has.Some.Contains("repeat"));
+            Assert.That(result.Excluded.SelectMany(note => note.Reason.Keys), Has.Some.EqualTo(ReasonText.RepeatsTooOften));
         }
 
         [Test]
@@ -559,7 +560,7 @@ namespace UVWizard.Core.Tests.Pipeline
 
             Assert.That(Filter(unwritable).sharedMesh, Is.SameAs(bytes));
             Assert.That(unwritable.sharedMaterials, Is.EqualTo(new[] { material }));
-            Assert.That(result.Excluded.Select(note => note.Reason), Has.Some.Contains("UV0"));
+            Assert.That(result.Excluded.SelectMany(note => note.Reason.Keys), Has.Some.EqualTo(ReasonText.UvFormat));
             Assert.That(merged.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
         }
 
@@ -589,7 +590,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var result = Bake(renderer);
 
             Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { material }));
-            Assert.That(result.Excluded.Select(note => note.Reason), Has.Some.Contains("UV0"));
+            Assert.That(result.Excluded.SelectMany(note => note.Reason.Keys), Has.Some.EqualTo(ReasonText.NoUvs));
         }
 
         [Test]
@@ -708,7 +709,7 @@ namespace UVWizard.Core.Tests.Pipeline
 
             Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
             Assert.That(result.Flagged.Select(note => note.Material), Is.EqualTo(new[] { transparent }));
-            Assert.That(result.Flagged[0].Reason, Does.Contain("opaque"));
+            Assert.That(result.Flagged[0].Reason.Keys, Is.EqualTo(new[] { ReasonText.TransparencyDropped }));
         }
 
         [Test]
@@ -848,14 +849,14 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(16, 1), Color.white), eyes);
 
             var result = Bake(new BakeOptions(Shader.Find("Standard")), new[] { renderer },
-                new AnimatedSlot(renderer, 2, "Swapped by \"Red eyes\".", new[] { eyes, red }));
+                new AnimatedSlot(renderer, 2, new Reason("Swapped by \"Red eyes\"."), new[] { eyes, red }));
 
             Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial, eyes }));
             Assert.That(CornerUvs(Filter(renderer).sharedMesh, 1), Is.EqualTo(CornerUvs(mesh, 2)));
             Assert.That(result.Excluded.Select(note => (note.Renderer, note.Slot, note.Material, note.Reason)), Is.EqualTo(new[]
             {
-                ((Renderer)renderer, 2, eyes, "Swapped by \"Red eyes\"."),
-                ((Renderer)renderer, 2, red, "Swapped by \"Red eyes\"."),
+                ((Renderer)renderer, 2, eyes, new Reason("Swapped by \"Red eyes\".")),
+                ((Renderer)renderer, 2, red, new Reason("Swapped by \"Red eyes\".")),
             }));
         }
 
@@ -869,10 +870,10 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), eyes);
 
             var result = Bake(new BakeOptions(Shader.Find("Standard")), new Renderer[] { renderer },
-                new AnimatedSlot(renderer, 1, "A", new[] { eyes, red }), new AnimatedSlot(renderer, 1, "B", new[] { red, green }));
+                new AnimatedSlot(renderer, 1, new Reason("A"), new[] { eyes, red }), new AnimatedSlot(renderer, 1, new Reason("B"), new[] { red, green }));
 
             Assert.That(result.Excluded.Select(note => (note.Material, note.Reason)),
-                Is.EqualTo(new[] { (eyes, "A"), (red, "A"), (green, "B") }));
+                Is.EqualTo(new[] { (eyes, new Reason("A")), (red, new Reason("A")), (green, new Reason("B")) }));
         }
 
         [Test]
@@ -884,10 +885,10 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(16, 1), Color.white), extra);
 
             var result = Bake(new BakeOptions(Shader.Find("Standard")), new Renderer[] { renderer },
-                new AnimatedSlot(renderer, 2, "Swapped by \"Red layer\".", new[] { extra, red }));
+                new AnimatedSlot(renderer, 2, new Reason("Swapped by \"Red layer\"."), new[] { extra, red }));
 
             Assert.That(result.Excluded.Where(note => note.Slot == 2).Select(note => (note.Material, note.Reason)),
-                Is.EqualTo(new[] { (extra, "Swapped by \"Red layer\"."), (red, "Swapped by \"Red layer\".") }));
+                Is.EqualTo(new[] { (extra, new Reason("Swapped by \"Red layer\".")), (red, new Reason("Swapped by \"Red layer\".")) }));
         }
 
         [Test]
@@ -898,10 +899,10 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), null!);
 
             var result = Bake(new BakeOptions(Shader.Find("Standard")), new Renderer[] { renderer },
-                new AnimatedSlot(renderer, 1, "Swapped by \"Red\".", new[] { red }));
+                new AnimatedSlot(renderer, 1, new Reason("Swapped by \"Red\"."), new[] { red }));
 
             Assert.That(result.Excluded.Select(note => (note.Slot, note.Material, note.Reason)),
-                Is.EqualTo(new[] { (1, red, "Swapped by \"Red\".") }));
+                Is.EqualTo(new[] { (1, red, new Reason("Swapped by \"Red\".")) }));
         }
 
         [Test]
@@ -914,12 +915,12 @@ namespace UVWizard.Core.Tests.Pipeline
             var other = MeshRenderer(Mesh(new[] { Quad(2, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 2), Color.white));
 
             var result = Bake(new BakeOptions(Shader.Find("Standard")), new Renderer[] { animated, other },
-                new AnimatedSlot(animated, null, "Glows in \"Glow\"."));
+                new AnimatedSlot(animated, null, new Reason("Glows in \"Glow\".")));
 
             Assert.That(animated.sharedMaterials, Is.EqualTo(new[] { first, second }));
             Assert.That(other.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
             Assert.That(result.Excluded.Select(note => (note.Slot, note.Material, note.Reason)),
-                Is.EqualTo(new[] { (0, first, "Glows in \"Glow\"."), (1, second, "Glows in \"Glow\".") }));
+                Is.EqualTo(new[] { (0, first, new Reason("Glows in \"Glow\".")), (1, second, new Reason("Glows in \"Glow\".")) }));
         }
 
         [Test]
@@ -1049,10 +1050,10 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), eyes);
 
             var result = Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { NoChannelFree = true },
-                new Renderer[] { renderer }, new[] { new AnimatedSlot(renderer, 1, "Swapped by \"Red eyes\".", new[] { eyes, red }) });
+                new Renderer[] { renderer }, new[] { new AnimatedSlot(renderer, 1, new Reason("Swapped by \"Red eyes\"."), new[] { eyes, red }) });
 
             Assert.That(result.Excluded.Where(note => note.Slot == 1).Select(note => note.Material), Is.EqualTo(new[] { eyes, red }));
-            Assert.That(result.Excluded.Single(note => note.Material == red).Reason, Is.EqualTo("Swapped by \"Red eyes\"."));
+            Assert.That(result.Excluded.Single(note => note.Material == red).Reason, Is.EqualTo(new Reason("Swapped by \"Red eyes\".")));
         }
 
         [Test]
@@ -1064,7 +1065,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white), eyes);
 
             var result = Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { KeepsSubmeshes = true },
-                new Renderer[] { renderer }, new[] { new AnimatedSlot(renderer, 2, "Swapped by \"Red eyes\".") });
+                new Renderer[] { renderer }, new[] { new AnimatedSlot(renderer, 2, new Reason("Swapped by \"Red eyes\".")) });
 
             Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial, result.MergedMaterial, eyes }));
             Assert.That(Enumerable.Range(0, 3).Select(result.MovedSlots.Single().NewIndexOf), Is.EqualTo(new[] { 0, 1, 2 }));

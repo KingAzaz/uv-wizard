@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using nadena.dev.ndmf.localization;
+using UVWizard.Core.Materials;
 using UVWizard.Core.Reporting;
 
 namespace UVWizard.NDMF
@@ -121,6 +122,105 @@ namespace UVWizard.NDMF
             (ReportText.Rank(PerformanceRank.Medium), "Medium"),
             (ReportText.Rank(PerformanceRank.Poor), "Poor"),
             (ReportText.Rank(PerformanceRank.VeryPoor), "Very Poor"),
+
+            (ReasonText.Channel(Channel.Albedo).Key, "Albedo"),
+            (ReasonText.Channel(Channel.Emission).Key, "Emission"),
+            (ReasonText.Channel(Channel.Normal).Key, "Normal"),
+            (ReasonText.CutoutDropped, "Cutout becomes opaque: Toon Standard has no alpha cutoff."),
+            (ReasonText.TransparencyDropped, "Transparent becomes opaque: Toon Standard has no transparency."),
+            (ReasonText.DetailMapsDropped, "Detail maps aren't baked: only the main maps are."),
+            (ReasonText.OutlineDropped, "Outline isn't baked: Toon Standard has no outline."),
+            (ReasonText.UnknownShader, "UV Wizard doesn't know the shader {0}, so only its main texture and colour " +
+                "are baked."),
+            (ReasonText.DetailMapsOffMainUvs, "Its detail maps use another of the mesh's UV maps (UV{0}), but the " +
+                "atlas can only rearrange the main one."),
+            (ReasonText.ChannelOffMainUvs, "{0} uses another of the mesh's UV maps (UV{1}), but the atlas can only " +
+                "rearrange the main one."),
+            (ReasonText.ChannelMappedWithoutUvs, "{0} is mapped by {1} instead of the mesh's UV maps, but the atlas " +
+                "can only rearrange the main UV map."),
+            (ReasonText.UvMode, "UV mode {0}"),
+            (ReasonText.HueShiftDropped, "Hue shift isn't baked: colours keep their unshifted hue."),
+            (ReasonText.ColourMaskDropped, "Colour mask isn't baked: its colours and glow are dropped."),
+            (ReasonText.MatcapDropped, "Matcap isn't baked: its reflections are dropped."),
+            (ReasonText.Pans, "{0} pans: the scrolling becomes static."),
+            (ReasonText.RenamedUnresolved, "The locked shader has more than one renamed {0}, and the lock didn't " +
+                "record which is this material's, so the saved values are baked."),
+            (ReasonText.PoiyomiAlbedoTheme, "Albedo takes a theme colour: the saved colour is baked."),
+            (ReasonText.PoiyomiColourAdjusted, "Albedo is colour-adjusted: hue, saturation, brightness and gamma " +
+                "aren't baked."),
+            (ReasonText.PoiyomiDecals, "Albedo has decals: decals aren't baked."),
+            (ReasonText.PoiyomiDetail, "Albedo takes detail textures: the detail texture and normal aren't baked."),
+            (ReasonText.PoiyomiEmissionTheme, "Emission takes a theme colour: the saved colour is baked."),
+            (ReasonText.PoiyomiEmissionThemeNoGlow, "Emission takes a theme colour: the glow isn't baked."),
+            (ReasonText.PoiyomiAudioLink, "Emission reacts to AudioLink: the saved strength is baked."),
+            (ReasonText.PoiyomiAudioLinkNoGlow, "Emission reacts to AudioLink: the glow isn't baked."),
+            (ReasonText.PoiyomiBaseColour, "Emission takes the base colour: only the emission colour is baked."),
+            (ReasonText.EmissionMasked, "Emission is masked: the mask isn't baked."),
+            (ReasonText.EmissionBlinks, "Emission blinks: the glow is baked steady."),
+            (ReasonText.PoiyomiScrolls, "Emission scrolls: the glow is baked steady."),
+            (ReasonText.PoiyomiCentreOut, "Emission moves from the centre out: the emission map is baked still."),
+            (ReasonText.PoiyomiFollowsLighting, "Emission follows the lighting: the saved strength is baked."),
+            (ReasonText.PoiyomiHueShifted, "Emission is hue-shifted: the saved colour is baked."),
+            (ReasonText.PoiyomiReplacesBase, "Emission overrides the base colour: the glow is baked on top of it."),
+            (ReasonText.PoiyomiMaskInverted, "Emission's mask is inverted: the glow is baked unmasked."),
+            (ReasonText.PoiyomiGlobalMask, "Emission takes a global mask: the glow is baked unmasked."),
+            (ReasonText.PoiyomiExtraEmission, "Emission {0} isn't baked: only the first emission is."),
+            (ReasonText.LilToonAddOn, "{0} draws a layer over another material, so there's nothing of its own to bake."),
+            (ReasonText.LilToonRimMapped, "Emission is mapped by the rim instead of the mesh's UV maps, but the atlas " +
+                "can only rearrange the main UV map."),
+            (ReasonText.LilToonFur, "Fur isn't baked: only the surface under it is."),
+            (ReasonText.LilToonMainLayers, "Albedo has a 2nd or 3rd main colour layer: only the first is baked."),
+            (ReasonText.LilToonColourAdjusted, "Albedo is colour-adjusted: hue, saturation, value, gamma and gradation " +
+                "aren't baked."),
+            (ReasonText.LilToonScrollsOrRotates, "{0} scrolls or rotates: it's baked still."),
+            (ReasonText.LilToonAlbedoBackface, "Albedo shifts the backfaces' texture: backfaces bake the front's colours."),
+            (ReasonText.LilToonNormalBackface, "Normal shifts the backfaces' texture: backfaces bake the front's normals."),
+            (ReasonText.LilToonNormal2nd, "Normal 2nd isn't baked: only the first normal map is."),
+            (ReasonText.LilToonMainColour, "Emission takes the main colour: only the emission colour is baked."),
+            (ReasonText.LilToonNotAdded, "Emission doesn't add: it's baked as added glow."),
+            (ReasonText.LilToonGradation, "Emission has a gradation: the gradation isn't baked."),
+            (ReasonText.LilToonFluorescent, "Emission is fluorescent: it's baked as if lit."),
+            (ReasonText.LilToonAudioLink, "Emission follows AudioLink: the glow is baked steady."),
+            (ReasonText.LilToonTriMask, "Emission is masked by the TriMask: the mask isn't baked."),
+            (ReasonText.LilToonEmissionAlpha, "Emission map has alpha: lilToon scales the glow by it, the bake doesn't."),
+            (ReasonText.LilToonEmission2nd, "Emission 2nd isn't baked: only the first emission is."),
+            (ReasonText.LaterToolNeedsUvs, "A tool that runs after the bake needs this mesh's UVs where they are, so " +
+                "the bake leaves them alone."),
+            (ReasonText.ExtraSlots, "Extra material slots draw this part of the mesh again, so its UVs must stay as " +
+                "they are."),
+            (ReasonText.LinesOrPoints, "It's drawn as lines or points, which the atlas can't hold."),
+            (ReasonText.NoUvs, "Its mesh has no UV map for the atlas to rearrange."),
+            (ReasonText.UvFormat, "Its mesh stores its UVs as {0}, which can't hold places in the atlas."),
+            (ReasonText.CantMerge, "Its material can't be merged."),
+            (ReasonText.RepeatsTooOften, "Part of it repeats its texture more than twice across, more than the atlas " +
+                "can hold."),
+            (ReasonText.MayLookDifferent, "It may look different after the bake."),
+            (ReasonText.Culling, "It culls {0}, but the merged material culls {1}, so some of its faces may show or " +
+                "hide."),
+            (ReasonText.CullsNoFaces, "no faces"),
+            (ReasonText.CullsFrontFaces, "front faces"),
+            (ReasonText.CullsBackFaces, "back faces"),
+            (ReasonText.VertexColours, "Its mesh carries vertex colours, which the merged material now multiplies in " +
+                "because another material uses vertex colour."),
+            (ReasonText.GlowsLessMerged, "Its emission is {0:0.##} times full brightness, but the merged material's " +
+                "emission goes up to {1}, so it glows less."),
+            (ReasonText.GlowsLessConverted, "Its emission is {0:0.##} times full brightness, but its Toon Standard " +
+                "material's emission goes up to {1}, so it glows less."),
+            (ReasonText.MeshRenderersOnly, "UV Wizard converts the materials of mesh renderers only."),
+            (ReasonText.NoSurface, "It has no surface of its own to convert."),
+            (ReasonText.AnimatedProperties, "An animation changes this renderer's material properties, which its Toon " +
+                "Standard material may not have, or may show differently."),
+            (ReasonText.ConvertedAlbedoOffMainUvs, "Its main texture uses a UV map other than the mesh's main one, " +
+                "which is the only one its Toon Standard material reads it from, so only its colour is kept."),
+            (ReasonText.ConvertedEmissionOffUvs, "Its emission uses a UV map past the mesh's second, and its Toon " +
+                "Standard material reads it from the first two only, so it doesn't glow."),
+            (ReasonText.ConvertedNormalOffMainUvs, "Its normal map uses a UV map other than the mesh's main one, " +
+                "which is the only one its Toon Standard material reads it from, so it's left out."),
+            (ReasonText.AnimationSwapsSlot, "The animation \"{0}\" swaps the material in Element {1} of this " +
+                "renderer's materials, so that slot keeps its own UVs. In a slot no animation swaps, the same material " +
+                "can still be merged."),
+            (ReasonText.AnimationChangesProperty, "The animation \"{0}\" changes {1} on this renderer's materials, " +
+                "which would change every merged material on it."),
         };
 
         /// <summary>The text for a key in the editor's language.</summary>

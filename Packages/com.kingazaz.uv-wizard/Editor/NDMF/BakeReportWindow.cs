@@ -107,7 +107,7 @@ namespace UVWizard.NDMF
                     for (var r = 0; r < row.Renderers.Count; r++)
                         ObjectButton(row.Renderers[r], row.RendererNames[r]);
                 }
-                Wrapped(row.Reason);
+                Wrapped(row.Reason.Text(Messages.Text));
             }
         }
 

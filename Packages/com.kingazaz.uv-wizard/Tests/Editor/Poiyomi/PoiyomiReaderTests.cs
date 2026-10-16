@@ -1,8 +1,10 @@
 #nullable enable
 
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Materials;
+using UVWizard.Core.Reporting;
 using UVWizard.Core.Tests.Materials;
 
 namespace UVWizard.Core.Tests.Poiyomi
@@ -24,7 +26,7 @@ namespace UVWizard.Core.Tests.Poiyomi
 
             var reading = SourceShaderReader.Read(material);
 
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{reading.Reason}");
             Assert.That(reading.Albedo, Is.Not.Null);
             Assert.That(reading.Albedo!.Texture, Is.SameAs(texture));
             AssertColour(new Color(0.25f, 0.5f, 1f, 1f), reading.Albedo.Tint);
@@ -109,7 +111,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain("UV1"));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.ChannelOffMainUvs, ReasonText.Channel(Channel.Normal), 1)));
         }
 
         [Test]
@@ -132,7 +134,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain("Panosphere"));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.ChannelMappedWithoutUvs, ReasonText.Channel(Channel.Albedo), "Panosphere")));
         }
 
         [Test]
@@ -145,7 +147,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Albedo"));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.Pans, ReasonText.Channel(Channel.Albedo))));
         }
 
         // An unset texture samples its plain default, so panning it moves nothing.
@@ -160,15 +162,15 @@ namespace UVWizard.Core.Tests.Poiyomi
         }
 
         // Each changes the colours the shader renders in a way the bake doesn't reproduce.
-        [TestCase("_ColorThemeIndex", "Albedo")]
-        [TestCase("_MainColorAdjustToggle", "Albedo")]
-        [TestCase("_DecalEnabled", "Albedo")]
-        [TestCase("_DecalEnabled3", "Albedo")]
-        [TestCase("_DetailEnabled", "Albedo")]
-        [TestCase("_EnableEmission1", "Emission")]
-        [TestCase("_EnableEmission3", "Emission")]
-        [TestCase("_EmissionColorThemeIndex", "Emission")]
-        [TestCase("_EmissionBaseColorAsMap", "Emission")]
+        [TestCase("_ColorThemeIndex", ReasonText.PoiyomiAlbedoTheme)]
+        [TestCase("_MainColorAdjustToggle", ReasonText.PoiyomiColourAdjusted)]
+        [TestCase("_DecalEnabled", ReasonText.PoiyomiDecals)]
+        [TestCase("_DecalEnabled3", ReasonText.PoiyomiDecals)]
+        [TestCase("_DetailEnabled", ReasonText.PoiyomiDetail)]
+        [TestCase("_EnableEmission1", ReasonText.PoiyomiExtraEmission)]
+        [TestCase("_EnableEmission3", ReasonText.PoiyomiExtraEmission)]
+        [TestCase("_EmissionColorThemeIndex", ReasonText.PoiyomiEmissionTheme)]
+        [TestCase("_EmissionBaseColorAsMap", ReasonText.PoiyomiBaseColour)]
         public void FeaturesTheBakeCantReproduceAreFlagged(string property, string reason)
         {
             var material = EmittingMaterial();
@@ -177,7 +179,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith(reason));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(reason));
         }
 
         [Test]
@@ -189,18 +191,18 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Keys, Is.EqualTo(new[] { ReasonText.EmissionMasked }));
         }
 
         // Each animates or reshapes the glow, which the bake turns into a steady one.
-        [TestCase("_EmissionBlinkingEnabled", "Emission blinks")]
-        [TestCase("_ScrollingEmission", "Emission scrolls")]
-        [TestCase("_EmissionCenterOutEnabled", "Emission moves from the centre out")]
-        [TestCase("_EnableGITDEmission", "Emission follows the lighting")]
-        [TestCase("_EmissionHueShiftEnabled", "Emission is hue-shifted")]
-        [TestCase("_EmissionReplace0", "Emission overrides the base colour")]
-        [TestCase("_EmissionMaskInvert", "Emission's mask is inverted")]
-        [TestCase("_EmissionMask0GlobalMask", "Emission takes a global mask")]
+        [TestCase("_EmissionBlinkingEnabled", ReasonText.EmissionBlinks)]
+        [TestCase("_ScrollingEmission", ReasonText.PoiyomiScrolls)]
+        [TestCase("_EmissionCenterOutEnabled", ReasonText.PoiyomiCentreOut)]
+        [TestCase("_EnableGITDEmission", ReasonText.PoiyomiFollowsLighting)]
+        [TestCase("_EmissionHueShiftEnabled", ReasonText.PoiyomiHueShifted)]
+        [TestCase("_EmissionReplace0", ReasonText.PoiyomiReplacesBase)]
+        [TestCase("_EmissionMaskInvert", ReasonText.PoiyomiMaskInverted)]
+        [TestCase("_EmissionMask0GlobalMask", ReasonText.PoiyomiGlobalMask)]
         public void AnimatedAndReshapedEmissionIsFlagged(string property, string reason)
         {
             var material = EmittingMaterial();
@@ -209,7 +211,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith(reason));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(reason));
         }
 
         // Poiyomi applies emission AudioLink only while the AudioLink module is on.
@@ -225,9 +227,9 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(on);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission reacts to AudioLink"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.PoiyomiAudioLink));
             var moduleOffReading = SourceShaderReader.Read(moduleOff);
-            Assert.That(moduleOffReading.Verdict, Is.EqualTo(MaterialVerdict.Merged), moduleOffReading.Reason);
+            Assert.That(moduleOffReading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{moduleOffReading.Reason}");
         }
 
         // AudioLink adds to the strength, so the material can glow while the saved strength is 0.
@@ -243,7 +245,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission reacts to AudioLink: the glow isn't baked."));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.PoiyomiAudioLinkNoGlow));
         }
 
         // poiThemeColor replaces the rgb, so a black saved colour still glows in the theme colour.
@@ -257,7 +259,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission takes a theme colour: the glow isn't baked."));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.PoiyomiEmissionThemeNoGlow));
         }
 
         // The theme replaces only the rgb: at strength 0, or a colour alpha of 0, nothing glows. Its ColorChord and
@@ -275,7 +277,7 @@ namespace UVWizard.Core.Tests.Poiyomi
 
             var reading = SourceShaderReader.Read(material);
 
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{reading.Reason}");
         }
 
         [Test]
@@ -289,7 +291,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission takes a theme colour"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.PoiyomiEmissionThemeNoGlow));
         }
 
         // AudioLink adds to the strength before the colour's alpha scales it.
@@ -303,7 +305,7 @@ namespace UVWizard.Core.Tests.Poiyomi
 
             var reading = SourceShaderReader.Read(material);
 
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{reading.Reason}");
         }
 
         [Test]
@@ -329,11 +331,11 @@ namespace UVWizard.Core.Tests.Poiyomi
             return material;
         }
 
-        [TestCase(1, "Cutout")]
-        [TestCase(9, "Cutout")]
-        [TestCase(2, "Transparent")]
-        [TestCase(3, "Transparent")]
-        [TestCase(4, "Transparent")]
+        [TestCase(1, ReasonText.CutoutDropped)]
+        [TestCase(9, ReasonText.CutoutDropped)]
+        [TestCase(2, ReasonText.TransparencyDropped)]
+        [TestCase(3, ReasonText.TransparencyDropped)]
+        [TestCase(4, ReasonText.TransparencyDropped)]
         public void CutoutAndTransparentPresetsAreFlagged(int mode, string reason)
         {
             var material = Material(PoiyomiToon);
@@ -342,7 +344,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith(reason));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(reason));
         }
 
         [Test]

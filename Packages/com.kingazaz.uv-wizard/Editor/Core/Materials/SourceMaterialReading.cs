@@ -2,6 +2,7 @@
 
 using System;
 using UnityEngine;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Materials
 {
@@ -67,7 +68,7 @@ namespace UVWizard.Core.Materials
     internal sealed class SourceMaterialReading
     {
         public SourceMaterialReading(ChannelSource? albedo, ChannelSource? emission, ChannelSource? normal,
-            MaterialVerdict verdict, string? reason, bool usesVertexColour = false, string? flaggedReason = null)
+            MaterialVerdict verdict, Reason? reason, bool usesVertexColour = false, Reason? flaggedReason = null)
         {
             FlaggedReason = verdict == MaterialVerdict.Flagged ? reason : flaggedReason;
             Albedo = albedo;
@@ -96,19 +97,19 @@ namespace UVWizard.Core.Materials
         public MaterialVerdict Verdict { get; }
 
         /// <summary>Why the material is flagged or excluded; null when it is merged.</summary>
-        public string? Reason { get; }
+        public Reason? Reason { get; }
 
         /// <summary>
         /// What the merged shader changes about the material's look, kept when the material is excluded for another
         /// reason, since its conversion changes it the same way; null when nothing.
         /// </summary>
-        public string? FlaggedReason { get; }
+        public Reason? FlaggedReason { get; }
 
         /// <summary>True when the source shader multiplies albedo by the mesh's vertex colours.</summary>
         public bool UsesVertexColour { get; }
 
         /// <summary>The same reading, excluded for the given reason.</summary>
-        public SourceMaterialReading Excluded(string reason) =>
+        public SourceMaterialReading Excluded(Reason reason) =>
             new SourceMaterialReading(Albedo, Emission, Normal, MaterialVerdict.Excluded, reason, UsesVertexColour,
                 FlaggedReason);
     }

@@ -45,22 +45,51 @@ namespace UVWizard.Core.Tests.Reporting
             var glass = Material("Glass");
             var swapped = Material("Swapped");
             var result = Merged(
-                excluded: new[] { new SlotNote(body, 2, swapped, "An animation swaps it.") },
+                excluded: new[] { new SlotNote(body, 2, swapped, new Reason("An animation swaps it.")) },
                 flagged: new[]
                 {
-                    new SlotNote(body, 0, glass, "It's transparent."),
-                    new SlotNote(body, 1, glass, "It's transparent."),
-                    new SlotNote(tail, 0, glass, "It's transparent."),
+                    new SlotNote(body, 0, glass, new Reason("It's transparent.")),
+                    new SlotNote(body, 1, glass, new Reason("It's transparent.")),
+                    new SlotNote(tail, 0, glass, new Reason("It's transparent.")),
                 });
 
             var report = new BakeReport("Avatar", false, result, PerformanceRank.Good);
 
             Assert.That(report.Materials.Select(row => (row.Outcome, row.Material, row.Reason)), Is.EqualTo(new[]
             {
-                (MaterialOutcome.Excluded, swapped, "An animation swaps it."),
-                (MaterialOutcome.Flagged, glass, "It's transparent."),
+                (MaterialOutcome.Excluded, swapped, new Reason("An animation swaps it.")),
+                (MaterialOutcome.Flagged, glass, new Reason("It's transparent.")),
             }));
             Assert.That(report.Materials[1].Renderers, Is.EqualTo(new[] { body, tail }));
+        }
+
+        [Test]
+        public void ReasonsAreEqualOnlyWithTheSameKeysAndArguments()
+        {
+            var culls = new Reason(ReasonText.Culling, new ReportLine(ReasonText.CullsNoFaces), new ReportLine(ReasonText.CullsBackFaces));
+
+            Assert.That(culls, Is.EqualTo(new Reason(ReasonText.Culling, new ReportLine(ReasonText.CullsNoFaces),
+                new ReportLine(ReasonText.CullsBackFaces))));
+            Assert.That(culls, Is.Not.EqualTo(new Reason(ReasonText.Culling, new ReportLine(ReasonText.CullsFrontFaces),
+                new ReportLine(ReasonText.CullsBackFaces))), "another argument");
+            Assert.That(new Reason(ReasonText.CutoutDropped), Is.Not.EqualTo(new Reason(ReasonText.TransparencyDropped)),
+                "another key");
+        }
+
+        [Test]
+        public void TheSameReasonWithOtherArgumentsIsListedApart()
+        {
+            var body = Renderer("Body");
+            var glass = Material("Glass");
+            var result = Merged(flagged: new[]
+            {
+                new SlotNote(body, 0, glass, new Reason("Swapped by \"{0}\".", "Red")),
+                new SlotNote(body, 1, glass, new Reason("Swapped by \"{0}\".", "Blue")),
+            });
+
+            var report = new BakeReport("Avatar", false, result, PerformanceRank.Good);
+
+            Assert.That(report.Materials[0].Reason.Lines.Select(line => line.Args[0]), Is.EqualTo(new[] { "Red", "Blue" }));
         }
 
         [Test]
@@ -70,14 +99,14 @@ namespace UVWizard.Core.Tests.Reporting
             var glass = Material("Glass");
             var result = Merged(flagged: new[]
             {
-                new SlotNote(body, 0, glass, "It's transparent."),
-                new SlotNote(body, 0, glass, "Its emission is too bright."),
+                new SlotNote(body, 0, glass, new Reason("It's transparent.")),
+                new SlotNote(body, 0, glass, new Reason("Its emission is too bright.")),
             });
 
             var report = new BakeReport("Avatar", false, result, PerformanceRank.Good);
 
             Assert.That(report.Materials.Count, Is.EqualTo(1));
-            Assert.That(report.Materials[0].Reason, Is.EqualTo("It's transparent. Its emission is too bright."));
+            Assert.That(report.Materials[0].Reason, Is.EqualTo(new Reason("It's transparent.").Then(new Reason("Its emission is too bright."))));
         }
 
         [TestCase(nameof(Packer.Exact), ReportText.ExactPacker)]
@@ -157,7 +186,7 @@ namespace UVWizard.Core.Tests.Reporting
         {
             var body = Renderer("Body");
             var report = new BakeReport("Avatar", false,
-                Merged(flagged: new[] { new SlotNote(body, 0, Material("Glass"), "It's transparent.") }), null);
+                Merged(flagged: new[] { new SlotNote(body, 0, Material("Glass"), new Reason("It's transparent.")) }), null);
 
             Object.DestroyImmediate(body.gameObject);
 
@@ -169,7 +198,7 @@ namespace UVWizard.Core.Tests.Reporting
         {
             // Merge Skinned Mesh destroys its sources after the bake, and the report is published again at the end.
             var body = Renderer("Body");
-            var result = Merged(excluded: new[] { new SlotNote(body, 0, Material("Skin"), "A later tool reads its UV0.") });
+            var result = Merged(excluded: new[] { new SlotNote(body, 0, Material("Skin"), new Reason("A later tool reads its UVs.")) });
 
             Object.DestroyImmediate(body.gameObject);
             var report = new BakeReport("Avatar", false, result, null);

@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Materials
 {
@@ -30,7 +31,7 @@ namespace UVWizard.Core.Materials
             // The inspector keeps _Mode and the blend keywords in step, but a script can set the keywords
             // alone, and the shader follows the keywords.
             var mode = material.GetFloat("_Mode");
-            var reasons = new List<string>();
+            var reasons = new List<Reason>();
             if (mode == Cutout || material.IsKeywordEnabled("_ALPHATEST_ON"))
                 reasons.Add(MaterialProperties.CutoutDropped);
             else if (mode >= Fade || material.IsKeywordEnabled("_ALPHABLEND_ON") ||
@@ -39,8 +40,7 @@ namespace UVWizard.Core.Materials
             if (MaterialProperties.DetailOnUv0(material, "_DETAIL_MULX2", "_UVSec"))
                 reasons.Add(MaterialProperties.DetailMapsDropped);
             var reading = new SourceMaterialReading(albedo, emission, normal,
-                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged,
-                reasons.Count == 0 ? null : string.Join(" ", reasons));
+                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged, Reason.Of(reasons));
             var detail = MaterialProperties.DetailOffUv0(material, "_DETAIL_MULX2", "_UVSec");
             return detail == null ? reading : reading.Excluded(detail);
         }

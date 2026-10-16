@@ -169,7 +169,7 @@ namespace UVWizard.NDMF.Tests
 
             Assert.That(OwnReports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)),
                 "each of the torso's slots is excluded");
-            Assert.That(Texts(errors), Has.All.Contain("can't keep it where that tool would find it"));
+            Assert.That(Texts(errors), Has.All.Contain("needs this mesh's UVs where they are"));
             Assert.That(torso.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(materials.Select(_ => ToonStandardName)));
         }
 

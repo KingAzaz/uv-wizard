@@ -6,6 +6,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 using UVWizard.Core.Tests.Materials;
 
 namespace UVWizard.Core.Tests.Poiyomi
@@ -51,8 +52,8 @@ namespace UVWizard.Core.Tests.Poiyomi
             Assert.That(converted.GetTexture("_EmissionMap"), Is.Not.Null);
             Assert.That(converted.GetTexture("_BumpMap"), Is.Null);
             Assert.That(converted.GetFloat("_VertexColor"), Is.EqualTo(1), "Poiyomi multiplies in vertex colour");
-            Assert.That(result.Flagged.Select(note => note.Reason), Has.Some.Contains("main texture isn't sampled from UV0")
-                .And.Some.Contains("normal map isn't sampled from UV0"));
+            Assert.That(result.Flagged.SelectMany(note => note.Reason.Keys), Has.Some.EqualTo(ReasonText.ConvertedAlbedoOffMainUvs)
+                .And.Some.EqualTo(ReasonText.ConvertedNormalOffMainUvs));
         }
 
         [Test]
@@ -70,7 +71,7 @@ namespace UVWizard.Core.Tests.Poiyomi
 
             Assert.That(converted.GetTexture("_EmissionMap"), Is.Null);
             Assert.That(converted.GetFloat("_Culling"), Is.EqualTo(0), "double-sided, as Poiyomi drew it");
-            Assert.That(result.Flagged.Select(note => note.Reason), Has.Some.Contains("emission isn't sampled from UV0 or UV1"));
+            Assert.That(result.Flagged.SelectMany(note => note.Reason.Keys), Has.Some.EqualTo(ReasonText.ConvertedEmissionOffUvs));
         }
 
         // Bakes a quad drawn with the material, which its off-UV0 textures exclude, converting it to Toon Standard.

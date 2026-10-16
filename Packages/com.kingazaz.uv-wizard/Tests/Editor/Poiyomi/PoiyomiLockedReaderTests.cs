@@ -6,6 +6,7 @@ using Thry.ThryEditor;
 using UnityEditor;
 using UnityEngine;
 using UVWizard.Core.Materials;
+using UVWizard.Core.Reporting;
 using UVWizard.Core.Tests.Materials;
 
 namespace UVWizard.Core.Tests.Poiyomi
@@ -103,7 +104,7 @@ namespace UVWizard.Core.Tests.Poiyomi
 
             var reading = SourceShaderReader.Read(material);
 
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{reading.Reason}");
             Assert.That(reading.Albedo, Is.Not.Null);
             AssertColour(new Color(0f, 1f, 0f, 1f), reading.Albedo!.Tint);
             Assert.That(reading.Emission, Is.Null, "emission was stripped");
@@ -121,7 +122,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("_Color"));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.RenamedUnresolved, "_Color")));
         }
 
         // The lock renamed only the properties it declared animated; a property it left alone keeps its name.
@@ -136,7 +137,7 @@ namespace UVWizard.Core.Tests.Poiyomi
 
             var reading = SourceShaderReader.Read(material);
 
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{reading.Reason}");
             Assert.That(reading.Albedo, Is.Not.Null);
             AssertColour(new Color(0f, 0f, 1f, 1f), reading.Albedo!.Tint);
         }
