@@ -297,8 +297,9 @@ namespace UVWizard.NDMF.Tests
             Assert.That(Materials(avatar), Is.EqualTo(materials));
         }
 
-        [Test]
-        public void ChartsThatFitAtNoScaleAreReportedAndChangeNothing()
+        [TestCase(false, Messages.NoFit)]
+        [TestCase(true, Messages.NoFitRanOutOfTime)]
+        public void ChartsThatFitAtNoScaleAreReportedAndChangeNothing(bool ranOut, string message)
         {
             // The hat becomes 320 separate quads on a 1024 px texture, each its own chart: no scale fits them
             // in a 64 px atlas.
@@ -311,9 +312,11 @@ namespace UVWizard.NDMF.Tests
             var materials = Materials(avatar);
 
             var errors = ErrorReport.CaptureErrors(() =>
-                BakePass.Bake(avatar, new BakeOptions(Shader.Find(ToonStandardName), atlasSize: 64, padding: 0)));
+                BakePass.Bake(avatar, new BakeOptions(Shader.Find(ToonStandardName), atlasSize: 64, padding: 0),
+                    outOfTime: () => ranOut));
 
-            Assert.That(Reports(errors), Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.NoFit) }));
+            // A search that ran out of time didn't try the lowest detail, so it doesn't say nothing fits there (#122).
+            Assert.That(Reports(errors), Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)message) }));
             Assert.That(Meshes(avatar), Is.EqualTo(meshes));
             Assert.That(Materials(avatar), Is.EqualTo(materials));
         }

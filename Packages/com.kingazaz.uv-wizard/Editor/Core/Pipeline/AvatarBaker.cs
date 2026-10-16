@@ -41,8 +41,8 @@ namespace UVWizard.Core.Pipeline
         /// <param name="animated">Slots that animations swap or change, which stay out of the atlas.</param>
         /// <param name="head">The avatar's humanoid Head bone, whose charts get priority, or null for none.</param>
         /// <param name="outOfTime">
-        /// Stands in for the scale search's clock: each search asks it whether its time is up. Null gives each search
-        /// <see cref="ScaleSearch.TimeBudget"/>.
+        /// Stands in for the scale search's clock: each search asks it whether its time is up, and skips the Burst
+        /// warm-up the clock waits for. Null gives each search <see cref="ScaleSearch.TimeBudget"/>.
         /// </param>
         public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options,
             ILaterMeshEdits? laterEdits = null, IReadOnlyList<AnimatedSlot>? animated = null, Transform? head = null,

@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
@@ -49,9 +50,11 @@ namespace UVWizard.NDMF
 
         /// <summary>
         /// Bakes the avatar and reports the outcome. Null options mean Toon Standard is missing, and give a null
-        /// result. Without animator services, no slot counts as animated.
+        /// result. Without animator services, no slot counts as animated. <paramref name="outOfTime"/> stands in for
+        /// the scale search's clock, as in <see cref="AvatarBaker.Bake"/>.
         /// </summary>
-        internal static BakeResult? Bake(GameObject root, BakeOptions? options, AnimatorServicesContext? animators = null)
+        internal static BakeResult? Bake(GameObject root, BakeOptions? options, AnimatorServicesContext? animators = null,
+            Func<bool>? outOfTime = null)
         {
             if (options == null)
             {
@@ -61,7 +64,7 @@ namespace UVWizard.NDMF
 
             var renderers = root.GetComponentsInChildren<Renderer>(true);
             var animated = animators != null ? MaterialAnimations.Find(animators, root, renderers) : null;
-            var result = AvatarBaker.Bake(renderers, options, LaterMeshEdits(root), animated, Head(root));
+            var result = AvatarBaker.Bake(renderers, options, LaterMeshEdits(root), animated, Head(root), outOfTime);
             if (animators != null)
             {
                 MaterialAnimations.FollowMovedSlots(animators, root, result.MovedSlots);
@@ -74,7 +77,9 @@ namespace UVWizard.NDMF
                 if (registered.Add(source)) ObjectRegistry.RegisterReplacedObject(source, rewritten);
 
             if (result.NothingToBake) ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.Information, Messages.NothingToBake);
-            if (!result.Fits) ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.NoFit);
+            if (!result.Fits)
+                ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal,
+                    result.RanOutOfTime ? Messages.NoFitRanOutOfTime : Messages.NoFit);
             foreach (var note in result.Excluded)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Excluded,
                     note.Material, note.Renderer, note.Reason.Text(Messages.Text));

@@ -19,6 +19,7 @@ namespace UVWizard.NDMF
         public const string Excluded = "uvwizard.excluded";
         public const string Flagged = "uvwizard.flagged";
         public const string NoFit = "uvwizard.no-fit";
+        public const string NoFitRanOutOfTime = "uvwizard.no-fit-ran-out-of-time";
         public const string NothingToBake = "uvwizard.nothing-to-bake";
         public const string NoToonStandard = "uvwizard.no-toon-standard";
         public const string OverBudget = "uvwizard.over-budget";
@@ -41,6 +42,9 @@ namespace UVWizard.NDMF
             (NoFit, "Nothing was merged"),
             (NoFit + ":description", "The materials don't fit in the atlas even at the lowest detail, so none is merged. " +
                 "Each still gets a Toon Standard material of its own."),
+            (NoFitRanOutOfTime, "Nothing was merged"),
+            (NoFitRanOutOfTime + ":description", "UV Wizard ran out of time looking for a packing, so none is merged. " +
+                "Bake again, or merge fewer materials. Each still gets a Toon Standard material of its own."),
             (NothingToBake, "Nothing to bake"),
             (NothingToBake + ":description", "Albedo is off, and so are Emission and Normal, or no material that " +
                 "would merge emits or has a normal map. So nothing was merged. With every channel off, UV Wizard left " +
