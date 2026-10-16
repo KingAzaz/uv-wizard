@@ -239,9 +239,11 @@ namespace UVWizard.Core.Tests.Baking
         [TestCase(false, 0.5f)]
         [TestCase(true, 2f)]
         [TestCase(true, 0.5f)]
+        [TestCase(false, 4f)]
         public void StrengthBendsTheNormalTheWayUnpackScaleNormalDoes(bool ag, float strength)
         {
-            // At strength 2 the corner texels tilt past horizontal, so their z clamps to 0.
+            // From strength 2 the corner texels tilt past horizontal, so their z clamps to 0. At 4 their x and y
+            // run well past 1 and have to be normalized back.
             var encoding = ag ? NormalEncoding.AG : NormalEncoding.RGorAG;
             var source = NormalMap(ag ? Ag : Xyz);
             var plan = NormalPlan(16, NormalEncoding.RGorAG,
