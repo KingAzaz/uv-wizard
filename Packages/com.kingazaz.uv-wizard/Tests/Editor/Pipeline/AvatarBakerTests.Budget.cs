@@ -4,6 +4,7 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Budgets;
+using UVWizard.Core.Pipeline;
 
 namespace UVWizard.Core.Tests.Pipeline
 {
