@@ -40,9 +40,19 @@ namespace UVWizard.Core.Pipeline
         /// <summary>A bake that merged nothing, and left every renderer as it was but for converted materials.</summary>
         public static BakeResult Unchanged(bool fits, IReadOnlyList<SlotNote> excluded, IReadOnlyList<SlotNote> flagged,
             IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null,
-            IReadOnlyList<SlotNote>? unconverted = null, bool nothingToBake = false) =>
+            IReadOnlyList<SlotNote>? unconverted = null, bool nothingToBake = false, bool ranOutOfTime = false) =>
             new BakeResult(fits, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged,
-                convertedMaterials: convertedMaterials, unconverted: unconverted) { NothingToBake = nothingToBake };
+                convertedMaterials: convertedMaterials, unconverted: unconverted)
+            {
+                NothingToBake = nothingToBake,
+                RanOutOfTime = ranOutOfTime,
+            };
+
+        /// <summary>
+        /// True when nothing fit and the scale search's time ran out first, so baking again may find a packing (#122).
+        /// A bake that merged says so in <see cref="PackingOutcome.RanOutOfTime"/> instead.
+        /// </summary>
+        public bool RanOutOfTime { get; private set; }
 
         /// <summary>True when the packing and atlas came from the cache rather than a fresh bake.</summary>
         public bool FromCache { get; }

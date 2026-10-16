@@ -87,6 +87,8 @@ namespace UVWizard.NDMF
             (ReportText.RanOutOfTime, "UV Wizard stopped looking for a tighter fit when its time ran out. A faster " +
                 "computer may keep more detail."),
             (ReportText.NothingMerged, "Nothing was merged, so the avatar's materials are as they were."),
+            (ReportText.NoFitRanOutOfTime, "UV Wizard ran out of time looking for a packing. Bake again, or merge " +
+                "fewer materials."),
             (ReportText.LeftoverMmdBody, "{0} stays a mesh of its own because Trace and Optimize keeps a mesh named " +
                 "Body under the avatar for MMD worlds, which animate its blend shapes. If you don't use MMD worlds, " +
                 "add Trace and Optimize to the avatar yourself and turn off its MMD World Compatibility."),
