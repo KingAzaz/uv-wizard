@@ -53,7 +53,7 @@ namespace UVWizard.Core.Pipeline
             string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null,
             string cullingProperty = "_Culling", string tintProperty = "_Color", string vertexColourProperty = "_VertexColor",
             string normalMapKeyword = "USE_NORMAL_MAPS",
-            NormalEncoding? normalEncoding = null, Budget? budget = null, Channels channels = Channels.All,
+            NormalEncoding? normalEncoding = null, Preset? preset = null, Channels channels = Channels.All,
             string? cacheDirectory = null, int cacheEntries = 16, IReadOnlyCollection<string>? mobileShaders = null)
         {
             MobileShaders = mobileShaders != null ? new HashSet<string>(mobileShaders) : null;
@@ -63,7 +63,7 @@ namespace UVWizard.Core.Pipeline
             AtlasSize = atlasSize;
             Padding = padding;
             Compress = compress;
-            Budget = budget;
+            Preset = preset;
             Channels = channels;
             RampProperty = rampProperty;
             DefaultRamp = defaultRamp;
@@ -79,7 +79,7 @@ namespace UVWizard.Core.Pipeline
         public int AtlasSize { get; }
         public int Padding { get; }
         public bool Compress { get; }
-        public Budget? Budget { get; }
+        public Preset? Preset { get; }
         public Channels Channels { get; }
         public string RampProperty { get; }
         public Texture? DefaultRamp { get; }

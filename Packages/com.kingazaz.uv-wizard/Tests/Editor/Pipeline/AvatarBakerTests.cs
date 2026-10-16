@@ -787,6 +787,24 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ChartsThatFitAtNoScaleLeaveNoMergedMaterialBehind()
+        {
+            // The merged material is made before packing, so a bake that finds no fit must destroy it.
+            var quads = Enumerable.Range(0, 320).Select(i => Quad(0, (i % 20) / 20f, (i / 20) / 16f, (i % 20 + 0.4f) / 20f, (i / 20 + 0.4f) / 16f)).ToArray();
+            var renderer = MeshRenderer(Mesh(quads), Standard(Gradient(1024, 0), Color.white));
+            var before = MergedMaterials();
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 0), renderer);
+
+            Assert.That(result.Fits, Is.False);
+            Assert.That(MergedMaterials(), Is.EqualTo(before));
+        }
+
+        // The merged materials in memory, including any a bake leaked.
+        static int MergedMaterials() =>
+            Resources.FindObjectsOfTypeAll<Material>().Count(material => material.name == AvatarBaker.MergedMaterialName);
+
+        [Test]
         public void ASkinnedMeshIsReplacedAndKeepsItsBlendShapeWeights()
         {
             var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) });
@@ -1068,10 +1086,10 @@ namespace UVWizard.Core.Tests.Pipeline
 
         // Standard as the merged shader, with its normal-map keyword.
         static BakeOptions StandardOptions(int atlasSize = 2048, int padding = 8, bool compress = false,
-            NormalEncoding normalEncoding = NormalEncoding.RGorAG, Budget? budget = null, Channels channels = Channels.All,
+            NormalEncoding normalEncoding = NormalEncoding.RGorAG, Preset? preset = null, Channels channels = Channels.All,
             string? cacheDirectory = null, int cacheEntries = 16) =>
             new BakeOptions(Shader.Find("Standard"), atlasSize, padding, compress, normalMapKeyword: "_NORMALMAP",
-                normalEncoding: normalEncoding, budget: budget, channels: channels, cacheDirectory: cacheDirectory,
+                normalEncoding: normalEncoding, preset: preset, channels: channels, cacheDirectory: cacheDirectory,
                 cacheEntries: cacheEntries);
 
         BakeResult Bake(BakeOptions options, params Renderer[] renderers) => Bake(options, null, renderers);

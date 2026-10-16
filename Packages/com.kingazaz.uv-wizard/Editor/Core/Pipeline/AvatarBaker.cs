@@ -55,7 +55,7 @@ namespace UVWizard.Core.Pipeline
             {
                 conversions.Apply(renderers, null);
                 return BakeResult.Unchanged(true, excluded, conversions.Flagged(flagged), conversions.Made,
-                    conversions.Unconverted).Measured(renderers, options.Budget, null);
+                    conversions.Unconverted).Measured(renderers, options.Preset, null);
             }
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -87,10 +87,10 @@ namespace UVWizard.Core.Pipeline
             var merged = MergedMaterial(options, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             conversions.Merged = merged;
             var channels = Needed(slots, options.Channels);
-            var outside = options.Budget != null ? OutsideBytes(renderers, slots, merged, conversions) : 0;
-            var sizedFor = options.Budget is { } budget ? AtlasSizing.SizedFor(budget, outside, channels) : null;
+            var outside = options.Preset != null ? OutsideBytes(renderers, slots, merged, conversions) : 0;
+            var sizedFor = options.Preset is { } preset ? AtlasSizing.SizedFor(preset, outside, channels) : null;
             // When no rank is within reach, no atlas size changes the outcome, so the atlas keeps its finest sizes.
-            var share = options.Budget == null ? (long?)null : sizedFor != null ? sizedFor.Bytes - outside : long.MaxValue;
+            var share = options.Preset == null ? (long?)null : sizedFor != null ? sizedFor.BudgetBytes - outside : long.MaxValue;
             var cache = options.CacheDirectory is { } directory ? new BakeCache(directory, options.CacheEntries) : null;
             var key = cache != null ? Key(slots, surfaces, priorities, channels, share, options) : null;
             var cached = key is { } hash ? cache!.Load(hash, options.Compress) : null;
@@ -124,7 +124,7 @@ namespace UVWizard.Core.Pipeline
                     Object.DestroyImmediate(merged);
                     conversions.Apply(renderers, null);
                     return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
-                        conversions.Made, conversions.Unconverted).Measured(renderers, options.Budget, null);
+                        conversions.Made, conversions.Unconverted).Measured(renderers, options.Preset, null);
                 }
                 placements = search.Packing.Placements;
                 packing = new PackingOutcome(search.Packer, search.Scale, search.RanOutOfTime);
@@ -164,7 +164,7 @@ namespace UVWizard.Core.Pipeline
             conversions.Apply(renderers, merged);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
                 emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, packing, conversions.Made,
-                conversions.Unconverted).Measured(renderers, options.Budget, sizedFor);
+                conversions.Unconverted).Measured(renderers, options.Preset, sizedFor);
         }
 
         // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.
@@ -208,9 +208,9 @@ namespace UVWizard.Core.Pipeline
         static Channels Needed(List<Slot> slots, Channels on)
         {
             var needed = on & Channels.Albedo;
-            if ((on & Channels.Emission) != 0 && slots.Exists(slot => slot.Draws && BakedEmission(slot.Reading) != null))
+            if ((on & Channels.Emission) != 0 && slots.Exists(BakesEmission))
                 needed |= Channels.Emission;
-            if ((on & Channels.Normal) != 0 && slots.Exists(slot => slot.Draws && BakedNormal(slot.Reading) != null))
+            if ((on & Channels.Normal) != 0 && slots.Exists(BakesNormal))
                 needed |= Channels.Normal;
             return needed;
         }
@@ -224,7 +224,7 @@ namespace UVWizard.Core.Pipeline
             var outside = new HashSet<Material> { merged };
             foreach (var renderer in renderers)
             {
-                if (TextureMemory.IsEditorOnly(renderer.transform)) continue;
+                if (UploadedRenderers.IsEditorOnly(renderer.transform)) continue;
                 var materials = renderer.sharedMaterials;
                 for (var s = 0; s < materials.Length; s++)
                     if (materials[s] != null && !mergedSlots.Contains((renderer, s)))
@@ -491,6 +491,12 @@ namespace UVWizard.Core.Pipeline
         // chart to a point, so any ratio does.
         static float Ratio(float channel, float albedo) => albedo != 0 ? Mathf.Abs(channel / albedo) : 1;
 
+        // True when the slot draws and glows, so the merged slot has the Emission channel.
+        static bool BakesEmission(Slot slot) => slot.Draws && BakedEmission(slot.Reading) != null;
+
+        // True when the slot draws and has a normal map that bumps it, so the merged slot has the Normal channel.
+        static bool BakesNormal(Slot slot) => slot.Draws && BakedNormal(slot.Reading) != null;
+
         // The source's emission, or null when it doesn't glow.
         static ChannelSource? BakedEmission(SourceMaterialReading reading) =>
             reading.Emission is { } emission && Intensity(emission.Tint) > 0 ? emission : null;
@@ -515,7 +521,7 @@ namespace UVWizard.Core.Pipeline
         // is dimmed to it, keeping its hue, and flagged.
         static float EmissionStrength(List<Slot> slots, List<SlotNote> flagged)
         {
-            var emitting = slots.FindAll(slot => slot.Draws && BakedEmission(slot.Reading) != null);
+            var emitting = slots.FindAll(BakesEmission);
             var strength = 1f;
             foreach (var slot in emitting) strength = Mathf.Max(strength, Intensity(slot.Reading.Emission!.Tint));
             strength = Mathf.Min(strength, MaxEmissionStrength);
@@ -655,10 +661,13 @@ namespace UVWizard.Core.Pipeline
             return coloured;
         }
 
+        /// <summary>The merged material's name.</summary>
+        internal const string MergedMaterialName = "UV Wizard merged";
+
         // The merged material without the atlas: its tint, vertex colour, and the representative's shared settings.
         static Material MergedMaterial(BakeOptions options, Material? representative, bool vertexColour)
         {
-            var material = new Material(options.MergedShader) { name = "UV Wizard merged" };
+            var material = new Material(options.MergedShader) { name = MergedMaterialName };
             SetTintAndVertexColour(material, options, vertexColour);
             if (representative != null)
                 foreach (var property in options.RepresentativeProperties)

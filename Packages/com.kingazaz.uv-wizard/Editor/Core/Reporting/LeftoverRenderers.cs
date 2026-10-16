@@ -30,7 +30,7 @@ namespace UVWizard.Core.Reporting
             // Only meshes count towards the SDK's mesh figures; particles, trails and lines don't.
             var renderers = new List<Renderer>();
             foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
-                if (renderer is SkinnedMeshRenderer or MeshRenderer && !TextureMemory.IsEditorOnly(renderer.transform))
+                if (renderer is SkinnedMeshRenderer or MeshRenderer && !UploadedRenderers.IsEditorOnly(renderer.transform))
                     renderers.Add(renderer);
             bool KeptForMmd(Renderer renderer) => mmdWorldCompatibility && IsMmdBody(renderer, root);
 
