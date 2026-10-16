@@ -894,7 +894,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var result = Bake(renderer);
 
             Assert.That(result.MovedSlots.Select(moved => moved.Renderer), Is.EqualTo(new[] { renderer }));
-            Assert.That(result.MovedSlots[0].SlotOf, Is.EqualTo(new[] { 0, 0, 1, 2 }));
+            Assert.That(Enumerable.Range(0, 4).Select(result.MovedSlots[0].NewIndexOf), Is.EqualTo(new[] { 0, 0, 1, 2 }));
         }
 
         [Test]
@@ -1027,7 +1027,7 @@ namespace UVWizard.Core.Tests.Pipeline
                 new Renderer[] { renderer }, new[] { new AnimatedSlot(renderer, 2, "Swapped by \"Red eyes\".") });
 
             Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial, result.MergedMaterial, eyes }));
-            Assert.That(result.MovedSlots.Where(moved => moved.SlotOf.Where((to, from) => to != from).Any()), Is.Empty);
+            Assert.That(Enumerable.Range(0, 3).Select(result.MovedSlots.Single().NewIndexOf), Is.EqualTo(new[] { 0, 1, 2 }));
         }
 
         [Test]
