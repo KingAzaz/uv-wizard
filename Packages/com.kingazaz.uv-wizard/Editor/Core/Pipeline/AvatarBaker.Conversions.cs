@@ -190,9 +190,9 @@ namespace UVWizard.Core.Pipeline
                     if (intensity > MaxEmissionStrength) Flag(GlowsLess(intensity, ReasonText.GlowsLessConverted));
                 }
 
-                var albedoTexture = (options.Channels & Channels.Albedo) != 0 && albedo != null
-                    ? Texture(source, Channels.Albedo, albedo.Texture, albedo.Tint)
-                    : null;
+                // Albedo is baked whether or not its channel is on: the toggle is about the atlas, which converted
+                // materials aren't in, and without it they'd draw plain white (#107).
+                var albedoTexture = albedo != null ? Texture(source, Channels.Albedo, albedo.Texture, albedo.Tint) : null;
                 var emissionTexture = emission != null
                     ? Texture(source, Channels.Emission, emission.Texture,
                         Divided(emission.Tint, Mathf.Max(strength, Intensity(emission.Tint))))
