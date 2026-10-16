@@ -21,6 +21,8 @@ Shader "Hidden/UVWizard/Tests/WorldNormal"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            // As Standard and Toon Standard do. Below 3.0, UnpackScaleNormal ignores the strength.
+            #pragma target 3.0
             #include "UnityStandardUtils.cginc"
 
             sampler2D _BumpMap;

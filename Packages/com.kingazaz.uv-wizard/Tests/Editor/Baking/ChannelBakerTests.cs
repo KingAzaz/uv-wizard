@@ -234,18 +234,27 @@ namespace UVWizard.Core.Tests.Baking
             }
         }
 
-        [Test]
-        public void StrengthScalesTheNormalsTiltThenRenormalizes()
+        // NormalEncoding is internal, so the cases name it by whether the source is in the AG layout.
+        [TestCase(false, 2f)]
+        [TestCase(false, 0.5f)]
+        [TestCase(true, 2f)]
+        [TestCase(true, 0.5f)]
+        [TestCase(false, 4f)]
+        [TestCase(true, 4f)]
+        public void StrengthBendsTheNormalTheWayUnpackScaleNormalDoes(bool ag, float strength)
         {
-            // SourceNormal(0, 0) is (-0.388, -0.324, 0.863). At strength 2 its x and y double, and it's renormalized.
-            var source = NormalMap(Xyz);
+            // In RG or AG, from strength 2 the corner texels tilt past horizontal, so their z clamps to 0. At 4 their
+            // x and y run well past 1 in either encoding and have to be normalized back.
+            var encoding = ag ? NormalEncoding.AG : NormalEncoding.RGorAG;
+            var source = NormalMap(ag ? Ag : Xyz);
             var plan = NormalPlan(16, NormalEncoding.RGorAG,
-                NormalQuad(source, 2, NormalEncoding.RGorAG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+                NormalQuad(source, strength, encoding, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
 
             var atlas = Bake(plan);
 
-            AssertDecodes(new Vector3(-0.584f, -0.487f, 0.649f), Texel(atlas, 0, 0), "atlas (0, 0)");
-            AssertDecodes(new Vector3(0.584f, 0.487f, 0.649f), Texel(atlas, 3, 3), "atlas (3, 3)");
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++)
+                AssertDecodes(UnpackScaleNormal(SourceNormal(i, j), strength, encoding), Texel(atlas, i, j), $"atlas ({i}, {j})");
         }
 
         [Test]
@@ -410,6 +419,19 @@ namespace UVWizard.Core.Tests.Baking
 
         // Unity's DXT5nm-style layout for mobile: (y, y, y, x).
         static Color32 Ag(Vector3 n) => new Color32(Packed(n.y), Packed(n.y), Packed(n.y), Packed(n.x));
+
+        // The direction Unity's UnpackScaleNormalRGorAG (UnityStandardUtils.cginc) gives a normal stored in 8 bits.
+        // Its desktop branch, for RG or AG, scales x and y and then rebuilds z from them, so past horizontal z is 0.
+        // Its mobile ASTC branch, for AG, rebuilds z from the stored x and y and then scales them.
+        static Vector3 UnpackScaleNormal(Vector3 stored, float strength, NormalEncoding encoding)
+        {
+            var xy = new Vector2(Unpacked(Packed(stored.x)), Unpacked(Packed(stored.y)));
+            var z = Mathf.Sqrt(1 - Mathf.Clamp01(xy.sqrMagnitude));
+            xy *= strength;
+            if (encoding == NormalEncoding.RGorAG)
+                z = Mathf.Sqrt(1 - Mathf.Clamp01(xy.sqrMagnitude));
+            return new Vector3(xy.x, xy.y, z).normalized;
+        }
 
         // A normal's tolerance per component: two 8-bit roundings and a rebuilt z.
         const float NormalTolerance = 0.03f;
