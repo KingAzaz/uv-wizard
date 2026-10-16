@@ -16,15 +16,32 @@ namespace UVWizard.Core.Baking
         /// into a linear atlas written in this encoding.
         /// </param>
         public BakePlan(int atlasSize, IReadOnlyList<BakeSource> sources, NormalEncoding? normalEncoding = null)
+            : this(atlasSize, atlasSize, sources, normalEncoding)
         {
-            if (atlasSize <= 0) throw new ArgumentOutOfRangeException(nameof(atlasSize), atlasSize, "must be positive");
-            AtlasSize = atlasSize;
+        }
+
+        /// <param name="width">The texture's width, in texels.</param>
+        /// <param name="height">The texture's height, in texels.</param>
+        /// <param name="sources">Every source's triangles.</param>
+        /// <param name="normalEncoding">
+        /// Null bakes colour: each source's texture times its tint. Otherwise the plan bakes tangent-space normals
+        /// into a linear atlas written in this encoding.
+        /// </param>
+        public BakePlan(int width, int height, IReadOnlyList<BakeSource> sources, NormalEncoding? normalEncoding = null)
+        {
+            if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), width, "must be positive");
+            if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height), height, "must be positive");
+            Width = width;
+            Height = height;
             Sources = sources;
             NormalEncoding = normalEncoding;
         }
 
-        /// <summary>The atlas's width and height, in texels.</summary>
-        public int AtlasSize { get; }
+        /// <summary>The texture's width, in texels.</summary>
+        public int Width { get; }
+
+        /// <summary>The texture's height, in texels.</summary>
+        public int Height { get; }
 
         public IReadOnlyList<BakeSource> Sources { get; }
 

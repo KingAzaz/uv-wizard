@@ -285,6 +285,38 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Preset.Excellent.BudgetBytes));
         }
 
+        [Test]
+        public void ANonSquareTextureIsConvertedAtItsOwnWidthAndHeight()
+        {
+            // The island spans five tiles, so the slot is excluded; its centroids sit well inside a tile, away from
+            // the gradient's seam.
+            var strip = Standard(Gradient(512, 128, 1), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
+                Standard(Gradient(16, 0), Color.white), strip);
+            var before = Centroids(renderer).Skip(2).Select(SourceColour).ToArray();
+
+            Bake(Converting(), renderer);
+
+            var converted = (Texture2D)renderer.sharedMaterials[1].mainTexture;
+            Assert.That((converted.width, converted.height), Is.EqualTo((512, 128)));
+            var after = Centroids(renderer).Skip(2).Select(SourceColour).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertClose(before[k], after[k], $"triangle {k}");
+        }
+
+        [Test]
+        public void EachSideOfAConvertedTextureIsClampedToTheAtlasSize()
+        {
+            var strip = Standard(Gradient(512, 128, 1), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
+                Standard(Gradient(16, 0), Color.white), strip);
+
+            Bake(Converting(atlasSize: 256), renderer);
+
+            var converted = (Texture2D)renderer.sharedMaterials[1].mainTexture;
+            Assert.That((converted.width, converted.height), Is.EqualTo((256, 128)));
+        }
+
         // Standard as the merged shader, converting every material whose shader isn't one of the given ones.
         static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Preset? preset = null,
             string[]? mobileShaders = null, Channels channels = Channels.All, string[]? representativeProperties = null,

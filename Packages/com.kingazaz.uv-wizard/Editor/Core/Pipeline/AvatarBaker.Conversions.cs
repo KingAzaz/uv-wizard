@@ -211,22 +211,24 @@ namespace UVWizard.Core.Pipeline
                 return material;
             }
 
-            // The texture, times the tint, baked whole into a texture of its own at its size, up to the atlas size,
-            // in the channel's finest format. A channel without a texture bakes its tint into a small one.
+            // The texture, times the tint, baked whole into a texture of its own at its width and height, each up to
+            // the atlas size, in the channel's finest format. A channel without a texture bakes its tint into a small one.
             Texture2D Texture(Material source, Channels channel, Texture? texture, Color tint, ChannelSource? normal = null)
             {
-                var size = texture != null ? Mathf.Min(Mathf.Max(texture.width, texture.height), options.AtlasSize) : UntexturedSize.x;
+                var size = texture != null
+                    ? new Vector2Int(Mathf.Min(texture.width, options.AtlasSize), Mathf.Min(texture.height, options.AtlasSize))
+                    : UntexturedSize;
                 var encoding = normal != null ? options.NormalEncoding : NormalEncoding.RGorAG;
                 var whole = new BakeSource(texture != null ? texture : Texture2D.whiteTexture, tint, Identity, Whole, Whole,
                     WholeTriangles, normal?.Strength ?? 1, encoding);
-                var baked = ChannelBaker.Bake(new BakePlan(size, new[] { whole },
+                var baked = ChannelBaker.Bake(new BakePlan(size.x, size.y, new[] { whole },
                     normal != null ? options.NormalEncoding : (NormalEncoding?)null));
                 if (texture != null)
                 {
                     baked.wrapModeU = texture.wrapModeU;
                     baked.wrapModeV = texture.wrapModeV;
                 }
-                if (options.Compress) AtlasCompressor.Compress(baked, AtlasSizing.Finest(channel, size)[channel]!.Value.Format);
+                if (options.Compress) AtlasCompressor.Compress(baked, AtlasSizing.Finest(channel, Mathf.Max(size.x, size.y))[channel]!.Value.Format);
                 baked.name = $"UV Wizard {channel} {source.name}";
                 return baked;
             }
