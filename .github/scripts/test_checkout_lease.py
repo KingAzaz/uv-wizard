@@ -96,6 +96,28 @@ class LeaseTest(unittest.TestCase):
                 self.assertEqual(results[loser][0], False)
                 self.assertNotIn("replaced", results[loser][1])
 
+    def test_a_takeover_is_refused_when_the_lease_is_rewritten_with_the_same_contents(self):
+        open(self.path, "w").close()
+        old = self.mtime() - STALE_AFTER
+        os.utime(self.path, (old.timestamp(), old.timestamp()))
+
+        def rewrite():
+            # A run on an older version of this script recreates an empty lease, just as empty.
+            os.remove(self.path)
+            open(self.path, "w").close()
+
+        with self.interrupt_at_read(1, rewrite):
+            ok, message = take(self.path, "b", "UV Wizard owner", old + STALE_AFTER)
+        self.assertFalse(ok)
+        self.assertEqual(os.path.getsize(self.path), 0)
+
+    def test_a_takeover_is_refused_when_the_lease_is_released_meanwhile(self):
+        take(self.path, "a", "UV Wizard next slice", T0)
+        with self.interrupt_at_read(1, lambda: release(self.path, "a")):
+            result = take(self.path, "b", "UV Wizard owner", T0 + STALE_AFTER)
+        self.assertEqual(result, (False, "the lease changed while taking it; try again"))
+        self.assertFalse(os.path.exists(self.path))
+
     def test_check_passes_for_the_holder_and_fails_for_others(self):
         take(self.path, "a", "UV Wizard next slice", T0)
         self.assertTrue(check(self.path, "a", T0)[0])
