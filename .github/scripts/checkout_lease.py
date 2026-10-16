@@ -8,18 +8,29 @@ branches or runs Unity in C:\\Users\\Azaz\\AI\\uv-wizard holds this lease from i
     python checkout_lease.py check [<session-id>]        # exit 1: leased by another run
     python checkout_lease.py release <session-id>
 
-The lease file lives under the checkout's .git directory, so `git status` stays clean. A lease
-older than STALE_AFTER belongs to a run that died without releasing it, and `take` replaces it.
+The lease file lives under the checkout's .git directory, so `git status` stays clean. The holder
+renews its lease by taking it again, which a run does before each branch switch and Unity run. A
+lease not renewed for STALE_AFTER belongs to a run that died without releasing it, and `take`
+replaces it.
+
+Every write is atomic: a lease is written to a temp file, then linked into place when the checkout
+is free, or renamed over the old lease. Taking over a stale lease first creates a claim file named
+after that exact lease, so of two runs that both find it stale, only one replaces it.
 """
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import sys
+import tempfile
 
 DEFAULT_LEASE_FILE = r"C:\Users\Azaz\AI\uv-wizard\.git\uv-wizard-checkout.lease"
 STALE_AFTER = datetime.timedelta(hours=3)
+# A takeover holds its claim for milliseconds. One older than this belongs to a run that died
+# mid-takeover, and the next run to find it clears it.
+CLAIM_STALE_AFTER = datetime.timedelta(minutes=5)
 
 
 def now():
@@ -27,17 +38,25 @@ def now():
 
 
 def read(path):
+    """The lease at `path`, or None. Its token identifies this exact file."""
     try:
-        with open(path, encoding="utf-8") as f:
-            lease = json.load(f)
-        lease["since_dt"] = datetime.datetime.fromisoformat(lease["since"])
-        return lease
+        with open(path, "rb") as f:
+            stat = os.fstat(f.fileno())
+            raw = f.read()
     except FileNotFoundError:
         return None
-    except (ValueError, KeyError):
-        # A half-written or hand-edited file: treat it as stale so it can be replaced.
-        return {"session": "?", "title": "unreadable lease", "since": "?",
-                "since_dt": datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)}
+    try:
+        lease = json.loads(raw.decode("utf-8"))
+        lease["since_dt"] = datetime.datetime.fromisoformat(lease["since"])
+        lease["session"], lease["title"]
+    except (ValueError, KeyError, TypeError):
+        # Empty (an older version of this script, between creating the file and writing it),
+        # half-written or hand-edited. It holds the checkout until the file is STALE_AFTER old.
+        mtime = datetime.datetime.fromtimestamp(stat.st_mtime, datetime.timezone.utc)
+        lease = {"session": "?", "title": "unreadable lease",
+                 "since": mtime.isoformat(timespec="seconds"), "since_dt": mtime}
+    lease["token"] = hashlib.sha256(raw + b"|%d" % stat.st_mtime_ns).hexdigest()[:16]
+    return lease
 
 
 def describe(lease):
@@ -51,32 +70,70 @@ def blocking(lease, session, at):
     return lease
 
 
-def write_new(path, session, title, at):
+def refusal(lease):
+    return False, describe(lease) if lease else "the lease changed while taking it; try again"
+
+
+def write_temp(path, session, title, at):
     body = json.dumps({"session": session, "title": title, "since": at.isoformat(timespec="seconds")})
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+    fd, temp = tempfile.mkstemp(dir=os.path.dirname(path) or ".",
+                                prefix=os.path.basename(path) + ".", suffix=".tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(body)
+    return temp
+
+
+def create(path, session, title, at):
+    temp = write_temp(path, session, title, at)
+    try:
+        os.link(temp, path)
+    except FileExistsError:
+        # Another run took it between our read and our write.
+        return refusal(read(path))
+    finally:
+        os.remove(temp)
+    return True, "lease taken"
+
+
+def clear_abandoned(claim, at):
+    try:
+        claimed = datetime.datetime.fromtimestamp(os.stat(claim).st_mtime, datetime.timezone.utc)
+        if at - claimed >= CLAIM_STALE_AFTER:
+            os.remove(claim)
+    except FileNotFoundError:
+        pass
+
+
+def take_over(path, stale, session, title, at):
+    claim = f"{path}.claim-{stale['token']}"
+    try:
+        os.close(os.open(claim, os.O_WRONLY | os.O_CREAT | os.O_EXCL))
+    except FileExistsError:
+        clear_abandoned(claim, at)
+        return False, f"another run is taking over the stale lease ({describe(stale)})"
+    try:
+        current = read(path)
+        if current is None or current["token"] != stale["token"]:
+            # Another run replaced or released it after our first read.
+            return refusal(current)
+        os.replace(write_temp(path, session, title, at), path)
+    finally:
+        os.remove(claim)
+    return True, f"stale lease replaced ({describe(stale)})"
 
 
 def take(path, session, title, at=None):
     """Returns (ok, message)."""
     at = at or now()
     lease = read(path)
-    held = blocking(lease, session, at)
-    if held:
-        return False, describe(held)
-    message = "lease taken"
-    if lease is not None:
-        if lease["session"] == session:
-            return True, "lease already held by this session"
-        message = f"stale lease replaced ({describe(lease)})"
-        os.remove(path)
-    try:
-        write_new(path, session, title, at)
-    except FileExistsError:
-        # Another run took it between our read and our write.
-        return False, describe(read(path))
-    return True, message
+    if lease is None:
+        return create(path, session, title, at)
+    if lease["session"] == session:
+        os.replace(write_temp(path, session, title, at), path)
+        return True, "lease renewed"
+    if blocking(lease, session, at):
+        return False, describe(lease)
+    return take_over(path, lease, session, title, at)
 
 
 def check(path, session=None, at=None):

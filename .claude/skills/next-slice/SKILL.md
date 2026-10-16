@@ -22,7 +22,7 @@ Stop at once, with a one-line reason, when any of these holds:
 - Unity MCP is unavailable.
 - `take` on the checkout lease (AGENTS.md, **Checkout lease**) exits 1. Take it last, once every other check has passed, with the title `UV Wizard next slice`.
 
-You hold the lease for the rest of the run, so a second run's gate stops even while you wait on sub-agents and `list_sessions` reports you `isRunning: false`. Sessions KingAzaz starts take no lease, so repeat the running-session check right before the first branch switch or file write to `C:\Users\Azaz\AI\uv-wizard`.
+You hold the lease for the rest of the run, so a second run's gate stops even while you wait on sub-agents and `list_sessions` reports you `isRunning: false`. Run `take` again before each branch switch and each Unity test run: it renews the lease, and a lease not renewed for 3 hours counts as stale, so another run takes it over. Sessions KingAzaz starts take no lease, so repeat the running-session check right before the first branch switch or file write to `C:\Users\Azaz\AI\uv-wizard`.
 
 ## 1. Orient
 

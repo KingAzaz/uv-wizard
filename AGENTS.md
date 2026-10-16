@@ -20,7 +20,7 @@ Two local scheduled tasks develop UV Wizard unattended. A scheduled run can't st
 
 Both stand down while another session in this repo is running, another run holds the **checkout lease**, or the checkout is dirty. Agent PRs carry the `owner-agent` label. Disable either task to pause the loop.
 
-**Checkout lease.** A run that switches branches or runs Unity in `C:\Users\Azaz\AI\uv-wizard` holds the lease from then until it ends, because `list_sessions` reports a run waiting on sub-agents as `isRunning: false`. Run `.github/scripts/checkout_lease.py` from `origin/main`, since the checkout may be on an older branch: `MSYS_NO_PATHCONV=1 git -C C:/Users/Azaz/AI/uv-wizard show origin/main:.github/scripts/checkout_lease.py | python - <take|check|release> <session id> [<title>]`. Get the session id from `get_session("self")`. Exit 1 means another run holds it: stand down and quote its output. Release it however the run ends, including "nothing to do".
+**Checkout lease.** A run that switches branches or runs Unity in `C:\Users\Azaz\AI\uv-wizard` holds the lease from then until it ends, because `list_sessions` reports a run waiting on sub-agents as `isRunning: false`. Run `.github/scripts/checkout_lease.py` from `origin/main`, since the checkout may be on an older branch: `MSYS_NO_PATHCONV=1 git -C C:/Users/Azaz/AI/uv-wizard show origin/main:.github/scripts/checkout_lease.py | python - <take|check|release> <session id> [<title>]`. Get the session id from `get_session("self")`. Exit 1 means another run holds it: stand down and quote its output. The holder's `take` renews it; a lease not renewed for 3 hours is stale, and the next `take` replaces it. Release it however the run ends, including "nothing to do".
 
 ## Dev environment
 
