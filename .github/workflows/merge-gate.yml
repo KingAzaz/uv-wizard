@@ -28,9 +28,9 @@ jobs:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false
 
-      - name: Test the gate
+      - name: Test the gate and the checkout lease
         working-directory: .github/scripts
-        run: python -m unittest test_merge_gate
+        run: python -m unittest test_merge_gate test_checkout_lease
 
       - name: Check what holds the merge
         working-directory: .github/scripts
