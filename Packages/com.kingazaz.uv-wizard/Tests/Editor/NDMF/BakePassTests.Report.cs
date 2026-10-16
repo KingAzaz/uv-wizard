@@ -90,9 +90,20 @@ namespace UVWizard.NDMF.Tests
                 new System.Collections.Generic.Dictionary<Object, Object>());
             var avatar = Avatar(withComponent: false);
 
-            Keep(ManualBake.Run(avatar, BuildTarget.Android));
+            var told = 0;
+            void Count() => told++;
+            BakeReports.Published += Count;
+            try
+            {
+                Keep(ManualBake.Run(avatar, BuildTarget.Android));
+            }
+            finally
+            {
+                BakeReports.Published -= Count;
+            }
 
             Assert.That(BakeReports.Latest, Is.Null);
+            Assert.That(told, Is.EqualTo(1), "an open report window repaints without the old report");
         }
 
         [TestCase(UVWizardAvatar.Preset.Excellent, "Excellent")]

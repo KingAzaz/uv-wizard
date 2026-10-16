@@ -32,11 +32,10 @@ namespace UVWizard.NDMF
             Published?.Invoke();
         }
 
-        /// <summary>Forgets the last report.</summary>
+        /// <summary>Forgets the last report, and tells an open report window so.</summary>
         public static void Clear()
         {
             Latest = null;
-            originals = new Dictionary<UnityEngine.Object, UnityEngine.Object>();
             Published?.Invoke();
         }
 
