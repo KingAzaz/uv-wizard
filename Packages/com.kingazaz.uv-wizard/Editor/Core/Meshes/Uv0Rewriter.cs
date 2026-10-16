@@ -15,9 +15,6 @@ namespace UVWizard.Core.Meshes
     /// </summary>
     internal static class Uv0Rewriter
     {
-        static readonly VertexAttributeFormat[] WritableUvFormats =
-            { VertexAttributeFormat.Float32, VertexAttributeFormat.Float16, VertexAttributeFormat.UNorm16 };
-
         /// <summary>
         /// Returns a copy of the mesh whose merged triangles sample the atlas. A vertex whose
         /// triangles want different UV0s, because they sit in different charts or some belong to an
@@ -121,8 +118,12 @@ namespace UVWizard.Core.Meshes
             }
             else
             {
+                // A copy rather than a new mesh, so it keeps the source's UV distribution metrics,
+                // which Unity has no setter for.
                 path = RewritePath.Rebuilt;
-                mesh = new Mesh { name = source.name };
+                mesh = UnityEngine.Object.Instantiate(source);
+                mesh.name = source.name;
+                mesh.ClearBlendShapes();
                 CopyVertexStreams(data, mesh, sourceOf, uv0Of);
                 CopyBoneWeights(data, source, mesh, sourceOf);
                 CopyBlendShapes(source, mesh, sourceOf);
@@ -139,7 +140,7 @@ namespace UVWizard.Core.Meshes
             mesh.bounds = source.bounds;
             // Mip streaming picks the atlas's mip level from UV0's texel density. Unity's
             // recalculation logs an error on a mesh with line or point submeshes, so those keep the
-            // source's metric.
+            // source's metric, as the other channels do.
             if (merged != null && AllTriangles(mesh)) mesh.RecalculateUVDistributionMetric(0);
             return new RewrittenMesh(mesh, submeshOf, merged, path);
         }
@@ -148,7 +149,7 @@ namespace UVWizard.Core.Meshes
 
         /// <summary>True when UV0 stored this way can be rewritten to atlas positions.</summary>
         public static bool CanHoldAtlasUvs(VertexAttributeFormat format, int dimension) =>
-            Array.IndexOf(WritableUvFormats, format) >= 0 && dimension >= 2;
+            dimension >= 2 && TryWriteUv(stackalloc byte[8], Vector2.zero, format);
 
         static bool AllTriangles(Mesh mesh)
         {
@@ -188,29 +189,31 @@ namespace UVWizard.Core.Meshes
             for (var v = 0; v < sourceOf.Length; v++)
             {
                 Buffer.BlockCopy(bytes, sourceOf[v] * stride, copied, v * stride, stride);
-                if (hasUv && uv0Of[v] is { } uv) WriteUv(copied.AsSpan(v * stride + uvOffset), uv, uvFormat);
+                if (hasUv && uv0Of[v] is { } uv && !TryWriteUv(copied.AsSpan(v * stride + uvOffset), uv, uvFormat))
+                    throw new NotSupportedException($"UV0 stored as {uvFormat} can't hold atlas UVs.");
             }
             return copied;
         }
 
-        static void WriteUv(Span<byte> at, Vector2 uv, VertexAttributeFormat format)
+        // Writes the UV in the given format, or returns false for a format that can't hold atlas UVs.
+        static bool TryWriteUv(Span<byte> at, Vector2 uv, VertexAttributeFormat format)
         {
             switch (format)
             {
                 case VertexAttributeFormat.Float32:
                     BitConverter.TryWriteBytes(at, uv.x);
                     BitConverter.TryWriteBytes(at.Slice(4), uv.y);
-                    break;
+                    return true;
                 case VertexAttributeFormat.Float16:
                     BitConverter.TryWriteBytes(at, Mathf.FloatToHalf(uv.x));
                     BitConverter.TryWriteBytes(at.Slice(2), Mathf.FloatToHalf(uv.y));
-                    break;
+                    return true;
                 case VertexAttributeFormat.UNorm16:
                     BitConverter.TryWriteBytes(at, (ushort)Mathf.RoundToInt(Mathf.Clamp01(uv.x) * ushort.MaxValue));
                     BitConverter.TryWriteBytes(at.Slice(2), (ushort)Mathf.RoundToInt(Mathf.Clamp01(uv.y) * ushort.MaxValue));
-                    break;
+                    return true;
                 default:
-                    throw new NotSupportedException($"UV0 stored as {format} can't hold atlas UVs.");
+                    return false;
             }
         }
 

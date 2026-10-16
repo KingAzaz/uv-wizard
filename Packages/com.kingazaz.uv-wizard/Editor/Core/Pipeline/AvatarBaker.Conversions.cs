@@ -152,8 +152,7 @@ namespace UVWizard.Core.Pipeline
                     foreach (var property in options.RepresentativeProperties) CopyProperty(Merged, material, property);
                 else if (options.DefaultRamp != null && material.HasTexture(options.RampProperty))
                     material.SetTexture(options.RampProperty, options.DefaultRamp);
-                if (material.HasColor("_Color")) material.SetColor("_Color", Color.white);
-                if (material.HasFloat("_VertexColor")) material.SetFloat("_VertexColor", reading.UsesVertexColour ? 1 : 0);
+                SetTintAndVertexColour(material, options, reading.UsesVertexColour);
                 // The source's own culling, under the merged shader's name or under lilToon's and Poiyomi's, which
                 // take the same values.
                 foreach (var cull in new[] { options.CullingProperty, "_Cull" })

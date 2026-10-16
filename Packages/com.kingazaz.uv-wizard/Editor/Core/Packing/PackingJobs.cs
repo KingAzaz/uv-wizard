@@ -238,7 +238,7 @@ namespace UVWizard.Core.Packing
 
     /// <summary>
     /// Places one chart at the lowest row <see cref="ScanRowsJob"/> found, or stops the packing when
-    /// it fits nowhere or the charts still to place need more cells than are free.
+    /// it fits nowhere.
     /// </summary>
     [BurstCompile(CompileSynchronously = true, DisableSafetyChecks = true)]
     internal struct PlaceChartJob : IJob
@@ -247,7 +247,6 @@ namespace UVWizard.Core.Packing
         public int Step;   // which chart in Order this job places
         public NativeArray<ulong> Grid;
         [ReadOnly] public NativeArray<ulong> Bits;
-        [ReadOnly] public NativeArray<int> Covered;
         [ReadOnly] public NativeArray<MaskInfo> Infos;
         [ReadOnly] public NativeArray<int> Order;
         [ReadOnly] public NativeArray<int> RowFits;
@@ -273,9 +272,6 @@ namespace UVWizard.Core.Packing
             Positions[chart] = position;
             Turned[chart] = turn;
             State[PackingGrid.Placed]++;
-            State[PackingGrid.Free] -= Covered[chart];
-            State[PackingGrid.Remaining] -= Covered[chart];
-            if (State[PackingGrid.Remaining] > State[PackingGrid.Free]) State[PackingGrid.Stopped] = 1;
             State[PackingGrid.LowestFit] = long.MaxValue;
         }
     }
@@ -284,12 +280,10 @@ namespace UVWizard.Core.Packing
     internal static class PackingGrid
     {
         // Indices into the parallel scan's State.
-        public const int Stopped = 0;     // nonzero once a chart fits nowhere or the rest can't fit
+        public const int Stopped = 0;     // nonzero once a chart fits nowhere
         public const int LowestFit = 1;   // the lowest row known to fit the current chart
         public const int Placed = 2;      // charts placed so far
-        public const int Free = 3;        // cells still free
-        public const int Remaining = 4;   // cells the charts still to place cover
-        public const int StateLength = 5;
+        public const int StateLength = 3;
 
         public readonly struct Mask
         {

@@ -333,6 +333,45 @@ namespace UVWizard.Core.Tests.Meshes
             Assert.That(result.Mesh.GetUVDistributionMetric(0), Is.EqualTo(recalculated.GetUVDistributionMetric(0)).Within(1e-4f));
         }
 
+        [TestCase(false, false)]
+        [TestCase(true, true)]
+        [TestCase(true, false)]
+        public void Uv1KeepsTheSourcesDistributionMetric(bool split, bool splitVerticesStill)
+        {
+            // Unity keeps a metric for UV0 and UV1 only.
+            var source = Skinned(Square(new[] { 0, 1, 2, 2, 1, 3 }), splitVerticesStill ? new[] { 1, 2 } : new int[0]);
+            HalveUvs(source, 1);
+            source.RecalculateUVDistributionMetric(1);
+
+            var result = Rewrite(source, split ? TwoCharts : OneChart);
+
+            Assert.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            Assert.That(source.GetUVDistributionMetric(1), Is.Not.EqualTo(1).Within(1e-3f));
+            Assert.That(result.Mesh.GetUVDistributionMetric(1), Is.EqualTo(source.GetUVDistributionMetric(1)).Within(1e-4f));
+        }
+
+        [TestCase(false, false)]
+        [TestCase(true, true)]
+        [TestCase(true, false)]
+        public void AMeshWithALineSubmeshKeepsTheSourcesUv0DistributionMetric(bool split, bool splitVerticesStill)
+        {
+            // Unity can't recalculate the metric of a mesh with line submeshes. A line vertex keeps
+            // its own UV0, so a line over the triangles' vertices splits them: this one lies on
+            // vertex 3, which only the second triangle uses, so a single triangle splits nothing.
+            var source = Skinned(Square(split ? new[] { 0, 1, 2, 2, 1, 3 } : new[] { 0, 1, 2 }),
+                splitVerticesStill ? new[] { 1, 2, 3 } : new int[0]);
+            HalveUvs(source, 0);
+            source.RecalculateUVDistributionMetric(0);
+            source.subMeshCount = 2;
+            source.SetIndices(new[] { 3, 3 }, MeshTopology.Lines, 1);
+
+            var result = Rewrite(source, split ? TwoCharts : new[] { A0, A1, A2 }, null);
+
+            Assert.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            Assert.That(source.GetUVDistributionMetric(0), Is.Not.EqualTo(1).Within(1e-3f));
+            Assert.That(result.Mesh.GetUVDistributionMetric(0), Is.EqualTo(source.GetUVDistributionMetric(0)).Within(1e-4f));
+        }
+
         [TestCase(true)]
         [TestCase(false)]
         public void TheSourceMeshIsLeftAsItWas(bool split)
@@ -462,6 +501,9 @@ namespace UVWizard.Core.Tests.Meshes
             mesh.AddBlendShapeFrame("smile", 100, Deltas(4, still), Deltas(5, still), Deltas(6, still));
             return mesh;
         }
+
+        // Shrinks a UV channel to half its size, so its distribution metric isn't the 1 a new mesh has.
+        static void HalveUvs(Mesh mesh, int channel) => mesh.SetUVs(channel, Uvs(mesh, channel).Select(uv => uv * 0.5f).ToArray());
 
         // A square whose UV0 is stored in the given format, written stream by stream: SetVertices
         // and SetUVs would turn UV0 back into two Float32s.
