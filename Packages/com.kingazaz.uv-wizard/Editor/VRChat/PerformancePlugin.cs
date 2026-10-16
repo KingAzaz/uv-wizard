@@ -47,8 +47,12 @@ namespace UVWizard.VRChat
                     if (!draft.Baked) return;
                     var root = context.AvatarRootObject;
                     draft.After = Measure(root);
-                    var toggled = MaterialAnimations.Toggled(context.Extension<AnimatorServicesContext>(), root);
-                    draft.Leftovers = LeftoverRenderers.Find(root, toggled, draft.MmdWorldCompatibility);
+                    // Without Trace and Optimize nothing merged the meshes, and the report says so once instead.
+                    if (draft.TraceAndOptimize)
+                    {
+                        var toggled = MaterialAnimations.Toggled(context.Extension<AnimatorServicesContext>(), root);
+                        draft.Leftovers = LeftoverRenderers.Find(root, toggled, draft.MmdWorldCompatibility);
+                    }
                     BudgetWarnings.Report(draft);
                     draft.Publish(root);
                 }));

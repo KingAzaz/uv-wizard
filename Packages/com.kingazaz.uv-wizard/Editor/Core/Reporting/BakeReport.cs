@@ -23,8 +23,12 @@ namespace UVWizard.Core.Reporting
         /// <param name="before">The SDK's figures before UV Wizard ran, or null when they weren't measured.</param>
         /// <param name="after">The SDK's figures at the end of the build, or null when they weren't measured.</param>
         /// <param name="leftovers">The renderers left beside the avatar's main skinned mesh, each with why.</param>
+        /// <param name="meshesMerged">
+        /// False when no Trace and Optimize ran, so nothing merged the meshes and none was kept apart for a reason.
+        /// </param>
         public BakeReport(string avatarName, bool mobilePreview, BakeResult? result, PerformanceRank? target,
-            ReportFigures? before = null, ReportFigures? after = null, IReadOnlyList<LeftoverRenderer>? leftovers = null)
+            ReportFigures? before = null, ReportFigures? after = null, IReadOnlyList<LeftoverRenderer>? leftovers = null,
+            bool meshesMerged = true)
         {
             AvatarName = avatarName;
             MobilePreview = mobilePreview;
@@ -34,7 +38,8 @@ namespace UVWizard.Core.Reporting
             After = after;
             Materials = Rows(result);
             PackingLines = Packing(result);
-            Leftovers = RankBlocked ? leftovers ?? Array.Empty<LeftoverRenderer>() : Array.Empty<LeftoverRenderer>();
+            Leftovers = RankBlocked && meshesMerged ? leftovers ?? Array.Empty<LeftoverRenderer>() : Array.Empty<LeftoverRenderer>();
+            NoMergeLine = RankBlocked && !meshesMerged ? new ReportLine(ReportText.NoMeshMerge) : (ReportLine?)null;
         }
 
         public string AvatarName { get; }
@@ -59,6 +64,12 @@ namespace UVWizard.Core.Reporting
         /// they don't, or when the figures weren't measured.
         /// </summary>
         public IReadOnlyList<LeftoverRenderer> Leftovers { get; }
+
+        /// <summary>
+        /// The one line in place of the leftovers when material slots or meshes keep the avatar below the preset's
+        /// rank and no Trace and Optimize ran to merge them. Null otherwise.
+        /// </summary>
+        public ReportLine? NoMergeLine { get; }
 
         /// <summary>True when the material slots or meshes after the build rank below the preset.</summary>
         public bool RankBlocked => After != null && Target != null && After.SlotsAndMeshesRank > Target;
@@ -147,13 +158,18 @@ namespace UVWizard.Core.Reporting
         {
             Outcome = outcome;
             Material = material;
+            MaterialName = material.name;
             Renderers = renderers;
             RendererNames = rendererNames;
             Reason = reason;
         }
 
         public MaterialOutcome Outcome { get; }
+        /// <summary>The material, which is gone once the build's clone is when the build made it.</summary>
         public Material Material { get; }
+
+        /// <summary>The material's name, kept for when the material is gone.</summary>
+        public string MaterialName { get; }
         /// <summary>The renderers, which are gone once the build's clone is.</summary>
         public IReadOnlyList<Renderer> Renderers { get; }
 
@@ -251,6 +267,7 @@ namespace UVWizard.Core.Reporting
         public const string LeftoverStaticMesh = "uvwizard.report.leftover-static-mesh";
         public const string LeftoverBoundsOrRootBone = "uvwizard.report.leftover-bounds-or-root-bone";
         public const string LeftoverOther = "uvwizard.report.leftover-other";
+        public const string NoMeshMerge = "uvwizard.report.no-mesh-merge";
 
         // The report window and the component's inspector.
         public const string WindowTitle = "uvwizard.report.window-title";

@@ -173,6 +173,55 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void AMeshWhoseRendererAloneAnAnimationTurnsOnAndOffIsKeptApartForItsToggle()
+        {
+            // Avatar Optimizer 1.9.20 merges a renderer whose enabled flag is animated only with others that share
+            // the animation (AutoMergeSkinnedMesh's activeness key). The tail shares it with none, so it stays apart.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var tail = avatar.transform.Find("Tail").GetComponent<Renderer>();
+            ToggleRenderers(avatar, "Tail");
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Renderer, Is.SameAs(tail));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("Toggle"));
+        }
+
+        [Test]
+        public void AnAvatarWithoutTraceAndOptimizeGetsOneNoMergeLineInsteadOfAReasonPerMesh()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            AddUnmergeable(avatar, Unmergeable.StaticMesh);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var report = BakeReports.Latest!;
+            Assert.That(report.RankBlocked, Is.True, "the torso, tail and glasses stay three meshes");
+            Assert.That(report.Leftovers, Is.Empty);
+            Assert.That(report.NoMergeLine, Is.EqualTo(new ReportLine(ReportText.NoMeshMerge)));
+        }
+
+        [Test]
+        public void AnAvatarWithTraceAndOptimizeGetsNoNoMergeLine()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            AddUnmergeable(avatar, Unmergeable.StaticMesh);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            Assert.That(BakeReports.Latest!.RankBlocked, Is.True);
+            Assert.That(BakeReports.Latest.NoMergeLine, Is.Null);
+        }
+
+        [Test]
         public void AMeshNamedTorsoIsntTakenForTheMmdBody()
         {
             var avatar = MergeableAvatar(addTraceAndOptimize: true);

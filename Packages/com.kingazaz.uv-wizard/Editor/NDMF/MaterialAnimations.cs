@@ -61,17 +61,21 @@ namespace UVWizard.NDMF
         }
 
         /// <summary>
-        /// The objects the avatar's animations turn on or off. Avatar Optimizer keeps renderers on or under them out of
-        /// the merge (ADR 0001). It does merge a renderer whose enabled flag is animated, so those don't count.
+        /// The objects the avatar's animations turn on or off, and the renderers whose enabled flag they animate.
+        /// Avatar Optimizer keeps renderers on or under those objects out of the merge (ADR 0001). It merges a renderer
+        /// whose enabled flag is animated only with others the same animation turns on and off, and moves the toggle
+        /// onto the merged mesh's object (AutoMergeSkinnedMesh, 1.9.20), so alone such a renderer stays apart too.
         /// </summary>
-        public static HashSet<GameObject> Toggled(AnimatorServicesContext animators, GameObject root)
+        public static HashSet<UnityEngine.Object> Toggled(AnimatorServicesContext animators, GameObject root)
         {
-            var toggled = new HashSet<GameObject>();
+            var toggled = new HashSet<UnityEngine.Object>();
             foreach (var (clip, resolve) in Clips(animators, root))
                 foreach (var binding in clip.GetFloatCurveBindings())
                     if (binding.type == typeof(GameObject) && binding.propertyName == "m_IsActive"
                         && resolve(binding.path) is { } target)
                         toggled.Add(target);
+                    else if (binding.propertyName == "m_Enabled" && Target(binding, resolve) is { } renderer)
+                        toggled.Add(renderer);
             return toggled;
         }
 

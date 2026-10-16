@@ -26,6 +26,7 @@ namespace UVWizard.NDMF
             // serialized.
             if (root.TryGetComponent<TraceAndOptimize>(out var own))
             {
+                draft.TraceAndOptimize = true;
                 draft.MmdWorldCompatibility =
                     new SerializedObject(own).FindProperty("mmdWorldCompatibility")?.boolValue ?? true;
                 return;
@@ -33,6 +34,7 @@ namespace UVWizard.NDMF
             if (!avatar.addTraceAndOptimize) return;
 
             root.AddComponent<TraceAndOptimize>();
+            draft.TraceAndOptimize = true;
             draft.MmdWorldCompatibility = true;
             ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.Information, Messages.AddedTraceAndOptimize);
         }

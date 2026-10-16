@@ -83,6 +83,27 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void AManualBakeForgetsTheLastReportBeforeItRuns()
+        {
+            // A bake that throws, or doesn't run, publishes nothing, so the window mustn't keep the previous avatar's.
+            BakeReports.Publish(new BakeReport("Previous", false, null, null),
+                new System.Collections.Generic.Dictionary<Object, Object>());
+            var avatar = Avatar(withComponent: false);
+
+            Keep(ManualBake.Run(avatar, BuildTarget.Android));
+
+            Assert.That(BakeReports.Latest, Is.Null);
+        }
+
+        [TestCase(UVWizardAvatar.Preset.Excellent, "Excellent")]
+        [TestCase(UVWizardAvatar.Preset.Good, "Good")]
+        [TestCase(UVWizardAvatar.Preset.Medium, "Medium")]
+        public void APresetAimsForTheRankOfTheSameName(UVWizardAvatar.Preset preset, string rank)
+        {
+            Assert.That(ReportDraft.RankOf(preset).ToString(), Is.EqualTo(rank));
+        }
+
+        [Test]
         public void EveryReportLineHasEnglish()
         {
             var keys = typeof(ReportText).GetFields(BindingFlags.Public | BindingFlags.Static)
