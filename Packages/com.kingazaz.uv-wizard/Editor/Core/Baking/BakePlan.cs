@@ -6,7 +6,10 @@ using UnityEngine;
 
 namespace UVWizard.Core.Baking
 {
-    /// <summary>What one channel of the atlas is drawn from: its size and every source's triangles.</summary>
+    /// <summary>
+    /// What one baked texture, a channel of the atlas or a converted material's texture, is drawn from: its width,
+    /// height and every source's triangles.
+    /// </summary>
     internal sealed class BakePlan
     {
         /// <param name="atlasSize">The atlas's width and height, in texels.</param>
@@ -25,7 +28,7 @@ namespace UVWizard.Core.Baking
         /// <param name="sources">Every source's triangles.</param>
         /// <param name="normalEncoding">
         /// Null bakes colour: each source's texture times its tint. Otherwise the plan bakes tangent-space normals
-        /// into a linear atlas written in this encoding.
+        /// into a linear texture written in this encoding.
         /// </param>
         public BakePlan(int width, int height, IReadOnlyList<BakeSource> sources, NormalEncoding? normalEncoding = null)
         {

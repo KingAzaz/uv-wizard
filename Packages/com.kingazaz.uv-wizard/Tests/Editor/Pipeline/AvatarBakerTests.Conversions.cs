@@ -318,6 +318,20 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That((converted.width, converted.height), Is.EqualTo((bakedWidth, bakedHeight)));
         }
 
+        [Test]
+        public void ACompressedNonSquareConvertedTextureKeepsItsWidthAndHeight()
+        {
+            var strip = Standard(Gradient(512, 128, 1), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
+                Standard(Gradient(16, 0), Color.white), strip);
+
+            Bake(Converting(compress: true), renderer);
+
+            var converted = (Texture2D)renderer.sharedMaterials[1].mainTexture;
+            Assert.That(converted.format, Is.EqualTo(TextureFormat.ASTC_6x6));
+            Assert.That((converted.width, converted.height), Is.EqualTo((512, 128)));
+        }
+
         // Standard as the merged shader, converting every material whose shader isn't one of the given ones.
         static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Preset? preset = null,
             string[]? mobileShaders = null, Channels channels = Channels.All, string[]? representativeProperties = null,
