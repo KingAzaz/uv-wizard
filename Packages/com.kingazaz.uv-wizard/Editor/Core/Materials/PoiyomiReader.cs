@@ -153,7 +153,7 @@ namespace UVWizard.Core.Materials
                 var cleaned = new StringBuilder();
                 foreach (var b in Encoding.UTF8.GetBytes(suffix.Trim().Replace(" ", "")))
                 {
-                    if (b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '_')
+                    if ((b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '_')
                         cleaned.Append((char)b);
                     else
                         cleaned.Append(b.ToString("X2"));
