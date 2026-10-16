@@ -32,19 +32,42 @@ namespace UVWizard.NDMF.Tests
             Assert.That(ours, Is.EqualTo(sdk).Within(1e-4), "UV Wizard counts texture memory as the SDK does");
         }
 
-        [Test]
-        public void TheComponentsChannelSwitchesReachTheBake()
+        // Each switch turns off its own channel and no other.
+        [TestCase("_MainTex")]
+        [TestCase("_EmissionMap")]
+        [TestCase("_BumpMap")]
+        public void EachOfTheComponentsChannelSwitchesReachesTheBake(string off)
         {
             var avatar = Avatar(withComponent: true);
-            avatar.GetComponent<UVWizardAvatar>().emission = false;
+            var component = avatar.GetComponent<UVWizardAvatar>();
+            component.albedo = off != "_MainTex";
+            component.emission = off != "_EmissionMap";
+            component.normal = off != "_BumpMap";
             Detailed(avatar);
 
             MobileBuild.Override = true;
             Build(avatar);
 
             var merged = Materials(avatar).Distinct().Single();
-            Assert.That(merged.GetTexture("_BumpMap"), Is.Not.Null);
-            Assert.That(merged.GetTexture("_EmissionMap"), Is.Null);
+            foreach (var channel in new[] { "_MainTex", "_EmissionMap", "_BumpMap" })
+                Assert.That(merged.GetTexture(channel), channel == off ? Is.Null : Is.Not.Null, channel);
+        }
+
+        [Test]
+        public void WithEveryChannelOffTheAvatarStaysAsItWasAndTheBuildSaysSo()
+        {
+            var avatar = Avatar(withComponent: true);
+            var component = avatar.GetComponent<UVWizardAvatar>();
+            component.albedo = component.emission = component.normal = false;
+            var materials = Materials(avatar);
+            var meshes = Meshes(avatar);
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(Materials(avatar), Is.EqualTo(materials));
+            Assert.That(Meshes(avatar), Is.EqualTo(meshes));
+            Assert.That(Reports(errors), Is.EqualTo(new[] { (ErrorSeverity.Information, (string?)Messages.NothingToBake) }));
         }
 
         [Test]

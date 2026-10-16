@@ -50,12 +50,24 @@ namespace UVWizard.Core.Pipeline
             foreach (var renderer in renderers)
                 CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
                     laterEdits, needs, options.Channels);
+            // With every channel off, conversions would lose every texture too, so the renderers stay as they were (#84).
+            if (options.Channels == Channels.None)
+                return BakeResult.Unchanged(true, excluded, Array.Empty<SlotNote>(), nothingToBake: true)
+                    .Measured(renderers, options.Preset, null);
             var conversions = new Conversions(options, animated);
             if (slots.Count == 0)
             {
                 conversions.Apply(renderers, null);
                 return BakeResult.Unchanged(true, excluded, conversions.Flagged(flagged), conversions.Made,
                     conversions.Unconverted).Measured(renderers, options.Preset, null);
+            }
+            // With only channels no slot to merge has on, an atlas would hold nothing, so nothing merges (#84). The
+            // channels that are on still carry the conversions, as when nothing fits.
+            if (Needed(slots, options.Channels) == Channels.None)
+            {
+                conversions.Apply(renderers, null);
+                return BakeResult.Unchanged(true, excluded, conversions.Flagged(Array.Empty<SlotNote>()), conversions.Made,
+                    conversions.Unconverted, nothingToBake: true).Measured(renderers, options.Preset, null);
             }
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.

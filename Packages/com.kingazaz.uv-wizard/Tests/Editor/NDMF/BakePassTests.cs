@@ -839,9 +839,14 @@ namespace UVWizard.NDMF.Tests
             errors.Select(e => (e.TheError.Severity, (e.TheError as SimpleError)?.TitleKey)).ToArray();
 
         // Leaves out the material-slot warning, for avatars whose meshes nothing merges: the SDK counts a slot on each,
-        // more than a one-slot preset such as Good allows.
-        static List<ErrorContext> BesidesSlots(List<ErrorContext> errors) =>
-            errors.Where(e => (e.TheError as SimpleError)?.TitleKey != Messages.TooManySlots).ToList();
+        // more than a one-slot preset such as Good allows. Asserts the warning is there, once, so it's never dropped
+        // from an avatar that should stay within its slots (#84).
+        static List<ErrorContext> BesidesSlots(List<ErrorContext> errors)
+        {
+            Assert.That(Reports(errors), Has.Exactly(1).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)),
+                "the avatar is over its preset's slots");
+            return errors.Where(e => (e.TheError as SimpleError)?.TitleKey != Messages.TooManySlots).ToList();
+        }
 
         static List<string> Texts(List<ErrorContext> errors) =>
             errors.Select(e => (e.TheError as SimpleError)?.ToMessage() ?? "").ToList();

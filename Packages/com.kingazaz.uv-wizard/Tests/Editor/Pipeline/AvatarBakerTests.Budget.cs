@@ -56,6 +56,69 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.EmissionAtlas, Is.Not.Null);
         }
 
+        // With every channel off, or only channels no slot has, an atlas would hold nothing, so the bake leaves the
+        // renderers as they were (#84).
+        [TestCase((int)Channels.None)]
+        [TestCase((int)(Channels.Emission | Channels.Normal))]
+        public void WithNoChannelToBakeTheRenderersStayAsTheyWere(int channels)
+        {
+            var renderer = Plain(Gradient(16, 0));
+            var material = renderer.sharedMaterial;
+            var mesh = Filter(renderer).sharedMesh;
+
+            var result = Bake(StandardOptions(preset: Preset.Good, channels: (Channels)channels), renderer);
+
+            Assert.That(result.NothingToBake, Is.True);
+            Assert.That(result.MergedMaterial, Is.Null);
+            Assert.That(renderer.sharedMaterial, Is.SameAs(material));
+            Assert.That(Filter(renderer).sharedMesh, Is.SameAs(mesh));
+        }
+
+        [Test]
+        public void WithEveryChannelOffAKeptOutMaterialIsntConverted()
+        {
+            var renderer = Kept(Gradient(16, 0));
+            var material = renderer.sharedMaterial;
+
+            var result = Bake(Converting(channels: Channels.None), renderer);
+
+            Assert.That(result.NothingToBake, Is.True);
+            Assert.That(renderer.sharedMaterial, Is.SameAs(material));
+        }
+
+        [Test]
+        public void WithEveryChannelOffAKeptOutSlotIsStillReported()
+        {
+            var renderer = Kept(Gradient(16, 0));
+
+            var result = Bake(Converting(channels: Channels.None), renderer);
+
+            Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(new[] { renderer.sharedMaterial }));
+        }
+
+        // Whether a kept-out material is converted doesn't hang on what the slots to merge have.
+        [Test]
+        public void WithNoChannelToMergeAKeptOutMaterialIsStillConvertedWithItsChannels()
+        {
+            var plain = Plain(Gradient(16, 0));
+            var kept = Kept(Gradient(16, 1));
+            var source = Emitting(kept.sharedMaterial, Gradient(16, 2), Color.white);
+
+            var result = Bake(Converting(channels: Channels.Emission), plain, kept);
+
+            Assert.That(result.NothingToBake, Is.True);
+            Assert.That(kept.sharedMaterial, Is.Not.SameAs(source));
+            Assert.That(kept.sharedMaterial.GetTexture("_EmissionMap"), Is.Not.Null);
+        }
+
+        [Test]
+        public void ABakeWithAChannelToBakeHasSomethingToBake()
+        {
+            var result = Bake(StandardOptions(channels: Channels.Albedo), Plain(Gradient(16, 0)));
+
+            Assert.That(result.NothingToBake, Is.False);
+        }
+
         [Test]
         public void TexturesOutsideTheAtlasShrinkItsShare()
         {
