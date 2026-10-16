@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Collections;
 using UnityEditor;
 using UnityEngine;
@@ -299,9 +300,12 @@ namespace UVWizard.Core.Pipeline
             {
                 var sources = renderer.sharedMaterials;
                 for (var s = 0; s < sources.Length; s++)
+                {
                     if (sources[s] != null)
                         excluded.Add(new SlotNote(renderer, s, sources[s], "A tool that runs after the bake reads " +
                             "this mesh's UV0, and the bake can't keep it where that tool would find it."));
+                    ExcludeSwappedIn(renderer, s, sources[s], AnimationsOf(animated, renderer, s), excluded);
+                }
                 return;
             }
             using var removals = laterEdits?.Removals(renderer);
@@ -309,22 +313,19 @@ namespace UVWizard.Core.Pipeline
             using var meshes = MeshUtility.AcquireReadOnlyMeshData(mesh);
             var data = meshes[0];
             Vector2[]? uv0 = null;
-            for (var s = 0; s < Math.Min(materials.Length, data.subMeshCount); s++)
+            // Every slot, extra and empty ones too, so the materials animations swap into them are all listed.
+            for (var s = 0; s < materials.Length; s++)
             {
                 var material = materials[s];
-                if (material == null) continue;
-                void Exclude(string reason) => excluded.Add(new SlotNote(renderer, s, material, reason));
-
                 var animations = AnimationsOf(animated, renderer, s);
                 if (animations.Count > 0)
                 {
-                    Exclude(animations[0].Reason);
-                    var listed = new HashSet<Material> { material };
-                    foreach (var animation in animations)
-                    foreach (var swapped in animation.SwappedIn)
-                        if (listed.Add(swapped)) excluded.Add(new SlotNote(renderer, s, swapped, animation.Reason));
+                    if (material != null) excluded.Add(new SlotNote(renderer, s, material, animations[0].Reason));
+                    ExcludeSwappedIn(renderer, s, material, animations, excluded);
                     continue;
                 }
+                if (material == null || s >= data.subMeshCount) continue;
+                void Exclude(string reason) => excluded.Add(new SlotNote(renderer, s, material, reason));
 
                 if (materials.Length > data.subMeshCount && s == data.subMeshCount - 1)
                 {
@@ -380,15 +381,21 @@ namespace UVWizard.Core.Pipeline
             }
         }
 
-        // The animations that swap or change the renderer's slot.
-        static List<AnimatedSlot> AnimationsOf(IReadOnlyList<AnimatedSlot> animated, Renderer renderer, int slot)
+        // Lists each material the animations swap into the slot once, with the first animation that swaps it in,
+        // unless it's the slot's own material.
+        static void ExcludeSwappedIn(Renderer renderer, int slot, Material? source, List<AnimatedSlot> animations,
+            List<SlotNote> excluded)
         {
-            var animations = new List<AnimatedSlot>();
-            foreach (var animation in animated)
-                if (animation.Renderer == renderer && (animation.Slot == null || animation.Slot == slot))
-                    animations.Add(animation);
-            return animations;
+            var listed = new HashSet<Material>();
+            if (source != null) listed.Add(source);
+            foreach (var animation in animations)
+            foreach (var swapped in animation.SwappedIn)
+                if (listed.Add(swapped)) excluded.Add(new SlotNote(renderer, slot, swapped, animation.Reason));
         }
+
+        // The animations that swap or change the renderer's slot.
+        static List<AnimatedSlot> AnimationsOf(IReadOnlyList<AnimatedSlot> animated, Renderer renderer, int slot) =>
+            animated.Where(animation => animation.Covers(renderer, slot)).ToList();
 
         static Mesh? MeshOf(Renderer renderer) => renderer switch
         {
@@ -713,13 +720,12 @@ namespace UVWizard.Core.Pipeline
 
         // Gives each renderer with merged slots a rewritten mesh and the merged material on those slots, and says
         // where each of its slots went.
-        static (List<(Mesh Source, Mesh Rewritten)> Replaced, List<(Renderer Renderer, int[] SlotOf)> Moved)
+        static (List<(Mesh Source, Mesh Rewritten)> Replaced, List<MovedSlots> Moved)
             RewriteRenderers(List<Slot> slots, Material merged, ILaterMeshEdits? laterEdits,
                 Dictionary<Renderer, LaterToolNeeds> needs)
         {
             // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was.
-            var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials, int[] SlotOf,
-                int? KeptIn)>();
+            var changes = new List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)>();
             for (var first = 0; first < slots.Count;)
             {
                 var renderer = slots[first].Renderer;
@@ -744,22 +750,23 @@ namespace UVWizard.Core.Pipeline
                 for (var s = mesh.subMeshCount; s < materials.Length; s++)
                     replacement[slotOf[s] = count + s - mesh.subMeshCount] = materials[s];
 
-                changes.Add((renderer, mesh, rewritten.Mesh, replacement, slotOf, keptIn));
+                changes.Add((new MovedSlots(renderer, slotOf), mesh, rewritten.Mesh, replacement, keptIn));
             }
 
             var replaced = new List<(Mesh Source, Mesh Rewritten)>();
-            var moved = new List<(Renderer Renderer, int[] SlotOf)>();
-            foreach (var (renderer, source, rewritten, materials, slotOf, _) in changes)
+            var moved = new List<MovedSlots>();
+            foreach (var (movedSlots, source, rewritten, materials, _) in changes)
             {
+                var renderer = movedSlots.Renderer;
                 // A skinned renderer keeps its blend-shape weights: the rewritten mesh has the same blend shapes.
                 if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten;
                 else renderer.GetComponent<MeshFilter>().sharedMesh = rewritten;
                 renderer.sharedMaterials = materials;
                 replaced.Add((source, rewritten));
-                moved.Add((renderer, slotOf));
+                moved.Add(movedSlots);
             }
-            foreach (var (renderer, _, _, _, _, keptIn) in changes)
-                if (keptIn is { } channel) laterEdits!.KeptSourceUv0(renderer, channel);
+            foreach (var change in changes)
+                if (change.KeptIn is { } channel) laterEdits!.KeptSourceUv0(change.Moved.Renderer, channel);
             return (replaced, moved);
         }
 

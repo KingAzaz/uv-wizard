@@ -836,6 +836,35 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ASwapOnAnExtraSlotListsItsMaterialAndTheMaterialsSwappedIn()
+        {
+            var extra = Standard(Gradient(16, 2), Color.white);
+            var red = Standard(Gradient(16, 3), Color.white);
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(16, 1), Color.white), extra);
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), new Renderer[] { renderer },
+                new AnimatedSlot(renderer, 2, "Swapped by \"Red layer\".", new[] { extra, red }));
+
+            Assert.That(result.Excluded.Where(note => note.Slot == 2).Select(note => (note.Material, note.Reason)),
+                Is.EqualTo(new[] { (extra, "Swapped by \"Red layer\"."), (red, "Swapped by \"Red layer\".") }));
+        }
+
+        [Test]
+        public void ASwapOnAnEmptySlotListsTheMaterialsSwappedIn()
+        {
+            var red = Standard(Gradient(16, 3), Color.white);
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), null!);
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), new Renderer[] { renderer },
+                new AnimatedSlot(renderer, 1, "Swapped by \"Red\".", new[] { red }));
+
+            Assert.That(result.Excluded.Select(note => (note.Slot, note.Material, note.Reason)),
+                Is.EqualTo(new[] { (1, red, "Swapped by \"Red\".") }));
+        }
+
+        [Test]
         public void AnAnimationOnEveryMaterialOfARendererExcludesAllItsSlots()
         {
             var first = Standard(Gradient(16, 0), Color.white);
@@ -865,7 +894,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var result = Bake(renderer);
 
             Assert.That(result.MovedSlots.Select(moved => moved.Renderer), Is.EqualTo(new[] { renderer }));
-            Assert.That(result.MovedSlots[0].SlotOf, Is.EqualTo(new[] { 0, 0, 1, 2 }));
+            Assert.That(Enumerable.Range(0, 4).Select(result.MovedSlots[0].NewIndexOf), Is.EqualTo(new[] { 0, 0, 1, 2 }));
         }
 
         [Test]
@@ -969,6 +998,36 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(renderer.sharedMaterials, Is.EqualTo(materials));
             Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(materials));
             Assert.That(tool.Disposed, Is.False, "its triangles aren't asked about");
+        }
+
+        [Test]
+        public void ASwapOnARendererALaterToolKeepsOutListsTheMaterialsSwappedIn()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var eyes = Standard(Gradient(32, 1), Color.white);
+            var red = Standard(Gradient(16, 2), Color.white);
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), eyes);
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { NoChannelFree = true },
+                new Renderer[] { renderer }, new[] { new AnimatedSlot(renderer, 1, "Swapped by \"Red eyes\".", new[] { eyes, red }) });
+
+            Assert.That(result.Excluded.Where(note => note.Slot == 1).Select(note => note.Material), Is.EqualTo(new[] { eyes, red }));
+            Assert.That(result.Excluded.Single(note => note.Material == red).Reason, Is.EqualTo("Swapped by \"Red eyes\"."));
+        }
+
+        [Test]
+        public void ALaterToolThatReadsMaterialSlotsMovesNoSlotBesideAnAnimatedOne()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) },
+                new[] { Quad(2, 0.1f, 0.1f, 0.3f, 0.3f) });
+            var eyes = Standard(Gradient(16, 2), Color.white);
+            var renderer = MeshRenderer(mesh, Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white), eyes);
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { KeepsSubmeshes = true },
+                new Renderer[] { renderer }, new[] { new AnimatedSlot(renderer, 2, "Swapped by \"Red eyes\".") });
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial, result.MergedMaterial, eyes }));
+            Assert.That(Enumerable.Range(0, 3).Select(result.MovedSlots.Single().NewIndexOf), Is.EqualTo(new[] { 0, 1, 2 }));
         }
 
         [Test]

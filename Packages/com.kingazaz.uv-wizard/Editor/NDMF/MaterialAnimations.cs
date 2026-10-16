@@ -40,7 +40,9 @@ namespace UVWizard.NDMF
                 }
                 foreach (var ((renderer, slot), materials) in swaps)
                     animated.Add(new AnimatedSlot(renderer, slot,
-                        $"The animation \"{clip.Name}\" swaps the material in this slot, so the slot keeps its own UVs.",
+                        $"The animation \"{clip.Name}\" swaps the material in Element {slot} of this renderer's " +
+                        "materials, so that slot keeps its own UVs. In a slot no animation swaps, the same material can " +
+                        "still be merged.",
                         materials));
 
                 var properties = new Dictionary<Renderer, string>();
@@ -77,10 +79,9 @@ namespace UVWizard.NDMF
 
         /// <summary>Moves each material swap on a renderer whose slots moved to the slot's new index.</summary>
         public static void FollowMovedSlots(AnimatorServicesContext animators, GameObject root,
-            IEnumerable<(Renderer Renderer, int[] SlotOf)> moved)
+            IEnumerable<MovedSlots> moved)
         {
-            var slotsOf = moved.Where(m => m.SlotOf.Where((to, from) => to != from).Any())
-                .ToDictionary(m => m.Renderer, m => m.SlotOf);
+            var slotsOf = moved.Where(m => m.AnyMoved).ToDictionary(m => m.Renderer);
             if (slotsOf.Count == 0) return;
             foreach (var (clip, resolve) in Clips(animators, root))
             {
@@ -89,10 +90,10 @@ namespace UVWizard.NDMF
                 foreach (var binding in clip.GetObjectCurveBindings())
                 {
                     if (SlotIndex(binding) is not { } slot || Target(binding, resolve) is not { } renderer
-                        || !slotsOf.TryGetValue(renderer, out var slotOf) || slot >= slotOf.Length || slotOf[slot] == slot)
+                        || !slotsOf.TryGetValue(renderer, out var slots) || slots.NewIndexOf(slot) == slot)
                         continue;
                     var to = binding;
-                    to.propertyName = $"{SlotPrefix}{slotOf[slot]}]";
+                    to.propertyName = $"{SlotPrefix}{slots.NewIndexOf(slot)}]";
                     curves.Add((binding, to, clip.GetObjectCurve(binding)));
                 }
                 foreach (var (from, _, _) in curves) clip.SetObjectCurve(from, null);
@@ -125,7 +126,8 @@ namespace UVWizard.NDMF
 
         // Every clip of every animator once, in name order so reports are stable, with a way to find the object a
         // curve's path names. A child Animator's clips start their paths at that Animator's object; every other
-        // controller's start at the avatar root.
+        // controller's start at the avatar root. NDMF clones each controller in a scope of its own, so no clip is
+        // shared by two controllers that resolve paths differently.
         static List<(VirtualClip Clip, Func<string, GameObject?> Resolve)> Clips(AnimatorServicesContext animators,
             GameObject root)
         {

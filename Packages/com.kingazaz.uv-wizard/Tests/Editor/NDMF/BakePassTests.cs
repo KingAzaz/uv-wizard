@@ -490,9 +490,7 @@ namespace UVWizard.NDMF.Tests
             var errors = BesidesSlots(Build(avatar));
             Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, ToonStandardName }));
             Assert.That(body.sharedMaterials[1].name, Is.EqualTo("Eyes blue (UV Wizard)"));
-            foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
-                Assert.That(avatar.transform.Find(other).GetComponent<Renderer>().sharedMaterials.Select(m => m.shader.name),
-                    Has.All.EqualTo(ToonStandardName), other);
+            AssertTheRestAreOnToonStandard(avatar);
             Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
             Assert.That(Texts(errors), Has.Count.EqualTo(2));
             Assert.That(Texts(errors), Has.Some.Contain("Eyes blue").And.Some.Contain("Eyes red"));
@@ -520,9 +518,7 @@ namespace UVWizard.NDMF.Tests
             var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
             Assert.That(body.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName, ToonStandardName }));
             Assert.That(body.sharedMaterials.Distinct().Count(), Is.EqualTo(2), "each keeps a material of its own");
-            foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
-                Assert.That(avatar.transform.Find(other).GetComponent<Renderer>().sharedMaterials.Select(m => m.shader.name),
-                    Has.All.EqualTo(ToonStandardName), other);
+            AssertTheRestAreOnToonStandard(avatar);
             Assert.That(Reports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)
                 .Concat(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Flagged), 2))));
             Assert.That(Texts(errors).Take(2), Has.All.Contain("Body glow").And.All.Contain("_EmissionColor"));
@@ -559,12 +555,14 @@ namespace UVWizard.NDMF.Tests
                 new[] { Quad(4, 0.1f, 0.1f, 0.3f, 0.3f) }, new[] { Quad(5, 0.6f, 0.6f, 0.8f, 0.8f) });
             body.sharedMaterials = new[]
                 { body.sharedMaterials[0], body.sharedMaterials[1], Standard(Gradient(16, 4)), Standard(Gradient(16, 5)) };
-            var red = Standard(Gradient(16, 6));
-            red.name = "Red";
             var toggle = Keep(new AnimationClip { name = "Face colours" });
-            foreach (var slot in new[] { 3, 2, -1 })
+            foreach (var (slot, colour) in new[] { (3, "Red mouth"), (2, "Red eyes"), (-1, "Stray") })
+            {
+                var red = Standard(Gradient(16, 6));
+                red.name = colour;
                 AnimationUtility.SetObjectReferenceCurve(toggle, Slot("Body", slot),
                     new[] { new ObjectReferenceKeyframe { time = 0, value = red } });
+            }
             WithFx(avatar, toggle);
 
             MobileBuild.Override = true;
@@ -573,9 +571,12 @@ namespace UVWizard.NDMF.Tests
             Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
             Assert.That(body.sharedMaterials.Select(m => m.shader.name), Has.All.EqualTo(ToonStandardName));
             Assert.That(body.sharedMaterials.Distinct().Count(), Is.EqualTo(3));
-            var swaps = FxClips(avatar).SelectMany(AnimationUtility.GetObjectReferenceCurveBindings)
-                .Select(binding => binding.propertyName).Where(name => !name.Contains("-1")).OrderBy(name => name);
-            Assert.That(swaps, Is.EqualTo(new[] { "m_Materials.Array.data[1]", "m_Materials.Array.data[2]" }));
+            var clip = FxClips(avatar).Single();
+            var swaps = AnimationUtility.GetObjectReferenceCurveBindings(clip)
+                .Select(binding => (binding.propertyName, AnimationUtility.GetObjectReferenceCurve(clip, binding)[0].value.name))
+                .Where(swap => !swap.propertyName.Contains("-1")).OrderBy(swap => swap.propertyName);
+            Assert.That(swaps, Is.EqualTo(new[]
+                { ("m_Materials.Array.data[1]", "Red eyes (UV Wizard)"), ("m_Materials.Array.data[2]", "Red mouth (UV Wizard)") }));
         }
         [Test]
         public void ALaterPassThatEditsTheFxControllerKeepsItsEdits()
@@ -602,23 +603,105 @@ namespace UVWizard.NDMF.Tests
             // The hat has its own Animator, whose clip paths start at the hat: "" is the hat itself.
             var avatar = Avatar(withComponent: true);
             var hat = avatar.transform.Find("Hat");
-            var original = hat.GetComponent<MeshRenderer>().sharedMaterial;
+            hat.GetComponent<MeshRenderer>().sharedMaterial.name = "Hat blue";
             var swap = Keep(new AnimationClip { name = "Hat recolour" });
             AnimationUtility.SetObjectReferenceCurve(swap,
                 EditorCurveBinding.PPtrCurve("", typeof(MeshRenderer), "m_Materials.Array.data[0]"),
                 new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 6)) } });
-            var controller = Keep(new AnimatorController { name = "Hat" });
-            controller.AddLayer("Recolour");
-            controller.layers[0].stateMachine.AddState(swap.name).motion = swap;
-            hat.gameObject.AddComponent<Animator>().runtimeAnimatorController = controller;
+            WithAnimator(hat.gameObject, swap);
 
             MobileBuild.Override = true;
             var errors = Build(avatar);
 
-            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.shader.name, Is.EqualTo(ToonStandardName));
-            Assert.That(Texts(errors), Has.Some.Contain("Hat recolour"));
+            // The slot is excluded and gets its own converted material. Had the swap been missed, the hat would merge,
+            // and then its Animator would put the source material back when NDMF commits the controllers: an
+            // Animator rebinds the materials its clips swap whenever its controller changes.
+            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.name, Is.EqualTo("Hat blue (UV Wizard)"));
+            Assert.That(Texts(errors), Has.Some.Contain("Hat blue").And.Contain("Hat recolour"));
             Assert.That(SwappedIn(hat.GetComponent<Animator>().runtimeAnimatorController.animationClips.Single()).Select(m => m.shader.name), Is.EqualTo(new[] { ToonStandardName }),
                 "a child animator's swap is converted too");
+        }
+
+        [Test]
+        public void AClipSharedByAChildAnimatorAndFxSwapsWhatEachOfThemFinds()
+        {
+            // The FX controller and an Animator on the hat play the same clip. Its path "" names the hat from the
+            // hat's Animator, and the avatar root from FX; its path "Tail" names the tail from FX, and nothing from
+            // the hat. NDMF clones each controller in a scope of its own, so each gets its own copy of the clip; if
+            // they ever shared one, only one of the two ways to resolve its paths would be kept.
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshRenderer>().sharedMaterial.name = "Hat blue";
+            var tail = avatar.transform.Find("Tail").GetComponent<SkinnedMeshRenderer>();
+            tail.sharedMaterial.name = "Tail blue";
+            var swap = Keep(new AnimationClip { name = "Recolour" });
+            AnimationUtility.SetObjectReferenceCurve(swap,
+                EditorCurveBinding.PPtrCurve("", typeof(MeshRenderer), "m_Materials.Array.data[0]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 6)) } });
+            AnimationUtility.SetObjectReferenceCurve(swap, Slot("Tail", 0),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 7)) } });
+            WithAnimator(hat.gameObject, swap);
+            WithFx(avatar, swap);
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.name, Is.EqualTo("Hat blue (UV Wizard)"));
+            Assert.That(tail.sharedMaterial.name, Is.EqualTo("Tail blue (UV Wizard)"));
+            Assert.That(Texts(errors), Has.Some.Contain("Hat blue").And.Some.Contain("Tail blue"));
+        }
+
+        [Test]
+        public void ASwapInAChildAnimatorFollowsItsSlotWhenItMoves()
+        {
+            // The hat's first two slots merge into one, so the child Animator's swap on slot 2 moves to slot 1.
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat");
+            hat.GetComponent<MeshFilter>().sharedMesh = Mesh(new[] { Quad(2, 0.05f, 0.4f, 0.55f, 0.95f) },
+                new[] { Quad(4, 0.1f, 0.1f, 0.3f, 0.3f) }, new[] { Quad(5, 0.6f, 0.6f, 0.8f, 0.8f) });
+            var feather = Standard(Gradient(16, 5));
+            feather.name = "Feather";
+            hat.GetComponent<MeshRenderer>().sharedMaterials = new[] { Standard(Gradient(16, 2)), Standard(Gradient(16, 4)), feather };
+            var red = Standard(Gradient(16, 6));
+            red.name = "Red";
+            var swap = Keep(new AnimationClip { name = "Red feather" });
+            AnimationUtility.SetObjectReferenceCurve(swap,
+                EditorCurveBinding.PPtrCurve("", typeof(MeshRenderer), "m_Materials.Array.data[2]"),
+                new[] { new ObjectReferenceKeyframe { time = 0, value = red } });
+            var animator = WithAnimator(hat.gameObject, swap);
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterials.Select(m => m.name).Skip(1), Is.EqualTo(new[] { "Feather (UV Wizard)" }));
+            var clip = animator.runtimeAnimatorController.animationClips.Single();
+            Assert.That(AnimationUtility.GetObjectReferenceCurveBindings(clip).Select(binding => (binding.propertyName,
+                    AnimationUtility.GetObjectReferenceCurve(clip, binding)[0].value.name)),
+                Is.EqualTo(new[] { ("m_Materials.Array.data[1]", "Red (UV Wizard)") }));
+        }
+
+        [Test]
+        public void ASwapOnASlotPastTheRenderersMaterialsStaysWhereItIs()
+        {
+            // The body's first two slots merge, so the swapped eyes move from slot 2 to slot 1. The clip's curve on
+            // slot 5, which the body doesn't have, animates nothing, and is left as it is.
+            var avatar = Avatar(withComponent: true);
+            var body = avatar.transform.Find("Body").GetComponent<SkinnedMeshRenderer>();
+            body.sharedMesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) },
+                new[] { Quad(4, 0.1f, 0.1f, 0.3f, 0.3f) });
+            body.sharedMaterials = new[] { body.sharedMaterials[0], body.sharedMaterials[1], Standard(Gradient(16, 4)) };
+            var toggle = Keep(new AnimationClip { name = "Red eyes on" });
+            foreach (var slot in new[] { 2, 5 })
+                AnimationUtility.SetObjectReferenceCurve(toggle, Slot("Body", slot),
+                    new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 6)) } });
+            WithFx(avatar, toggle);
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            Assert.That(FxClips(avatar).SelectMany(AnimationUtility.GetObjectReferenceCurveBindings)
+                    .Select(binding => binding.propertyName).OrderBy(name => name),
+                Is.EqualTo(new[] { "m_Materials.Array.data[1]", "m_Materials.Array.data[5]" }));
         }
 
         [Test]
@@ -698,6 +781,14 @@ namespace UVWizard.NDMF.Tests
             Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.Unconverted)));
         }
 
+        // Asserts every renderer but the body is on Toon Standard.
+        static void AssertTheRestAreOnToonStandard(GameObject avatar)
+        {
+            foreach (var other in new[] { "BodyCopy", "Hat", "Tail" })
+                Assert.That(avatar.transform.Find(other).GetComponent<Renderer>().sharedMaterials.Select(m => m.shader.name),
+                    Has.All.EqualTo(ToonStandardName), other);
+        }
+
         // The materials a clip's material swaps put in their slots.
         static IEnumerable<Material> SwappedIn(AnimationClip clip) => AnimationUtility.GetObjectReferenceCurveBindings(clip)
             .SelectMany(binding => AnimationUtility.GetObjectReferenceCurve(clip, binding))
@@ -705,6 +796,17 @@ namespace UVWizard.NDMF.Tests
 
         static EditorCurveBinding Slot(string path, int slot) =>
             EditorCurveBinding.PPtrCurve(path, typeof(SkinnedMeshRenderer), $"m_Materials.Array.data[{slot}]");
+
+        // Gives the object an Animator of its own, whose controller has one state playing the clip.
+        Animator WithAnimator(GameObject target, AnimationClip clip)
+        {
+            var controller = Keep(new AnimatorController { name = target.name });
+            controller.AddLayer("Recolour");
+            controller.layers[0].stateMachine.AddState(clip.name).motion = clip;
+            var animator = target.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+            return animator;
+        }
 
         // Gives the avatar an FX controller with one layer holding a state for each clip.
         void WithFx(GameObject avatar, params AnimationClip[] clips)

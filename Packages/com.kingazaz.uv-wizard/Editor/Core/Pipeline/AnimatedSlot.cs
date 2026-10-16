@@ -29,5 +29,11 @@ namespace UVWizard.Core.Pipeline
         public int? Slot { get; }
         public string Reason { get; }
         public IReadOnlyList<Material> SwappedIn { get; }
+
+        /// <summary>True when the animation changes material properties, which reach every slot of the renderer.</summary>
+        public bool EverySlot => Slot == null;
+
+        /// <summary>True when the animation swaps or changes the renderer's slot.</summary>
+        public bool Covers(Renderer renderer, int slot) => Renderer == renderer && (EverySlot || Slot == slot);
     }
 }

@@ -141,11 +141,12 @@ namespace UVWizard.Core.Tests.Meshes
                     Debug.LogWarning($"[UV Wizard bench] {avatar.name}: the bake merged nothing.");
                     return;
                 }
-                foreach (var (renderer, slotOf) in result.MovedSlots)
+                foreach (var slots in result.MovedSlots)
                 {
+                    var renderer = slots.Renderer;
                     var source = meshes[renderer]!;
                     var rewritten = MeshOf(renderer)!;
-                    var atlasUvs = BakedAtlasUvs(source, rewritten, renderer, slotOf, result.MergedMaterial);
+                    var atlasUvs = BakedAtlasUvs(source, rewritten, renderer, slots, result.MergedMaterial);
                     Report(avatar.name, source, "in a bake", atlasUvs);
                     WhySplit(avatar.name, source, atlasUvs);
                 }
@@ -196,7 +197,7 @@ namespace UVWizard.Core.Tests.Meshes
 
         // The merged submeshes became one, holding their corners in source submesh order, so each takes the next
         // stretch of its corners' UV0s.
-        static Vector2[]?[] BakedAtlasUvs(Mesh source, Mesh rewritten, Renderer renderer, int[] slotOf, Material merged)
+        static Vector2[]?[] BakedAtlasUvs(Mesh source, Mesh rewritten, Renderer renderer, MovedSlots slots, Material merged)
         {
             var materials = renderer.sharedMaterials;
             var atlasUvs = new Vector2[]?[source.subMeshCount];
@@ -205,8 +206,8 @@ namespace UVWizard.Core.Tests.Meshes
             int[]? mergedCorners = null;
             for (var s = 0; s < source.subMeshCount; s++)
             {
-                if (materials[slotOf[s]] != merged) continue;
-                mergedCorners ??= rewritten.GetIndices(slotOf[s]);
+                if (materials[slots.NewIndexOf(s)] != merged) continue;
+                mergedCorners ??= rewritten.GetIndices(slots.NewIndexOf(s));
                 var count = (int)source.GetIndexCount(s);
                 atlasUvs[s] = mergedCorners.Skip(next).Take(count).Select(v => uv0[v]).ToArray();
                 next += count;

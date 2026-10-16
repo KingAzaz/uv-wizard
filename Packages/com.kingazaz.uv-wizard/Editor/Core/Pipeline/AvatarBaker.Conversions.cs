@@ -143,7 +143,7 @@ namespace UVWizard.Core.Pipeline
             {
                 void Flag(string reason) => flagged.Add(new SlotNote(renderer, slot, source, reason));
                 if (reading.FlaggedReason != null) Flag(reading.FlaggedReason);
-                if (animated.Any(a => a.Renderer == renderer && a.Slot == null))
+                if (animated.Any(a => a.Renderer == renderer && a.EverySlot))
                     Flag("An animation changes this renderer's material properties, which its Toon Standard material " +
                          "may not have, or may show differently.");
 

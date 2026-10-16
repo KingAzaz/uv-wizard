@@ -14,7 +14,7 @@ namespace UVWizard.Core.Pipeline
         public BakeResult(bool fits, Material? mergedMaterial, Texture2D? atlas, Material? representative,
             IReadOnlyList<(Mesh Source, Mesh Rewritten)> replacedMeshes, IReadOnlyList<SlotNote> excluded,
             IReadOnlyList<SlotNote> flagged, Texture2D? emissionAtlas = null, float emissionStrength = 1,
-            Texture2D? normalAtlas = null, IReadOnlyList<(Renderer Renderer, int[] SlotOf)>? movedSlots = null,
+            Texture2D? normalAtlas = null, IReadOnlyList<MovedSlots>? movedSlots = null,
             bool fromCache = false, PackingOutcome? packing = null,
             IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null,
             IReadOnlyList<SlotNote>? unconverted = null)
@@ -24,7 +24,7 @@ namespace UVWizard.Core.Pipeline
             ConvertedMaterials = convertedMaterials ?? Array.Empty<(Material, Material)>();
             FromCache = fromCache;
             NormalAtlas = normalAtlas;
-            MovedSlots = movedSlots ?? Array.Empty<(Renderer, int[])>();
+            MovedSlots = movedSlots ?? Array.Empty<MovedSlots>();
             EmissionAtlas = emissionAtlas;
             EmissionStrength = emissionStrength;
             Fits = fits;
@@ -76,11 +76,8 @@ namespace UVWizard.Core.Pipeline
         /// <summary>Each mesh a renderer used before, and the rewritten copy it uses now.</summary>
         public IReadOnlyList<(Mesh Source, Mesh Rewritten)> ReplacedMeshes { get; }
 
-        /// <summary>
-        /// For each renderer with merged slots, where each of its slots went: its merged slots collapse into one,
-        /// so the slots after them move down. SlotOf[old] is the new index.
-        /// </summary>
-        public IReadOnlyList<(Renderer Renderer, int[] SlotOf)> MovedSlots { get; }
+        /// <summary>For each renderer with merged slots, where each of its slots went.</summary>
+        public IReadOnlyList<MovedSlots> MovedSlots { get; }
 
         /// <summary>
         /// The texture memory, in bytes, of everything on the renderers right after the bake, counted the way the
