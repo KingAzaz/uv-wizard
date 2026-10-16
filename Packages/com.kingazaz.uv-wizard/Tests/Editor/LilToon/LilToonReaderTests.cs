@@ -14,6 +14,7 @@ namespace UVWizard.Core.Tests.LilToon
     public class LilToonReaderTests : MaterialTests
     {
         const string LilToon = "lilToon";
+        const string Lite = "Hidden/lilToonLite";
 
         [Test]
         public void AlbedoIsTheMainTextureWithItsColourAndScaleOffsetOnUv0()
@@ -487,12 +488,14 @@ namespace UVWizard.Core.Tests.LilToon
         }
 
         // Avatars' maps are imported: the importer's alpha source and the source file decide whether alpha is kept.
-        [TestCase(true, TextureImporterAlphaSource.FromInput, true)]
-        [TestCase(true, TextureImporterAlphaSource.None, false)]
-        [TestCase(false, TextureImporterAlphaSource.FromInput, false)]
-        [TestCase(false, TextureImporterAlphaSource.FromGrayScale, true)]
+        // High-quality compression picks BC7, which has an alpha channel even for a map without alpha.
+        [TestCase(true, TextureImporterAlphaSource.FromInput, TextureImporterCompression.Compressed, true)]
+        [TestCase(true, TextureImporterAlphaSource.None, TextureImporterCompression.Compressed, false)]
+        [TestCase(false, TextureImporterAlphaSource.FromInput, TextureImporterCompression.Compressed, false)]
+        [TestCase(false, TextureImporterAlphaSource.FromInput, TextureImporterCompression.CompressedHQ, false)]
+        [TestCase(false, TextureImporterAlphaSource.FromGrayScale, TextureImporterCompression.Compressed, true)]
         public void AnImportedEmissionMapIsFlaggedWhenItsImporterKeepsAlpha(bool sourceHasAlpha,
-            TextureImporterAlphaSource alphaSource, bool flagged)
+            TextureImporterAlphaSource alphaSource, TextureImporterCompression compression, bool flagged)
         {
             const string folder = "Assets/UVWizardLilToonReaderTests";
             const string path = folder + "/emission.png";
@@ -506,6 +509,7 @@ namespace UVWizard.Core.Tests.LilToon
                 AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
                 var importer = (TextureImporter)AssetImporter.GetAtPath(path);
                 importer.alphaSource = alphaSource;
+                importer.textureCompression = compression;
                 importer.SaveAndReimport();
                 var material = EmittingMaterial();
                 material.SetTexture("_EmissionMap", AssetDatabase.LoadAssetAtPath<Texture2D>(path));
@@ -558,17 +562,30 @@ namespace UVWizard.Core.Tests.LilToon
         }
 
         [Test]
-        public void ShiftingBackfaceUvsIsFlaggedWhenTheNormalMapIsClamped()
+        public void ShiftingBackfaceUvsIsFlaggedForTheNormalMapWhenTheMainTextureIsClamped()
+        {
+            var main = Texture();
+            main.wrapModeU = TextureWrapMode.Clamp;
+            var material = NormalMapped(Texture());
+            material.SetTexture("_MainTex", main);
+            material.SetFloat("_ShiftBackfaceUV", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.Contain("Normal shifts"));
+        }
+
+        // Without a main texture, sampler_MainTex is the default white texture's, which repeats.
+        [Test]
+        public void ShiftingBackfaceUvsIgnoresTheNormalMapsOwnWrapModeWithoutAMainTexture()
         {
             var map = Texture();
             map.wrapModeU = TextureWrapMode.Clamp;
             var material = NormalMapped(map);
             material.SetFloat("_ShiftBackfaceUV", 1);
 
-            var reading = SourceShaderReader.Read(material);
-
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Normal"));
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }
 
         [Test]
@@ -602,8 +619,6 @@ namespace UVWizard.Core.Tests.LilToon
             material.SetTexture("_BumpMap", map);
             return material;
         }
-
-        const string Lite = "Hidden/lilToonLite";
 
         Material EmittingMaterial(string shader = LilToon)
         {

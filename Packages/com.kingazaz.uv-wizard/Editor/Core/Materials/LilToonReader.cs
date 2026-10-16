@@ -2,6 +2,7 @@
 #nullable enable
 
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
@@ -105,11 +106,12 @@ namespace UVWizard.Core.Materials
             if ((albedo.Texture != null || normal != null) &&
                 Vector(material, "_MainTex_ScrollRotate", Vector4.zero) != Vector4.zero)
                 yield return "Albedo scrolls or rotates: the UV animation isn't baked.";
-            if (ShiftsBackfaceTexels(material, albedo.Texture, albedo.ScaleOffset, albedo.Texture))
+            // Both are sampled with sampler_MainTex, whose wrap mode is the main texture's, or the repeating
+            // default texture's when it's unset.
+            var wrap = albedo.Texture?.wrapModeU ?? TextureWrapMode.Repeat;
+            if (ShiftsBackfaceTexels(material, albedo, wrap))
                 yield return "Albedo shifts backface UVs: backfaces bake the front's texels.";
-            // The normal is sampled with the main texture's sampler, so its wrap mode decides.
-            if (normal != null &&
-                ShiftsBackfaceTexels(material, normal.Texture, normal.ScaleOffset, albedo.Texture ?? normal.Texture))
+            if (normal != null && ShiftsBackfaceTexels(material, normal, wrap))
                 yield return "Normal shifts backface UVs: backfaces bake the front's normals.";
             if (Float(material, "_UseBump2ndMap", 0) > 0.5f && Texture(material, "_Bump2ndMap") != null)
                 yield return "Normal 2nd isn't baked: only the first normal map is.";
@@ -142,16 +144,23 @@ namespace UVWizard.Core.Materials
         }
 
         // lilToon moves backface UVs one tile along U, which samples other texels unless the texture repeats a
-        // whole number of times per tile. The sampler's texture sets the wrap mode.
-        static bool ShiftsBackfaceTexels(Material material, Texture? texture, Vector4 scaleOffset,
-            Texture? sampler) =>
-            Float(material, "_ShiftBackfaceUV", 0) > 0.5f && texture != null &&
-            (scaleOffset.x != Mathf.Round(scaleOffset.x) || sampler!.wrapModeU != TextureWrapMode.Repeat);
+        // whole number of times per tile.
+        static bool ShiftsBackfaceTexels(Material material, ChannelSource channel, TextureWrapMode wrap) =>
+            Float(material, "_ShiftBackfaceUV", 0) > 0.5f && channel.Texture != null &&
+            (channel.ScaleOffset.x != Mathf.Round(channel.ScaleOffset.x) || wrap != TextureWrapMode.Repeat);
 
         static bool IsLite(Material material) => material.shader.name.StartsWith(Lite);
 
-        // The importer picks a format without alpha when it keeps none.
-        static bool HasAlpha(Texture texture) => GraphicsFormatUtility.HasAlphaChannel(texture.graphicsFormat);
+        // An imported map has alpha when its importer keeps some. Its format can't say: BC7 and ASTC have an
+        // alpha channel even when the importer keeps none.
+        static bool HasAlpha(Texture texture)
+        {
+            if (AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(texture)) is TextureImporter importer)
+                return importer.alphaSource == TextureImporterAlphaSource.FromGrayScale ||
+                       importer.alphaSource == TextureImporterAlphaSource.FromInput &&
+                       importer.DoesSourceTextureHaveAlpha();
+            return GraphicsFormatUtility.HasAlphaChannel(texture.graphicsFormat);
+        }
 
         // _MainTexHSVG's neutral value: no hue shift, and saturation, value and gamma of 1.
         static readonly Vector4 NoHsvg = new Vector4(0, 1, 1, 1);
