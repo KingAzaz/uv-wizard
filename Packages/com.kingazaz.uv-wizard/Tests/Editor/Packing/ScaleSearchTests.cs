@@ -16,7 +16,7 @@ namespace UVWizard.Core.Tests.Packing
             var charts = Enumerable.Repeat(Rectangle(20, 20), 12).ToArray();
             var settings = new PackSettings(atlasSize: 64, padding: 2);
 
-            var result = ScaleSearch.Search(charts, settings);
+            var result = Untimed(charts, settings);
 
             Assert.That(result.Fits, Is.True);
             Assert.That(result.FitsAtFullDetail, Is.False);
@@ -33,7 +33,7 @@ namespace UVWizard.Core.Tests.Packing
         {
             var charts = new[] { Rectangle(10, 10), Rectangle(12, 6) };
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 2));
+            var result = Untimed(charts, new PackSettings(atlasSize: 64, padding: 2));
 
             Assert.That(result.Fits, Is.True);
             Assert.That(result.FitsAtFullDetail, Is.True);
@@ -50,8 +50,8 @@ namespace UVWizard.Core.Tests.Packing
             var stacked = new ChartShape(Enumerable.Repeat(single.Corners, 4).SelectMany(c => c).ToArray());
             var settings = new PackSettings(atlasSize: 64, padding: 0);
 
-            var one = ScaleSearch.Search(new[] { single, Rectangle(30, 30) }, settings);
-            var four = ScaleSearch.Search(new[] { stacked, Rectangle(30, 30) }, settings);
+            var one = Untimed(new[] { single, Rectangle(30, 30) }, settings);
+            var four = Untimed(new[] { stacked, Rectangle(30, 30) }, settings);
 
             Assert.That(one.FitsAtFullDetail, Is.False);
             Assert.That(four.Scale, Is.EqualTo(one.Scale));
@@ -64,7 +64,7 @@ namespace UVWizard.Core.Tests.Packing
             var priorities = Enumerable.Repeat(1f, 12).ToArray();
             priorities[3] = 0.5f;
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 2), priorities);
+            var result = Untimed(charts, new PackSettings(atlasSize: 64, padding: 2), priorities);
 
             Assert.That(result.Fits, Is.True);
             Assert.That(result.Packing.Placements[3].Scale, Is.EqualTo(result.Scale * 0.5f));
@@ -78,7 +78,7 @@ namespace UVWizard.Core.Tests.Packing
             // A priority of 3 never upscales its chart, even when the search's scale is above 1/3.
             var charts = new[] { Rectangle(10, 10), Rectangle(10, 10) };
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 0), new[] { 3f, 1f });
+            var result = Untimed(charts, new PackSettings(atlasSize: 64, padding: 0), new[] { 3f, 1f });
 
             Assert.That(result.Scale, Is.EqualTo(1));
             Assert.That(result.Packing.Placements[0].Scale, Is.EqualTo(1));
@@ -90,7 +90,7 @@ namespace UVWizard.Core.Tests.Packing
             // A 64 px atlas has 256 cells of 4 px, and every chart takes at least one.
             var charts = Enumerable.Repeat(Rectangle(10, 10), 300).ToArray();
 
-            var result = ScaleSearch.Search(charts, new PackSettings(atlasSize: 64, padding: 0));
+            var result = Untimed(charts, new PackSettings(atlasSize: 64, padding: 0));
 
             Assert.That(result.Fits, Is.False);
             Assert.That(result.Scale, Is.EqualTo(0));
@@ -100,7 +100,7 @@ namespace UVWizard.Core.Tests.Packing
         [Test]
         public void NoChartsFitAtFullDetail()
         {
-            var result = ScaleSearch.Search(new ChartShape[0], new PackSettings(atlasSize: 64, padding: 0));
+            var result = Untimed(new ChartShape[0], new PackSettings(atlasSize: 64, padding: 0));
 
             Assert.That(result.FitsAtFullDetail, Is.True);
             Assert.That(result.Packing.Placements, Is.Empty);
@@ -149,9 +149,9 @@ namespace UVWizard.Core.Tests.Packing
         static readonly PackSettings NestingSettings = new PackSettings(atlasSize: 64, padding: 0);
 
         // A search the clock can't cut, so its result doesn't depend on the machine's speed.
-        static ScaleSearchResult Untimed(ChartShape[] charts, PackSettings settings,
+        static ScaleSearchResult Untimed(ChartShape[] charts, PackSettings settings, float[] priorities = null,
             int exactPackerChartLimit = ScaleSearch.ExactPackerChartLimit) =>
-            ScaleSearch.Search(charts, settings, null, exactPackerChartLimit, System.TimeSpan.MaxValue);
+            ScaleSearch.Search(charts, settings, priorities, exactPackerChartLimit, System.TimeSpan.MaxValue);
 
         static ScaleSearchResult ShelfOnly(ChartShape[] charts, PackSettings settings) =>
             Untimed(charts, settings, exactPackerChartLimit: 0);

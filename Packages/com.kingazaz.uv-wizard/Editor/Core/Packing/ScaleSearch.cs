@@ -51,7 +51,7 @@ namespace UVWizard.Core.Packing
             int exactPackerChartLimit, TimeSpan timeBudget) =>
             Search(charts, settings, priorities, exactPackerChartLimit, timeBudget, ExactPackerWarmUp.Shared, StartClock);
 
-        /// <param name="startClock">Starts timing the search, and returns whether the given budget is spent.</param>
+        /// <param name="startClock">Starts timing the search against the given budget, and returns whether it is out of time.</param>
         internal static ScaleSearchResult Search(IReadOnlyList<ChartShape> charts, PackSettings settings, IReadOnlyList<float>? priorities,
             int exactPackerChartLimit, TimeSpan timeBudget, ExactPackerWarmUp warmUp, Func<TimeSpan, Func<bool>> startClock)
         {
@@ -177,7 +177,8 @@ namespace UVWizard.Core.Packing
     /// <summary>
     /// Runs <see cref="ScaleSearch.WarmUpExactPacker"/> before a timed search: once after each domain
     /// reload, and again whenever Burst compilation has been switched on or off since, so a search
-    /// never spends its budget compiling jobs.
+    /// doesn't spend its budget compiling jobs. Other Burst options, such as safety checks, can
+    /// still recompile the jobs without a warm-up.
     /// </summary>
     internal sealed class ExactPackerWarmUp
     {
