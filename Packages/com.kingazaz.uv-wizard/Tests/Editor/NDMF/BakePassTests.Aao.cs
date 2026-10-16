@@ -206,7 +206,7 @@ namespace UVWizard.NDMF.Tests
             MobileBuild.Override = true;
             Application.logMessageReceived += Collect;
             List<ErrorContext> errors;
-            try { errors = BesidesSlots(Build(avatar)); }
+            try { errors = Build(avatar); }
             finally { Application.logMessageReceived -= Collect; }
 
             Assert.That(warnings, Has.None.Contains("before initialization"));
@@ -261,7 +261,7 @@ namespace UVWizard.NDMF.Tests
             };
 
             MobileBuild.Override = true;
-            var errors = BesidesSlots(Build(avatar));
+            var errors = Build(avatar);
 
             Assert.That(OwnReports(errors), Has.Exactly(3).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
             var mesh = outer.sharedMesh;
@@ -293,7 +293,7 @@ namespace UVWizard.NDMF.Tests
             tiles.ApplyModifiedPropertiesWithoutUndo();
 
             MobileBuild.Override = true;
-            var errors = BesidesSlots(Build(avatar));
+            var errors = Build(avatar);
 
             Assert.That(OwnReports(errors), Has.Exactly(3).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
             var mesh = target.sharedMesh;
@@ -320,7 +320,7 @@ namespace UVWizard.NDMF.Tests
             removal.Materials = new[] { new RemoveMeshByMask.MaterialSlot { Enabled = true, Mask = mask, Mode = RemoveMeshByMask.RemoveMode.RemoveWhite } };
 
             MobileBuild.Override = true;
-            var errors = BesidesSlots(Build(avatar));
+            var errors = Build(avatar);
 
             Assert.That(OwnReports(errors), Has.Exactly(1).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
             var mesh = target.sharedMesh;

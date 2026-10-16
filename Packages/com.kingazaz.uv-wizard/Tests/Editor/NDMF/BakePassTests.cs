@@ -644,7 +644,7 @@ namespace UVWizard.NDMF.Tests
             WithFx(avatar, swap);
 
             MobileBuild.Override = true;
-            var errors = BesidesSlots(Build(avatar));
+            var errors = Build(avatar);
 
             Assert.That(hat.GetComponent<MeshRenderer>().sharedMaterial.name, Is.EqualTo("Hat blue (UV Wizard)"));
             Assert.That(tail.sharedMaterial.name, Is.EqualTo("Tail blue (UV Wizard)"));
@@ -770,7 +770,7 @@ namespace UVWizard.NDMF.Tests
             WithFx(avatar, toggle);
 
             MobileBuild.Override = true;
-            var errors = BesidesSlots(Build(avatar));
+            var errors = Build(avatar);
 
             var clip = FxClips(avatar).Single();
             Material SwapOn(string path) => (Material)AnimationUtility.GetObjectReferenceCurve(clip,
