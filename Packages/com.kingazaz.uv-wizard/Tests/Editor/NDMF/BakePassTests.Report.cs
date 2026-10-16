@@ -34,7 +34,7 @@ namespace UVWizard.NDMF.Tests
             Assert.That(report.AvatarName, Is.EqualTo("Avatar"));
             Assert.That(report.Materials.Select(row => (row.Outcome, row.Material, row.Renderers.Single())),
                 Is.EqualTo(new[] { (MaterialOutcome.Flagged, doubleSided, (Renderer)hat) }));
-            Assert.That(report.Materials[0].Reason, Does.Contain("cull"));
+            Assert.That(report.Materials[0].Reason.Text(Messages.Text), Does.Contain("cull"));
             Assert.That(report.PackingLines.Select(line => line.Key), Is.EqualTo(new[] { ReportText.ExactPacker }));
             Assert.That(report.Target, Is.EqualTo(PerformanceRank.Good));
         }
@@ -92,6 +92,28 @@ namespace UVWizard.NDMF.Tests
             foreach (var key in keys)
                 Assert.That(Messages.Localizer.TryGetLocalizedString(key, out _), Is.True, key);
         }
+
+        [Test]
+        public void EveryReasonHasEnglish()
+        {
+            foreach (var key in ReasonKeys())
+                Assert.That(Messages.Localizer.TryGetLocalizedString(key, out _), Is.True, key);
+        }
+
+        // A creator reads these without knowing how the bake splits a mesh up or numbers its UV maps.
+        [Test]
+        public void NoReasonUsesTheBakesOwnTerms()
+        {
+            foreach (var key in ReasonKeys())
+                Assert.That(Messages.Text(key), Does.Not.Contain("island").IgnoreCase.And.Not.Contain("chart").IgnoreCase
+                    .And.Not.Contain("submesh").IgnoreCase.And.Not.Contain("UV0").IgnoreCase, key);
+        }
+
+        static System.Collections.Generic.IEnumerable<string> ReasonKeys() =>
+            typeof(ReasonText).GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue())
+                .Concat(new[] { Core.Materials.Channel.Albedo, Core.Materials.Channel.Emission, Core.Materials.Channel.Normal }
+                    .Select(channel => ReasonText.Channel(channel).Key));
 
         [Test]
         public void ClickingAListedMaterialSelectsIt()

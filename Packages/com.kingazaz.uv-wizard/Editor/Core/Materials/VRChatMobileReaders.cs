@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using UnityEngine;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Materials
 {
@@ -26,7 +27,7 @@ namespace UVWizard.Core.Materials
                 ? new ChannelSource(normalMap, Color.white, scaleOffset, 0, material.GetFloat("_BumpScale"))
                 : null;
             // Vertex colouring isn't flagged: the merged material multiplies it in too whenever a source uses it.
-            var reasons = new List<string>();
+            var reasons = new List<Reason>();
             if (MaterialProperties.DetailOnUv0(material, "_DETAIL", "_UVSec"))
                 reasons.Add(MaterialProperties.DetailMapsDropped);
             var reading = Reading(albedo, emission, normal, reasons,
@@ -82,31 +83,31 @@ namespace UVWizard.Core.Materials
         // AudioLink aren't listed: the merged Toon Standard material can turn them back on for the whole avatar.
         // Hue shift and colour mask are dynamic-branch keywords; the inspector turns a group off by clearing its
         // keyword alone, so a turned-off group keeps its values.
-        static List<string> ToonStandardDropped(Material material, bool emits, bool outline)
+        static List<Reason> ToonStandardDropped(Material material, bool emits, bool outline)
         {
-            var reasons = new List<string>();
+            var reasons = new List<Reason>();
             var detailMaps = material.IsKeywordEnabled("USE_DETAIL_MAPS");
             // Each layer's shift shows only where the layer does: emission that glows, detail maps that are on.
             if (material.IsKeywordEnabled("USE_HUE_SHIFT") &&
                 (material.GetFloat("_HueShift") != 0 || emits && material.GetFloat("_EmissionHueShift") != 0 ||
                  detailMaps && material.GetFloat("_DetailHueShift") != 0))
-                reasons.Add("Hue shift isn't baked: colours keep their unshifted hue.");
+                reasons.Add(new Reason(ReasonText.HueShiftDropped));
             // _ColorMask defaults to black, which has no effect. Its emission glows even with a black _EmissionColor.
             if (material.IsKeywordEnabled("USE_COLOR_MASK") && material.GetTexture("_ColorMask") != null)
-                reasons.Add("Colour mask isn't baked: its colours and glow are dropped.");
+                reasons.Add(new Reason(ReasonText.ColourMaskDropped));
             if (material.IsKeywordEnabled("USE_MATCAP"))
-                reasons.Add("Matcap isn't baked: its reflections are dropped.");
+                reasons.Add(new Reason(ReasonText.MatcapDropped));
             if (MaterialProperties.DetailOnUv0(material, "USE_DETAIL_MAPS", "_DetailUV"))
                 reasons.Add(MaterialProperties.DetailMapsDropped);
             if (outline && material.GetFloat("_OutlineThickness") > 0)
-                reasons.Add("Outline is dropped: the merged material has no outline.");
+                reasons.Add(new Reason(ReasonText.OutlineDropped));
             return reasons;
         }
 
         static SourceMaterialReading Reading(ChannelSource albedo, ChannelSource? emission, ChannelSource? normal,
-            List<string> reasons, bool usesVertexColour) =>
+            List<Reason> reasons, bool usesVertexColour) =>
             new SourceMaterialReading(albedo, emission, normal,
-                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged,
-                reasons.Count == 0 ? null : string.Join(" ", reasons), usesVertexColour);
+                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged, Reason.Of(reasons),
+                usesVertexColour);
     }
 }

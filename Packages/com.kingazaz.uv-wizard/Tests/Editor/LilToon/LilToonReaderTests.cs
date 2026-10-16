@@ -6,6 +6,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using UVWizard.Core.Materials;
+using UVWizard.Core.Reporting;
 using UVWizard.Core.Tests.Materials;
 
 namespace UVWizard.Core.Tests.LilToon
@@ -28,7 +29,7 @@ namespace UVWizard.Core.Tests.LilToon
 
             var reading = SourceShaderReader.Read(material);
 
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{reading.Reason}");
             Assert.That(reading.Albedo, Is.Not.Null);
             Assert.That(reading.Albedo!.Texture, Is.SameAs(texture));
             AssertColour(new Color(0.25f, 0.5f, 1f, 1f), reading.Albedo.Tint);
@@ -129,10 +130,10 @@ namespace UVWizard.Core.Tests.LilToon
             Assert.That(SourceShaderReader.Read(unset).Normal, Is.Null, "unset");
         }
 
-        [TestCase(1, "UV1")]
-        [TestCase(3, "UV3")]
-        [TestCase(4, "rim")]
-        public void AnEmissionMapOffUv0ExcludesTheMaterial(int uvMode, string named)
+        [TestCase(1, ReasonText.ChannelOffMainUvs)]
+        [TestCase(3, ReasonText.ChannelOffMainUvs)]
+        [TestCase(4, ReasonText.LilToonRimMapped)]
+        public void AnEmissionMapOffUv0ExcludesTheMaterial(int uvMode, string reason)
         {
             var material = Material(LilToon);
             material.SetFloat("_UseEmission", 1);
@@ -142,7 +143,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Does.Contain(named));
+            Assert.That(reading.Reason!.Keys, Is.EqualTo(new[] { reason }));
         }
 
         [Test]
@@ -157,21 +158,21 @@ namespace UVWizard.Core.Tests.LilToon
         }
 
         // lilToon switches shaders to change its rendering mode.
-        [TestCase("Hidden/lilToonCutout", "Cutout")]
-        [TestCase("Hidden/lilToonLiteCutout", "Cutout")]
-        [TestCase("Hidden/lilToonTessellationCutout", "Cutout")]
-        [TestCase("Hidden/lilToonTransparent", "Transparent")]
-        [TestCase("Hidden/lilToonOnePassTransparent", "Transparent")]
-        [TestCase("Hidden/lilToonTwoPassTransparent", "Transparent")]
-        [TestCase("Hidden/lilToonLiteTransparent", "Transparent")]
-        [TestCase("Hidden/lilToonRefraction", "Transparent")]
-        [TestCase("Hidden/lilToonGem", "Transparent")]
+        [TestCase("Hidden/lilToonCutout", ReasonText.CutoutDropped)]
+        [TestCase("Hidden/lilToonLiteCutout", ReasonText.CutoutDropped)]
+        [TestCase("Hidden/lilToonTessellationCutout", ReasonText.CutoutDropped)]
+        [TestCase("Hidden/lilToonTransparent", ReasonText.TransparencyDropped)]
+        [TestCase("Hidden/lilToonOnePassTransparent", ReasonText.TransparencyDropped)]
+        [TestCase("Hidden/lilToonTwoPassTransparent", ReasonText.TransparencyDropped)]
+        [TestCase("Hidden/lilToonLiteTransparent", ReasonText.TransparencyDropped)]
+        [TestCase("Hidden/lilToonRefraction", ReasonText.TransparencyDropped)]
+        [TestCase("Hidden/lilToonGem", ReasonText.TransparencyDropped)]
         public void CutoutAndTransparentShadersAreFlagged(string shader, string reason)
         {
             var reading = SourceShaderReader.Read(Material(shader));
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith(reason));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(reason));
         }
 
         [TestCase("lilToon")]
@@ -182,16 +183,16 @@ namespace UVWizard.Core.Tests.LilToon
         {
             var reading = SourceShaderReader.Read(Material(shader));
 
-            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), $"{reading.Reason}");
         }
 
         // lilToonMulti keeps its rendering mode in _TransparentMode, also on the Hidden variants it switches to.
-        [TestCase(1, "Cutout")]
-        [TestCase(2, "Transparent")]
-        [TestCase(3, "Transparent")]
-        [TestCase(6, "Transparent")]
-        [TestCase(4, "Fur")]
-        [TestCase(5, "Cutout")]
+        [TestCase(1, ReasonText.CutoutDropped)]
+        [TestCase(2, ReasonText.TransparencyDropped)]
+        [TestCase(3, ReasonText.TransparencyDropped)]
+        [TestCase(6, ReasonText.TransparencyDropped)]
+        [TestCase(4, ReasonText.LilToonFur)]
+        [TestCase(5, ReasonText.CutoutDropped)]
         public void LilToonMultiIsFlaggedByItsRenderingMode(int mode, string reason)
         {
             var material = Material("_lil/lilToonMulti");
@@ -200,14 +201,14 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith(reason));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(reason));
         }
 
         // Each changes the colours lilToon renders in a way the bake doesn't reproduce.
-        [TestCase("_UseMain2ndTex", "Albedo")]
-        [TestCase("_UseMain3rdTex", "Albedo")]
-        [TestCase("_MainGradationStrength", "Albedo")]
-        [TestCase("_UseEmission2nd", "Emission")]
+        [TestCase("_UseMain2ndTex", ReasonText.LilToonMainLayers)]
+        [TestCase("_UseMain3rdTex", ReasonText.LilToonMainLayers)]
+        [TestCase("_MainGradationStrength", ReasonText.LilToonColourAdjusted)]
+        [TestCase("_UseEmission2nd", ReasonText.LilToonEmission2nd)]
         public void FeaturesTheBakeCantReproduceAreFlagged(string property, string reason)
         {
             var material = Material(LilToon);
@@ -216,7 +217,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith(reason));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(reason));
         }
 
         [Test]
@@ -228,7 +229,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Albedo"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonColourAdjusted));
         }
 
         // The main texture's scroll moves the normal map too, since it is sampled at the main UVs.
@@ -244,7 +245,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Albedo"));
+            Assert.That(reading.Reason!.Lines.First(), Is.EqualTo(new ReportLine(ReasonText.LilToonScrollsOrRotates, ReasonText.Channel(Channel.Albedo))));
         }
 
         [Test]
@@ -266,7 +267,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Lines.First(), Is.EqualTo(new ReportLine(ReasonText.LilToonScrollsOrRotates, ReasonText.Channel(Channel.Emission))));
         }
 
         [Test]
@@ -287,15 +288,15 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonMainColour));
         }
 
         // Each changes the emission lilToon renders in a way the bake doesn't reproduce.
-        [TestCase("_EmissionUseGrad", 1f)]
-        [TestCase("_EmissionFluorescence", 0.5f)]
-        [TestCase("_EmissionBlendMode", 0f)]
-        [TestCase("_EmissionBlendMode", 2f)]
-        public void EmissionFeaturesTheBakeCantReproduceAreFlagged(string property, float value)
+        [TestCase("_EmissionUseGrad", 1f, ReasonText.LilToonGradation)]
+        [TestCase("_EmissionFluorescence", 0.5f, ReasonText.LilToonFluorescent)]
+        [TestCase("_EmissionBlendMode", 0f, ReasonText.LilToonNotAdded)]
+        [TestCase("_EmissionBlendMode", 2f, ReasonText.LilToonNotAdded)]
+        public void EmissionFeaturesTheBakeCantReproduceAreFlagged(string property, float value, string reason)
         {
             var material = EmittingMaterial();
             material.SetFloat(property, value);
@@ -303,7 +304,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(reason));
         }
 
         [Test]
@@ -315,7 +316,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.EmissionBlinks));
         }
 
         [Test]
@@ -328,7 +329,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Normal"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonNormal2nd));
         }
 
         [Test]
@@ -356,7 +357,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Albedo"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonAlbedoBackface));
         }
 
         [Test]
@@ -371,7 +372,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Albedo"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonAlbedoBackface));
         }
 
         [Test]
@@ -404,7 +405,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.EmissionMasked));
         }
 
         [Test]
@@ -448,7 +449,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonTriMask));
         }
 
         [Test]
@@ -472,7 +473,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonEmissionAlpha));
         }
 
         [Test]
@@ -533,7 +534,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonAudioLink));
         }
 
         [TestCase(1, 0)]
@@ -558,7 +559,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Normal"));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(ReasonText.LilToonNormalBackface));
         }
 
         [Test]
@@ -573,7 +574,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Normal shifts"));
+            Assert.That(reading.Reason!.Keys, Does.Contain(ReasonText.LilToonNormalBackface));
         }
 
         // Without a main texture, sampler_MainTex is the default white texture's, which repeats.
@@ -627,19 +628,19 @@ namespace UVWizard.Core.Tests.LilToon
             return material;
         }
 
-        [TestCase("Hidden/lilToonOutline", "Outline")]
-        [TestCase("Hidden/lilToonCutoutOutline", "Outline")]
-        [TestCase("Hidden/lilToonFur", "Fur")]
-        public void OutlineAndFurShadersAreFlagged(string shader, string named)
+        [TestCase("Hidden/lilToonOutline", ReasonText.OutlineDropped)]
+        [TestCase("Hidden/lilToonCutoutOutline", ReasonText.OutlineDropped)]
+        [TestCase("Hidden/lilToonFur", ReasonText.LilToonFur)]
+        public void OutlineAndFurShadersAreFlagged(string shader, string reason)
         {
             var reading = SourceShaderReader.Read(Material(shader));
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain(named));
+            Assert.That(reading.Reason!.Keys, Does.Contain(reason));
         }
 
-        [TestCase("Hidden/lilToonMultiOutline", 2, "Transparent")]
-        [TestCase("Hidden/lilToonMultiFur", 5, "Cutout")]
+        [TestCase("Hidden/lilToonMultiOutline", 2, ReasonText.TransparencyDropped)]
+        [TestCase("Hidden/lilToonMultiFur", 5, ReasonText.CutoutDropped)]
         public void LilToonMultiVariantsAreFlaggedByTheirRenderingMode(string shader, int mode, string reason)
         {
             var material = Material(shader);
@@ -648,7 +649,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith(reason));
+            Assert.That(reading.Reason!.Keys.First(), Is.EqualTo(reason));
         }
 
         [Test]
@@ -660,7 +661,7 @@ namespace UVWizard.Core.Tests.LilToon
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.Contain("Outline"));
+            Assert.That(reading.Reason!.Keys, Does.Contain(ReasonText.OutlineDropped));
         }
 
         // The [Optional] shaders draw an extra layer over another material slot's surface.

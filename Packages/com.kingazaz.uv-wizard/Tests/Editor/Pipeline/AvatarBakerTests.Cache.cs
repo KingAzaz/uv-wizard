@@ -12,6 +12,7 @@ using UnityEngine.TestTools;
 using UVWizard.Core.Baking;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Tests.Pipeline
 {
@@ -83,7 +84,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var cached = Bake(CachedOptions(), TooBright());
 
             Assert.That(cached.FromCache, Is.True);
-            Assert.That(cached.Flagged.Select(note => note.Reason), Has.Some.Contains("glows less"));
+            Assert.That(cached.Flagged.SelectMany(note => note.Reason.Keys), Has.Some.EqualTo(ReasonText.GlowsLessMerged));
         }
 
         [Test]

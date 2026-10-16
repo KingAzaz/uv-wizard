@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using UnityEngine;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Materials
 {
@@ -50,7 +51,7 @@ namespace UVWizard.Core.Materials
 
             var usesVertexColour = properties.Float("_MainVertexColoringEnabled", 0) > 0.5f &&
                                    properties.Float("_MainVertexColoring", 0) > 0;
-            var reasons = new List<string>();
+            var reasons = new List<Reason>();
             var mode = (int)properties.Float("_Mode", Opaque);
             if (mode == Cutout || mode == TransClipping)
                 reasons.Add(MaterialProperties.CutoutDropped);
@@ -59,20 +60,19 @@ namespace UVWizard.Core.Materials
             // An unset texture samples its plain default, so panning it moves nothing.
             foreach (var (channel, texture, source) in textures)
                 if (source.Texture != null && properties.Pan(texture) != Vector2.zero)
-                    reasons.Add($"{channel} pans: the scrolling becomes static.");
+                    reasons.Add(new Reason(ReasonText.Pans, ReasonText.Channel(channel)));
             reasons.AddRange(Unbaked(properties, emission != null));
             if (properties.Unresolved.Count > 0)
-                reasons.Add($"Renamed {string.Join(", ", properties.Unresolved)} can't be told apart: " +
-                            "the lock recorded no suffix, so the saved values are baked.");
+                reasons.Add(new Reason(ReasonText.RenamedUnresolved, string.Join(", ", properties.Unresolved)));
             var reading = new SourceMaterialReading(albedo, emission, normal,
-                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged,
-                reasons.Count == 0 ? null : string.Join(" ", reasons), usesVertexColour);
+                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged, Reason.Of(reasons),
+                usesVertexColour);
 
             // UV1 to UV3 are left to SourceShaderReader; the modes past them aren't UV channels at all.
             foreach (var (channel, _, source) in textures)
                 if (source.UvChannel > 3)
-                    return reading.Excluded(
-                        $"{channel} is mapped by {UvMode(source.UvChannel)}: the atlas remaps UV0 only.");
+                    return reading.Excluded(new Reason(ReasonText.ChannelMappedWithoutUvs, ReasonText.Channel(channel),
+                        UvMode(source.UvChannel)));
             return reading;
         }
 
@@ -91,56 +91,55 @@ namespace UVWizard.Core.Materials
             properties.Float("_EmissionStrength", 0) * properties.Color("_EmissionColor", Color.white).a;
 
         // Features that change the colours Poiyomi renders in ways the bake doesn't reproduce.
-        static IEnumerable<string> Unbaked(Properties properties, bool emits)
+        static IEnumerable<Reason> Unbaked(Properties properties, bool emits)
         {
             if (properties.Float("_ColorThemeIndex", 0) != 0)
-                yield return "Albedo takes a theme colour: the saved colour is baked.";
+                yield return new Reason(ReasonText.PoiyomiAlbedoTheme);
             if (properties.Float("_MainColorAdjustToggle", 0) > 0.5f)
-                yield return "Albedo is colour-adjusted: hue, saturation, brightness and gamma aren't baked.";
+                yield return new Reason(ReasonText.PoiyomiColourAdjusted);
             if (Decals.Any(decal => properties.Float(decal, 0) > 0.5f))
-                yield return "Albedo has decals: decals aren't baked.";
+                yield return new Reason(ReasonText.PoiyomiDecals);
             if (properties.Float("_DetailEnabled", 0) > 0.5f)
-                yield return "Albedo takes detail textures: the detail texture and normal aren't baked.";
+                yield return new Reason(ReasonText.PoiyomiDetail);
             if (properties.Float("_EnableEmission", 0) > 0.5f)
             {
                 // These two glow even where the bake reads no emission: a theme colour replaces the saved
                 // colour's rgb, and AudioLink adds to the saved strength before the colour's alpha scales it.
-                var dropped = emits ? null : "the glow isn't baked.";
                 var audioLink = properties.Float("_EnableAudioLink", 0) > 0.5f;
                 // poiThemeColor reads the ColorChord and AudioLink theme slots, index 5 on, only with AudioLink.
                 var theme = properties.Float("_EmissionColorThemeIndex", 0);
                 if (theme != 0 && (theme <= 4 || audioLink) && EmissionStrength(properties) > 0)
-                    yield return "Emission takes a theme colour: " + (dropped ?? "the saved colour is baked.");
+                    yield return new Reason(emits ? ReasonText.PoiyomiEmissionTheme : ReasonText.PoiyomiEmissionThemeNoGlow);
                 if (audioLink && properties.Float("_EmissionAL0Enabled", 0) > 0.5f &&
                     properties.Color("_EmissionColor", Color.white).a > 0)
-                    yield return "Emission reacts to AudioLink: " + (dropped ?? "the saved strength is baked.");
+                    yield return new Reason(emits ? ReasonText.PoiyomiAudioLink : ReasonText.PoiyomiAudioLinkNoGlow);
             }
             if (emits)
             {
                 if (properties.Float("_EmissionBaseColorAsMap", 0) > 0.5f)
-                    yield return "Emission takes the base colour: only the emission colour is baked.";
+                    yield return new Reason(ReasonText.PoiyomiBaseColour);
                 if (properties.Texture("_EmissionMask") != null)
-                    yield return "Emission is masked: the mask isn't baked.";
+                    yield return new Reason(ReasonText.EmissionMasked);
                 if (properties.Float("_EmissionBlinkingEnabled", 0) > 0.5f)
-                    yield return "Emission blinks: the glow is baked steady.";
+                    yield return new Reason(ReasonText.EmissionBlinks);
                 if (properties.Float("_ScrollingEmission", 0) > 0.5f)
-                    yield return "Emission scrolls: the glow is baked steady.";
+                    yield return new Reason(ReasonText.PoiyomiScrolls);
                 if (properties.Float("_EmissionCenterOutEnabled", 0) > 0.5f)
-                    yield return "Emission moves from the centre out: the emission map is baked still.";
+                    yield return new Reason(ReasonText.PoiyomiCentreOut);
                 if (properties.Float("_EnableGITDEmission", 0) > 0.5f)
-                    yield return "Emission follows the lighting: the saved strength is baked.";
+                    yield return new Reason(ReasonText.PoiyomiFollowsLighting);
                 if (properties.Float("_EmissionHueShiftEnabled", 0) > 0.5f)
-                    yield return "Emission is hue-shifted: the saved colour is baked.";
+                    yield return new Reason(ReasonText.PoiyomiHueShifted);
                 if (properties.Float("_EmissionReplace0", 0) > 0.5f)
-                    yield return "Emission overrides the base colour: the glow is baked on top of it.";
+                    yield return new Reason(ReasonText.PoiyomiReplacesBase);
                 if (properties.Float("_EmissionMaskInvert", 0) > 0.5f)
-                    yield return "Emission's mask is inverted: the glow is baked unmasked.";
+                    yield return new Reason(ReasonText.PoiyomiMaskInverted);
                 if (properties.Float("_EmissionMask0GlobalMask", 0) > 0)
-                    yield return "Emission takes a global mask: the glow is baked unmasked.";
+                    yield return new Reason(ReasonText.PoiyomiGlobalMask);
             }
             for (var i = 1; i <= 3; i++)
                 if (properties.Float($"_EnableEmission{i}", 0) > 0.5f)
-                    yield return $"Emission {i} isn't baked: only the first emission is.";
+                    yield return new Reason(ReasonText.PoiyomiExtraEmission, i);
         }
 
         // A texture as Poiyomi samples it: with its own _ST, from the mesh UVs its {texture}UV selector names.
@@ -152,7 +151,9 @@ namespace UVWizard.Core.Materials
             return new ChannelSource(map, tint, properties.ScaleOffset(texture), uv, strength);
         }
 
-        static string UvMode(int uv) => uv >= 0 && uv < UvModes.Length ? UvModes[uv] : $"UV mode {uv}";
+        // A mode past UV3 by its name in Poiyomi's inspector, or a line naming its number for a mode Poiyomi added later.
+        static object UvMode(int uv) =>
+            uv > 3 && uv < UvModes.Length ? UvModes[uv] : (object)new ReportLine(ReasonText.UvMode, uv);
 
         /// <summary>
         /// A Poiyomi material's properties, read under the names its shader declares them by. Locking strips

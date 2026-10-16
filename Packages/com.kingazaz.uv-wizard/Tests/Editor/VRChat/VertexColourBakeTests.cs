@@ -5,6 +5,7 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Tests.VRChat
 {
@@ -35,7 +36,7 @@ namespace UVWizard.Core.Tests.VRChat
             foreach (var renderer in renderers) Keep(renderer.GetComponent<MeshFilter>().sharedMesh);
 
             Assume.That(result.MergedMaterial!.GetFloat("_Glossiness"), Is.EqualTo(1));
-            Assert.That(result.Flagged.Where(note => note.Reason.Contains("vertex colours")).Select(note => note.Material),
+            Assert.That(result.Flagged.Where(note => note.Reason.Keys.Contains(ReasonText.VertexColours)).Select(note => note.Material),
                 Is.EqualTo(new[] { standard }));
         }
 

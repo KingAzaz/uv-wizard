@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.Core.Materials
 {
@@ -44,29 +45,28 @@ namespace UVWizard.Core.Materials
         {
             if (material.shader.name.StartsWith(AddOns))
                 return new SourceMaterialReading(null, null, null, MaterialVerdict.Excluded,
-                    $"{material.shader.name} draws a layer over another material: it has no surface to bake.");
+                    new Reason(ReasonText.LilToonAddOn, material.shader.name));
 
             var albedo = new ChannelSource(Texture(material, "_MainTex"), Colour(material, "_Color", Color.white),
                 ScaleOffset(material, "_MainTex"), 0);
             var emission = Emission(material);
             var normal = Normal(material);
 
-            var reasons = new List<string>();
+            var reasons = new List<Reason>();
             reasons.AddRange(RenderingMode(material));
             reasons.AddRange(Unbaked(material, albedo, normal, emission));
             var reading = new SourceMaterialReading(albedo, emission, normal,
-                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged,
-                reasons.Count == 0 ? null : string.Join(" ", reasons));
+                reasons.Count == 0 ? MaterialVerdict.Merged : MaterialVerdict.Flagged, Reason.Of(reasons));
 
             // UV1 to UV3 are left to SourceShaderReader; the rim mode isn't a UV channel at all.
             if (emission?.UvChannel == RimUv)
-                return reading.Excluded("Emission is mapped by the rim: the atlas remaps UV0 only.");
+                return reading.Excluded(new Reason(ReasonText.LilToonRimMapped));
             return reading;
         }
 
         // What the rendering mode loses: alpha, outlines and fur. lilToonMulti and its variants keep the mode in
         // properties; every other lilToon shader names its mode.
-        static IEnumerable<string> RenderingMode(Material material)
+        static IEnumerable<Reason> RenderingMode(Material material)
         {
             var shader = material.shader.name;
             bool cutout, transparent, outline, fur;
@@ -88,59 +88,59 @@ namespace UVWizard.Core.Materials
             }
             if (cutout) yield return MaterialProperties.CutoutDropped;
             if (transparent) yield return MaterialProperties.TransparencyDropped;
-            if (outline) yield return "Outline isn't baked: Toon Standard has no outline.";
-            if (fur) yield return "Fur isn't baked: only the surface under it is.";
+            if (outline) yield return new Reason(ReasonText.OutlineDropped);
+            if (fur) yield return new Reason(ReasonText.LilToonFur);
         }
 
         // Features that change the colours lilToon renders in ways the bake doesn't reproduce.
-        static IEnumerable<string> Unbaked(Material material, ChannelSource albedo, ChannelSource? normal,
+        static IEnumerable<Reason> Unbaked(Material material, ChannelSource albedo, ChannelSource? normal,
             ChannelSource? emission)
         {
             if (Float(material, "_UseMain2ndTex", 0) > 0.5f || Float(material, "_UseMain3rdTex", 0) > 0.5f)
-                yield return "Albedo has a 2nd or 3rd main colour layer: only the first is baked.";
+                yield return new Reason(ReasonText.LilToonMainLayers);
             if (Vector(material, "_MainTexHSVG", NoHsvg) != NoHsvg ||
                 Float(material, "_MainGradationStrength", 0) > 0)
-                yield return "Albedo is colour-adjusted: hue, saturation, value, gamma and gradation aren't baked.";
+                yield return new Reason(ReasonText.LilToonColourAdjusted);
             // The normal map is sampled at the main UVs, so it moves with them. An unset texture samples its
             // plain default, so moving it changes nothing.
             if ((albedo.Texture != null || normal != null) &&
                 Vector(material, "_MainTex_ScrollRotate", Vector4.zero) != Vector4.zero)
-                yield return "Albedo scrolls or rotates: the UV animation isn't baked.";
+                yield return new Reason(ReasonText.LilToonScrollsOrRotates, ReasonText.Channel(Channel.Albedo));
             // Both are sampled with sampler_MainTex, whose wrap mode is the main texture's, or the repeating
             // default texture's when it's unset.
             var wrap = albedo.Texture?.wrapModeU ?? TextureWrapMode.Repeat;
             if (ShiftsBackfaceTexels(material, albedo, wrap))
-                yield return "Albedo shifts backface UVs: backfaces bake the front's texels.";
+                yield return new Reason(ReasonText.LilToonAlbedoBackface);
             if (normal != null && ShiftsBackfaceTexels(material, normal, wrap))
-                yield return "Normal shifts backface UVs: backfaces bake the front's normals.";
+                yield return new Reason(ReasonText.LilToonNormalBackface);
             if (Float(material, "_UseBump2ndMap", 0) > 0.5f && Texture(material, "_Bump2ndMap") != null)
-                yield return "Normal 2nd isn't baked: only the first normal map is.";
+                yield return new Reason(ReasonText.LilToonNormal2nd);
             if (emission != null)
             {
                 if (emission.Texture != null &&
                     Vector(material, "_EmissionMap_ScrollRotate", Vector4.zero) != Vector4.zero)
-                    yield return "Emission scrolls or rotates: the UV animation isn't baked.";
+                    yield return new Reason(ReasonText.LilToonScrollsOrRotates, ReasonText.Channel(Channel.Emission));
                 if (Float(material, "_EmissionMainStrength", 0) > 0)
-                    yield return "Emission takes the main colour: only the emission colour is baked.";
+                    yield return new Reason(ReasonText.LilToonMainColour);
                 if (Texture(material, "_EmissionBlendMask") != null)
-                    yield return "Emission is masked: the mask isn't baked.";
+                    yield return new Reason(ReasonText.EmissionMasked);
                 if ((int)Float(material, "_EmissionBlendMode", AddBlend) != AddBlend)
-                    yield return "Emission doesn't add: it's baked as added glow.";
+                    yield return new Reason(ReasonText.LilToonNotAdded);
                 if (Vector(material, "_EmissionBlink", Vector4.zero).x != 0)
-                    yield return "Emission blinks: it's baked steady.";
+                    yield return new Reason(ReasonText.EmissionBlinks);
                 if (Float(material, "_EmissionUseGrad", 0) > 0.5f)
-                    yield return "Emission has a gradation: the gradation isn't baked.";
+                    yield return new Reason(ReasonText.LilToonGradation);
                 if (Float(material, "_EmissionFluorescence", 0) > 0)
-                    yield return "Emission is fluorescent: it's baked as if lit.";
+                    yield return new Reason(ReasonText.LilToonFluorescent);
                 if (Float(material, "_UseAudioLink", 0) > 0.5f && Float(material, "_AudioLink2Emission", 0) > 0.5f)
-                    yield return "Emission follows AudioLink: it's baked steady.";
+                    yield return new Reason(ReasonText.LilToonAudioLink);
                 if (IsLite(material) && Texture(material, "_TriMask") != null)
-                    yield return "Emission is masked by the TriMask: the mask isn't baked.";
+                    yield return new Reason(ReasonText.LilToonTriMask);
                 if (!IsLite(material) && emission.Texture != null && HasAlpha(emission.Texture))
-                    yield return "Emission map has alpha: lilToon scales the glow by it, the bake doesn't.";
+                    yield return new Reason(ReasonText.LilToonEmissionAlpha);
             }
             if (Float(material, "_UseEmission2nd", 0) > 0.5f)
-                yield return "Emission 2nd isn't baked: only the first emission is.";
+                yield return new Reason(ReasonText.LilToonEmission2nd);
         }
 
         // lilToon moves backface UVs one tile along U, which samples other texels unless the texture repeats a

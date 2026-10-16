@@ -5,7 +5,9 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UVWizard.Core.Materials;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 using UVWizard.Core.Tests.Materials;
 
 namespace UVWizard.Core.Tests.LilToon
@@ -48,7 +50,8 @@ namespace UVWizard.Core.Tests.LilToon
             Assert.That(renderer.sharedMaterials.Last(), Is.SameAs(outline));
             Assert.That(result.ConvertedMaterials.Select(c => c.Source), Has.No.Member(outline));
             Assert.That(result.Unconverted.Select(note => note.Material), Is.EqualTo(new[] { outline }));
-            Assert.That(result.Unconverted[0].Reason, Does.Contain("no surface"));
+            Assert.That(result.Unconverted[0].Reason, Is.EqualTo(new Reason(ReasonText.LilToonAddOn, outline.shader.name)
+                .Then(new Reason(ReasonText.NoSurface))));
         }
 
         [Test]
@@ -77,10 +80,11 @@ namespace UVWizard.Core.Tests.LilToon
             if (result.Atlas != null) Track(result.Atlas);
             foreach (var (_, rewritten) in result.ReplacedMeshes) Track(rewritten);
 
-            Assert.That(result.Excluded.Single().Reason, Does.Contain("UV1"));
+            Assert.That(result.Excluded.Single().Reason,
+                Is.EqualTo(new Reason(ReasonText.ChannelOffMainUvs, ReasonText.Channel(Channel.Emission), 1)));
             Assert.That(result.ConvertedMaterials.Select(c => c.Source), Is.EqualTo(new[] { glass }));
-            Assert.That(result.Flagged.Where(note => note.Material == glass).Select(note => note.Reason),
-                Has.Some.Contains("Transparent becomes opaque"));
+            Assert.That(result.Flagged.Where(note => note.Material == glass).SelectMany(note => note.Reason.Keys),
+                Has.Some.EqualTo(ReasonText.TransparencyDropped));
         }
     }
 }

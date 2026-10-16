@@ -77,13 +77,13 @@ namespace UVWizard.NDMF
             if (!result.Fits) ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.NoFit);
             foreach (var note in result.Excluded)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Excluded,
-                    note.Material, note.Renderer, note.Reason);
+                    note.Material, note.Renderer, note.Reason.Text(Messages.Text));
             foreach (var note in result.Unconverted)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Unconverted,
-                    note.Material, note.Renderer, note.Reason);
+                    note.Material, note.Renderer, note.Reason.Text(Messages.Text));
             foreach (var note in result.Flagged)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Flagged,
-                    note.Material, note.Renderer, note.Reason);
+                    note.Material, note.Renderer, note.Reason.Text(Messages.Text));
             return result;
         }
     }

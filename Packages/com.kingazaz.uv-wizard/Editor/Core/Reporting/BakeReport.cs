@@ -72,7 +72,7 @@ namespace UVWizard.Core.Reporting
                     var onRenderers = group.GroupBy(note => note.Renderer).Select(byRenderer => byRenderer.First()).ToList();
                     return new MaterialRow(outcome, group.Key, onRenderers.Select(note => note.Renderer).ToList(),
                         onRenderers.Select(note => note.RendererName).ToList(),
-                        string.Join(" ", group.Select(note => note.Reason).Distinct()));
+                        Reason.Of(group.Select(note => note.Reason).Distinct())!);
                 });
             return Grouped(result.Excluded, MaterialOutcome.Excluded)
                 .Concat(Grouped(result.Flagged, MaterialOutcome.Flagged)).ToList();
@@ -143,7 +143,7 @@ namespace UVWizard.Core.Reporting
     internal sealed class MaterialRow
     {
         public MaterialRow(MaterialOutcome outcome, Material material, IReadOnlyList<Renderer> renderers,
-            IReadOnlyList<string> rendererNames, string reason)
+            IReadOnlyList<string> rendererNames, Reason reason)
         {
             Outcome = outcome;
             Material = material;
@@ -159,7 +159,7 @@ namespace UVWizard.Core.Reporting
 
         /// <summary>The renderers' names, kept for when the renderers are gone.</summary>
         public IReadOnlyList<string> RendererNames { get; }
-        public string Reason { get; }
+        public Reason Reason { get; }
     }
 
     /// <summary>Why Avatar Optimizer kept a renderer apart from the avatar's main skinned mesh (ADR 0001).</summary>
@@ -214,7 +214,7 @@ namespace UVWizard.Core.Reporting
     }
 
     /// <summary>One line of the report: a localizer key and the arguments its template fills in.</summary>
-    internal readonly struct ReportLine
+    internal readonly struct ReportLine : IEquatable<ReportLine>
     {
         public ReportLine(string key, params object[] args)
         {
@@ -225,8 +225,16 @@ namespace UVWizard.Core.Reporting
         public string Key { get; }
         public object[] Args { get; }
 
-        /// <summary>The line's text: its key's template from the lookup, with the arguments filled in.</summary>
-        public string Text(Func<string, string> lookup) => string.Format(lookup(Key), Args);
+        /// <summary>
+        /// The line's text: its key's template from the lookup, with the arguments filled in. An argument that is
+        /// itself a line is filled in with its own text.
+        /// </summary>
+        public string Text(Func<string, string> lookup) =>
+            string.Format(lookup(Key), Args.Select(arg => arg is ReportLine line ? line.Text(lookup) : arg).ToArray());
+
+        public bool Equals(ReportLine other) => Key == other.Key && Args.SequenceEqual(other.Args);
+        public override bool Equals(object? obj) => obj is ReportLine other && Equals(other);
+        public override int GetHashCode() => Args.Aggregate(Key.GetHashCode(), (hash, arg) => HashCode.Combine(hash, arg));
     }
 
     /// <summary>The localizer keys the report uses. Messages holds their English.</summary>

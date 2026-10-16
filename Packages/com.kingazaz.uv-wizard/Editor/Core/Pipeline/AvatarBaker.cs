@@ -13,6 +13,7 @@ using UVWizard.Core.Islands;
 using UVWizard.Core.Materials;
 using UVWizard.Core.Meshes;
 using UVWizard.Core.Packing;
+using UVWizard.Core.Reporting;
 using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Pipeline
@@ -317,8 +318,7 @@ namespace UVWizard.Core.Pipeline
                 for (var s = 0; s < sources.Length; s++)
                 {
                     if (sources[s] != null)
-                        excluded.Add(new SlotNote(renderer, s, sources[s], "A tool that runs after the bake reads " +
-                            "this mesh's UV0, and the bake can't keep it where that tool would find it."));
+                        excluded.Add(new SlotNote(renderer, s, sources[s], new Reason(ReasonText.LaterToolNeedsUvs)));
                     ExcludeSwappedIn(renderer, s, sources[s], AnimationsOf(animated, renderer, s), excluded);
                 }
                 return;
@@ -340,27 +340,27 @@ namespace UVWizard.Core.Pipeline
                     continue;
                 }
                 if (material == null || s >= data.subMeshCount) continue;
-                void Exclude(string reason) => excluded.Add(new SlotNote(renderer, s, material, reason));
+                void Exclude(string reason, params object[] args) => excluded.Add(new SlotNote(renderer, s, material, new Reason(reason, args)));
 
                 if (materials.Length > data.subMeshCount && s == data.subMeshCount - 1)
                 {
-                    Exclude("Extra material slots draw this submesh again, so its UVs must stay as they are.");
+                    Exclude(ReasonText.ExtraSlots);
                     continue;
                 }
                 if (data.GetSubMesh(s).topology != MeshTopology.Triangles)
                 {
-                    Exclude("It's drawn as lines or points, which the atlas can't hold.");
+                    Exclude(ReasonText.LinesOrPoints);
                     continue;
                 }
                 if (!data.HasVertexAttribute(VertexAttribute.TexCoord0))
                 {
-                    Exclude("Its mesh has no UV0 to remap.");
+                    Exclude(ReasonText.NoUvs);
                     continue;
                 }
                 var uvFormat = data.GetVertexAttributeFormat(VertexAttribute.TexCoord0);
                 if (!Uv0Rewriter.CanHoldAtlasUvs(uvFormat, data.GetVertexAttributeDimension(VertexAttribute.TexCoord0)))
                 {
-                    Exclude($"Its mesh stores UV0 as {uvFormat}, which can't hold atlas positions.");
+                    Exclude(ReasonText.UvFormat, uvFormat);
                     continue;
                 }
                 if (!readings.TryGetValue(material, out var reading))
@@ -369,7 +369,7 @@ namespace UVWizard.Core.Pipeline
                 // An empty submesh is merged whatever its material, since it draws nothing to keep.
                 if (reading.Verdict == MaterialVerdict.Excluded && DrawsAny(corners))
                 {
-                    Exclude(reading.Reason ?? "Its material can't be merged.");
+                    excluded.Add(new SlotNote(renderer, s, material, reading.Reason ?? new Reason(ReasonText.CantMerge)));
                     continue;
                 }
 
@@ -385,13 +385,13 @@ namespace UVWizard.Core.Pipeline
                 var islands = IslandBuilder.Build(sampled, triangles, periodU, periodV);
                 if (Array.Exists(islands, island => island.ExceedsRepeatLimit))
                 {
-                    Exclude("Part of it repeats its texture across more than two tiles, more than the atlas can hold.");
+                    Exclude(ReasonText.RepeatsTooOften);
                     continue;
                 }
                 var slot = new Slot(renderer, mesh, s, material, reading, uv0, sampled, corners, removed, triangles,
                     islands, TextureSize(reading, channels));
                 if (reading.Verdict == MaterialVerdict.Flagged && slot.Draws)
-                    flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? "It may look different after the bake."));
+                    flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? new Reason(ReasonText.MayLookDifferent)));
                 slots.Add(slot);
             }
         }
@@ -542,7 +542,7 @@ namespace UVWizard.Core.Pipeline
                 var intensity = Intensity(slot.Reading.Emission!.Tint);
                 if (intensity > MaxEmissionStrength)
                     flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
-                        GlowsLess(intensity, "the merged material")));
+                        GlowsLess(intensity, ReasonText.GlowsLessMerged)));
             }
             return strength;
         }
@@ -576,9 +576,7 @@ namespace UVWizard.Core.Pipeline
         }
 
         // Why an emission brighter than the material can glow is flagged.
-        static string GlowsLess(float intensity, string material) =>
-            $"Its emission is {intensity:0.##} times full brightness, but {material}'s emission goes up to " +
-            $"{MaxEmissionStrength}, so it glows less.";
+        static Reason GlowsLess(float intensity, string key) => new Reason(key, intensity, MaxEmissionStrength);
 
         // The colour with its linear components divided by the divisor, as an Emission texture holds it.
         static Color Divided(Color colour, float divisor)
@@ -638,26 +636,24 @@ namespace UVWizard.Core.Pipeline
                 if (merged.HasProperty(culling) && slot.Material.HasProperty(culling)
                     && slot.Material.GetFloat(culling) != merged.GetFloat(culling))
                     flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
-                        $"It culls {CullingName(slot.Material.GetFloat(culling))}, but the merged material culls " +
-                        $"{CullingName(merged.GetFloat(culling))}, so some of its faces may show or hide."));
+                        new Reason(ReasonText.Culling, Culls(slot.Material.GetFloat(culling)), Culls(merged.GetFloat(culling)))));
                 if (vertexColourOn && !slot.Reading.UsesVertexColour)
                 {
                     if (!colouredVertices.TryGetValue(slot.Mesh, out var coloured))
                         colouredVertices.Add(slot.Mesh, coloured = ColouredVertices(slot.Mesh));
                     if (coloured != null && Array.Exists(slot.Triangles, v => coloured[v]))
                         flagged.Add(new SlotNote(slot.Renderer, slot.Submesh, slot.Material,
-                            "Its mesh carries vertex colours, which the merged material now multiplies in because " +
-                            "another source uses vertex colour."));
+                            new Reason(ReasonText.VertexColours)));
                 }
             }
         }
 
-        static string CullingName(float value) => value switch
+        static ReportLine Culls(float value) => new ReportLine(value switch
         {
-            0 => "no faces",
-            1 => "front faces",
-            _ => "back faces",
-        };
+            0 => ReasonText.CullsNoFaces,
+            1 => ReasonText.CullsFrontFaces,
+            _ => ReasonText.CullsBackFaces,
+        });
 
         // Which vertices have a colour other than white, or null when the mesh has no vertex colours.
         static bool[]? ColouredVertices(Mesh mesh)
