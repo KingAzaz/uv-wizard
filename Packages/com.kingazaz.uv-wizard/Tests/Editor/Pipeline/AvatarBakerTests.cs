@@ -229,6 +229,28 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AShaderWithoutAnEmissionStrengthHasItsEmissionKeywordTurnedOn()
+        {
+            // Standard compiles its emission out unless _EMISSION is on, so without it the atlas wouldn't glow.
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), null, Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
+
+            var result = Bake(renderer);
+
+            Assert.That(result.MergedMaterial!.IsKeywordEnabled("_EMISSION"), Is.True);
+        }
+
+        [Test]
+        public void AMergedMaterialThatDoesntGlowKeepsItsEmissionKeywordOff()
+        {
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+
+            var result = Bake(renderer);
+
+            Assert.That(result.MergedMaterial!.IsKeywordEnabled("_EMISSION"), Is.False);
+        }
+
+        [Test]
         public void AnEmissionSwitchedOnButBlackLeavesTheEmissionChannelOff()
         {
             // A script can turn Standard's emission keyword on with the colour left black: nothing glows.
