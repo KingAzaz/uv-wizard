@@ -165,6 +165,19 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void AMaterialRowNamesARendererALaterToolDestroyedBeforeTheReport()
+        {
+            // Merge Skinned Mesh destroys its sources after the bake, and the report is published again at the end.
+            var body = Renderer("Body");
+            var result = Merged(excluded: new[] { new SlotNote(body, 0, Material("Skin"), "A later tool reads its UV0.") });
+
+            Object.DestroyImmediate(body.gameObject);
+            var report = new BakeReport("Avatar", false, result, null);
+
+            Assert.That(report.Materials[0].RendererNames, Is.EqualTo(new[] { "Body" }));
+        }
+
+        [Test]
         public void ALineReadsItsTemplateFromTheLookupAndFillsInItsArguments()
         {
             var line = new ReportLine("some.key", "Hat", 3);

@@ -37,9 +37,9 @@ namespace UVWizard.NDMF
         }
 
         // Avatar Optimizer runs after the bake and edits the meshes it rewrites.
-        static ILaterMeshEdits? LaterMeshEdits() =>
+        static ILaterMeshEdits? LaterMeshEdits(GameObject root) =>
 #if UVWIZARD_AAO
-            new AaoMeshEdits();
+            new AaoMeshEdits(root);
 #else
             null;
 #endif
@@ -62,7 +62,7 @@ namespace UVWizard.NDMF
 
             var renderers = root.GetComponentsInChildren<Renderer>(true);
             var animated = animators != null ? MaterialAnimations.Find(animators, root, renderers) : null;
-            var result = AvatarBaker.Bake(renderers, options, LaterMeshEdits(), animated, Head(root));
+            var result = AvatarBaker.Bake(renderers, options, LaterMeshEdits(root), animated, Head(root));
             if (animators != null)
             {
                 MaterialAnimations.FollowMovedSlots(animators, root, result.MovedSlots);
