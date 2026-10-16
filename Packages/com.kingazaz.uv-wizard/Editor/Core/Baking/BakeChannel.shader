@@ -62,7 +62,7 @@ Shader "Hidden/UVWizard/BakeChannel"
             ENDCG
         }
 
-        // Normal: the source decoded, its x and y scaled by the strength, renormalized, and written as XYZ into a
+        // Normal: the source decoded at its strength the way UnpackScaleNormal decodes it, and written as XYZ into a
         // linear target. Never tinted.
         Pass
         {
@@ -77,10 +77,10 @@ Shader "Hidden/UVWizard/BakeChannel"
             {
                 float4 packed = tex2D(_MainTex, i.uv);
                 float x = _SourceEncoding > 0.5 ? packed.a : packed.r * packed.a;
-                float2 xy = float2(x, packed.g) * 2 - 1;
-                float3 n = float3(xy * _Strength, sqrt(1 - saturate(dot(xy, xy))));
-                // Strength 0 on a texel lying flat along x and y leaves nothing to normalize: that's flat.
-                n = dot(n, n) > 0 ? normalize(n) : float3(0, 0, 1);
+                // As UnpackScaleNormal does: scale x and y, then rebuild z from them. Past horizontal z is 0 and
+                // the vector is longer than 1, so it's normalized for the merged shader to read at strength 1.
+                float2 xy = (float2(x, packed.g) * 2 - 1) * _Strength;
+                float3 n = normalize(float3(xy, sqrt(1 - saturate(dot(xy, xy)))));
                 return float4(n * 0.5 + 0.5, 1);
             }
             ENDCG

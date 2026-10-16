@@ -446,6 +446,19 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ANormalMapAtDoubleStrengthLightsLikeItsSource()
+        {
+            // The merged material reads the atlas at strength 1, so the atlas must hold the source's bend at 2.
+            var renderer = MeshRenderer(TangentQuad(new Vector2(0, 0), new Vector2(1, 1)),
+                NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 0), 2));
+            var before = WorldNormals(renderer);
+
+            Bake(StandardOptions(atlasSize: 64, padding: 0), renderer);
+
+            AssertSameNormals(before, WorldNormals(renderer), "at strength 2");
+        }
+
+        [Test]
         public void TheWorldNormalRenderShowsTheNearestSurfaceWhateverTheDrawOrder()
         {
             // Guards the render comparisons above: overlapping surfaces mustn't come out by draw order.
