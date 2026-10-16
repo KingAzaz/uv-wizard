@@ -3,9 +3,11 @@
 import io
 import json
 import os
+import re
 import socket
 import struct
 import sys
+import tempfile
 import threading
 import time
 import unittest
@@ -15,6 +17,13 @@ from contextlib import redirect_stdout
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unity_bridge as bridge  # noqa: E402
 import unity_tests  # noqa: E402
+
+
+def temp_dir(test):
+    """A folder deleted when the test ends."""
+    folder = tempfile.TemporaryDirectory()
+    test.addCleanup(folder.cleanup)
+    return folder.name
 
 
 def succeeded(total, passed, failed=0):
@@ -66,6 +75,15 @@ class ReportTest(unittest.TestCase):
             sys.stdout.flush()
         self.assertIn("Body → Merged".encode("utf-8"), raw.getvalue())
 
+    def test_the_failure_count_is_the_number_of_failures(self):
+        two = [{"full_name": "A", "message": ""}, {"full_name": "B", "message": ""}]
+        for job, count in [(failed_job(two), "2 test(s) failed"),
+                           (failed_job([]), "1 test(s) failed"),
+                           (failed_job(two, capped=True), "2 or more tests failed"),
+                           (succeeded(5, 2, failed=3), "3 test(s) failed")]:
+            with redirect_stdout(io.StringIO()), self.assertRaisesRegex(unity_tests.Failed, re.escape(count)):
+                unity_tests.report(job)
+
     def test_a_failed_job_with_an_error_is_broken_not_red(self):
         job = {"status": "failed", "error": "Job orphaned after domain reload"}
         self.assertEqual(self.report(job)[0], "broken")
@@ -109,23 +127,13 @@ class EditorStateTest(unittest.TestCase):
 
 
 
-# The bridge's greeting, from MCP for Unity v10.2.0's StdioBridgeHost.cs, kept
+# The bridge's greeting, from MCP for Unity v10.3.0's StdioBridgeHost.cs, kept
 # literal here so a wrong constant in unity_bridge fails these tests.
 WELCOME = b"WELCOME UNITY-MCP 1 FRAMING=1\n"
 
 
 def ok(data):
     return {"status": "success", "result": {"success": True, "data": data}}
-
-
-def read_exact(sock, count):
-    data = b""
-    while len(data) < count:
-        chunk = sock.recv(count - len(data))
-        if not chunk:
-            raise ConnectionError("closed")
-        data += chunk
-    return data
 
 
 class FakeBridge:
@@ -159,8 +167,8 @@ class FakeBridge:
     def talk(self, client):
         try:
             client.sendall(WELCOME)
-            (length,) = struct.unpack(">Q", read_exact(client, 8))
-            request = json.loads(read_exact(client, length))
+            (length,) = struct.unpack(">Q", bridge.read_exact(client, 8))
+            request = json.loads(bridge.read_exact(client, length))
             self.requests.append(request)
             reply = self.handler(request, len(self.requests))
             if reply is None:
@@ -180,20 +188,30 @@ class FakeBridge:
 
 
 class FakeEditor:
-    """Answers the requests unity_tests sends, the way the v10.2.0 bridge does."""
+    """Answers the requests unity_tests sends, the way the v10.3.0 bridge does.
+
+    A fast job finishes before the next editor-state snapshot: the snapshot
+    then shows no current job, only the run's start and finish times
+    (TestJobManager.cs clears the job id when the job ends).
+    """
 
     IDLE = {"activity": {"phase": "idle"}, "compilation": {}, "assets": {}, "tests": {}}
 
     def __init__(self, reload_after_refresh=True, compile_failed=False, job=None,
-                 drop_run_tests=False, busy_since=None):
+                 drop_run_tests=0, busy_since=None, fast=False, forget_jobs=False, run_tests_error=None):
         self.reload_after_refresh = reload_after_refresh
         self.compile_failed = compile_failed
         self.job = job if job is not None else {"status": "succeeded", "error": None, "result": {
             "summary": {"total": 2, "passed": 2, "failed": 0, "skipped": 0, "durationSeconds": 0.1}}}
-        self.drop_run_tests = drop_run_tests
+        self.drop_run_tests = drop_run_tests   # how many run_tests replies to lose
         self.busy_since = busy_since   # a run another client started, in unix ms
+        self.fast = fast
+        self.forget_jobs = forget_jobs   # get_test_job answers "Unknown job_id."
+        self.run_tests_error = run_tests_error
         self.reloaded_at = None
         self.started_at = None
+        self.jobs = 0
+        self.running = False
 
     def __call__(self, request, n):
         kind = request["type"]
@@ -205,21 +223,30 @@ class FakeEditor:
             state = json.loads(json.dumps(self.IDLE))
             if self.reloaded_at and time.time() * 1000 >= self.reloaded_at:
                 state["compilation"]["last_domain_reload_after_unix_ms"] = self.reloaded_at
-            if self.started_at or self.busy_since:
-                state["tests"] = {"current_job_id": "job-1" if self.started_at else "theirs",
-                                  "started_unix_ms": self.started_at or self.busy_since}
+            if self.busy_since:
+                state["tests"] = {"current_job_id": "theirs", "started_unix_ms": self.busy_since}
+            elif self.started_at:
+                state["tests"] = {"current_job_id": "job-%d" % self.jobs if self.running else None,
+                                  "started_unix_ms": self.started_at,
+                                  "last_run": None if self.running else {"finished_unix_ms": self.started_at + 1}}
             return ok(state)
         if kind == "execute_code":
             return ok({"result": self.compile_failed})
         if kind == "run_tests":
-            if self.busy_since:
+            if self.run_tests_error:
+                return {"status": "success", "result": {"success": False, "error": self.run_tests_error}}
+            if self.busy_since or self.running:
                 return {"status": "success", "result": {"success": False, "error": "tests_running",
-                                                        "data": {"reason": "tests_running"}}}
-            if self.started_at:
-                return {"status": "success", "result": {"success": False, "error": "tests_running"}}
+                                                        "data": {"reason": "tests_running", "retry_after_ms": 5000}}}
+            self.jobs += 1
             self.started_at = int(time.time() * 1000)
-            return None if self.drop_run_tests else ok({"job_id": "job-1", "status": "running"})
+            self.running = not self.fast
+            if self.jobs <= self.drop_run_tests:
+                return None
+            return ok({"job_id": "job-%d" % self.jobs, "status": "running"})
         if kind == "get_test_job":
+            if self.forget_jobs:
+                return {"status": "success", "result": {"success": False, "error": "Unknown job_id."}}
             return ok(dict(self.job, job_id=request["params"]["job_id"]))
         return {"status": "error", "error": "unknown command " + kind}
 
@@ -280,16 +307,47 @@ class EditorTest(unittest.TestCase):
         with self.assertRaisesRegex(unity_tests.Failed, "failed to compile"):
             unity_tests.refresh(fake.port, time.monotonic() + 30, poll=0.05)
 
+    def test_a_compile_error_with_no_reload_is_red_not_a_timeout(self):
+        # A failed compile ends in no domain reload, so the wait runs out first.
+        editor, fake = self.editor(reload_after_refresh=False, compile_failed=True)
+        with self.assertRaisesRegex(unity_tests.Failed, "failed to compile"):
+            unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=1, poll=0.05)
+
     def test_a_job_started_before_the_drop_is_followed_not_restarted(self):
-        editor, fake = self.editor(drop_run_tests=True)
+        editor, fake = self.editor(drop_run_tests=1)
         job = unity_tests.run(fake.port, ["A"], None, time.monotonic() + 30, poll=0.05)
         self.assertEqual(job["job_id"], "job-1")
         self.assertEqual(len(fake.sent("run_tests")), 1)
+
+    def test_a_fast_job_whose_reply_was_lost_is_run_once_more(self):
+        # It finished before a snapshot showed its id, so there is no job to follow.
+        editor, fake = self.editor(drop_run_tests=1, fast=True)
+        job = unity_tests.run(fake.port, ["A"], None, time.monotonic() + 30, poll=0.05)
+        self.assertEqual((job["job_id"], job["status"]), ("job-2", "succeeded"))
+        self.assertEqual(len(fake.sent("run_tests")), 2)
+
+    def test_a_fast_job_whose_reply_is_lost_twice_is_not_run_a_third_time(self):
+        editor, fake = self.editor(drop_run_tests=2, fast=True)
+        with self.assertRaisesRegex(RuntimeError, "result unknown"):
+            unity_tests.start_job(fake.port, {}, time.monotonic() + 30, adopt_wait=2, poll=0.05)
+        self.assertEqual(len(fake.sent("run_tests")), 2)
+
+    def test_a_refused_run_that_only_mentions_tests_running_is_an_error(self):
+        editor, fake = self.editor(run_tests_error="Failed to start test job: no assembly 'tests_running'")
+        with self.assertRaisesRegex(bridge.BridgeError, "no assembly"):
+            unity_tests.start_job(fake.port, {}, time.monotonic() + 30, adopt_wait=0.5, poll=0.05)
 
     def test_tests_another_client_started_are_not_taken_as_ours(self):
         editor, fake = self.editor(busy_since=int(time.time() * 1000) - 60000)
         with self.assertRaisesRegex(RuntimeError, "didn't start"):
             unity_tests.start_job(fake.port, {}, time.monotonic() + 30, adopt_wait=0.5, poll=0.05)
+
+    def test_a_job_the_editor_doesnt_know_ends_the_run_at_once(self):
+        editor, fake = self.editor(forget_jobs=True)
+        started = time.monotonic()
+        with self.assertRaisesRegex(RuntimeError, "Unknown job_id"):
+            unity_tests.run(fake.port, ["A"], None, time.monotonic() + 30, poll=0.05)
+        self.assertLess(time.monotonic() - started, 5)
 
     def test_the_run_asks_for_the_assemblies_and_the_group(self):
         editor, fake = self.editor()
@@ -302,10 +360,9 @@ class MainTest(unittest.TestCase):
     """main()'s exit codes, against a fake editor found through its status file."""
 
     def main(self, editor, *args):
-        import tempfile
         fake = FakeBridge(editor)
         self.addCleanup(fake.close)
-        tmp = tempfile.mkdtemp()
+        tmp = temp_dir(self)
         with open(os.path.join(tmp, "unity-mcp-status-x.json"), "w") as f:
             json.dump({"project_name": "uv-wizard", "unity_port": fake.port}, f)
         os.environ["UNITY_MCP_STATUS_DIR"] = tmp
@@ -327,11 +384,23 @@ class MainTest(unittest.TestCase):
     def test_tests_already_running_is_2(self):
         self.assertEqual(self.main(FakeEditor(busy_since=1)), 2)
 
+    def test_a_job_the_editor_lost_is_2(self):
+        self.assertEqual(self.main(FakeEditor(forget_jobs=True)), 2)
+
+
+class TestAssembliesTest(unittest.TestCase):
+    def test_the_default_is_every_test_assembly_in_the_package(self):
+        # The SDK-, NDMF- and shader-gated ones sit in subfolders of Tests/Editor.
+        names = unity_tests.test_assemblies()
+        for name in ("UVWizard.Core.Editor.Tests", "UVWizard.NDMF.Editor.Tests",
+                     "UVWizard.Core.Editor.Tests.LilToon", "UVWizard.Core.Editor.Tests.Poiyomi",
+                     "UVWizard.Core.Editor.Tests.VRChat"):
+            self.assertIn(name, names)
+
 
 class FindPortTest(unittest.TestCase):
     def status_dir(self, files):
-        import tempfile
-        tmp = tempfile.mkdtemp()
+        tmp = temp_dir(self)
         for i, (name, port) in enumerate(files):
             path = os.path.join(tmp, "unity-mcp-status-%d.json" % i)
             with open(path, "w") as f:
