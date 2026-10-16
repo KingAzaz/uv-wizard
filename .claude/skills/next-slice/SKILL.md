@@ -69,7 +69,7 @@ Done when its PR is open, its tests pass in Unity, and each acceptance criterion
 6. Build test-first with the `tdd` skill at the seams the ticket names, finishing with its mutation check. Run the tests through Unity MCP `run_tests`. Respect CI's limits in AGENTS.md: CI's project has no VRChat SDK, NDMF or AAO.
    - When the ticket says what a shader or Unity decoder does, open the source it cites, or `<Editor>/Data/CGIncludes` if it cites none, and read the `#if` branch each target platform compiles. Write the expected values from that code rather than from the brief. Tickets written before the owner's citation rule carry uncited claims, and #63's was wrong.
    - Run the mutation check with the `tdd` skill's `mutate.sh`, BUILD `sh tools/unity-tests.sh --refresh-only` and TEST `sh tools/unity-tests.sh --no-refresh -g '<group regex>'` (AGENTS.md, **Tests**). Commit first, so `git diff` shows only the mutation, and keep mutation files in the scratchpad: Unity imports any file under `Packages/` and writes a `.meta` for it, which dirties the checkout. The editor keeps the last mutation's code afterwards, so run `sh tools/unity-tests.sh` once more.
-7. Review the branch with the `code-review` skill against its base, and fix what it finds. Inline the Codex peer's inputs (the diff, the spec and the changed files) into its prompt, using the skill's `claude`-peer `peer-in.md` recipe: Codex's read-only sandbox can't read files on this machine.
+7. Review the branch with the `supermatt:code-review` skill (the full name: the bare `code-review` is the built-in one-pass review) against its base, and fix what it finds. Inline the Codex peer's inputs (the diff, the spec and the changed files) into its prompt, using the skill's `claude`-peer `peer-in.md` recipe: Codex's read-only sandbox can't read files on this machine.
 8. Open the PR with the `pr` skill.
    - First `git fetch origin` and run `git merge-tree --write-tree origin/main HEAD`. Main moves while you build, and GitHub runs no checks on a conflicting PR. If it conflicts, merge `origin/main`, rerun the tests, and push.
    - Include `Closes #<n>`.
@@ -83,6 +83,7 @@ Product decisions are KingAzaz's. Ask with a recommendation (unattended: see **M
 ## Finish
 
 1. Leave the Unity checkout clean, on the branch you just pushed. Never leave uncommitted work behind: commit it as WIP on the branch and push it, or, if it's worthless, delete the branch.
+   If you assigned yourself a ticket and opened no PR for it, unassign yourself, so the next run can take it.
    Then `release` the checkout lease.
 2. Report what landed, what's open, and what waits on KingAzaz.
 3. If the session hit new friction, follow the `retro` skill. It can't be called with the Skill tool: read `find ~/.claude/plugins -path '*supermatt*/skills/retro/SKILL.md'` and follow it. Unattended, file its candidates as one `needs-triage` issue titled `Retro: <date>` instead of applying them.
