@@ -1,6 +1,9 @@
 #nullable enable
 
+using System.IO;
+using System.Linq;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UVWizard.Core.Materials;
 using UVWizard.Core.Tests.Materials;
@@ -481,6 +484,37 @@ namespace UVWizard.Core.Tests.LilToon
 
             Assert.That(SourceShaderReader.Read(opaque).Verdict, Is.EqualTo(MaterialVerdict.Merged), "no alpha");
             Assert.That(SourceShaderReader.Read(lite).Verdict, Is.EqualTo(MaterialVerdict.Merged), "Lite");
+        }
+
+        // An imported map's importer says whether it keeps alpha: DXT1, which the importer picks for a map
+        // without alpha, declares an alpha channel anyway.
+        [TestCase(TextureImporterAlphaSource.FromInput, true)]
+        [TestCase(TextureImporterAlphaSource.None, false)]
+        public void AnImportedEmissionMapIsFlaggedWhenItsImporterKeepsAlpha(TextureImporterAlphaSource alphaSource,
+            bool flagged)
+        {
+            const string folder = "Assets/UVWizardLilToonReaderTests";
+            const string path = folder + "/emission.png";
+            Directory.CreateDirectory(folder);
+            try
+            {
+                var image = Track(new Texture2D(4, 4, TextureFormat.RGBA32, false));
+                image.SetPixels(Enumerable.Repeat(new Color(1, 1, 1, 0.5f), 16).ToArray());
+                File.WriteAllBytes(path, image.EncodeToPNG());
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+                var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                importer.alphaSource = alphaSource;
+                importer.SaveAndReimport();
+                var material = EmittingMaterial();
+                material.SetTexture("_EmissionMap", AssetDatabase.LoadAssetAtPath<Texture2D>(path));
+
+                Assert.That(SourceShaderReader.Read(material).Verdict,
+                    Is.EqualTo(flagged ? MaterialVerdict.Flagged : MaterialVerdict.Merged));
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(folder);
+            }
         }
 
         [Test]
