@@ -61,14 +61,22 @@ jobs:
               a = run.attrib
               out.write(
                   f"### EditMode tests: {a.get('passed', '?')}/{a.get('total', '?')} passed, "
-                  f"{a.get('failed', '?')} failed, {a.get('skipped', '?')} skipped "
+                  f"{a.get('failed', '?')} failed, {a.get('inconclusive', '?')} inconclusive, "
+                  f"{a.get('skipped', '?')} skipped "
                   f"({float(a.get('duration', 0)):.1f} s)\n\n"
               )
+              # The test runner fails the job on an Inconclusive test (an Assume.That that
+              # didn't hold), so list those beside the failures.
               for case in run.iter("test-case"):
-                  if case.get("result") != "Failed":
+                  result = case.get("result")
+                  if result == "Failed":
+                      mark, message = "❌", case.findtext("failure/message")
+                  elif result == "Inconclusive":
+                      mark, message = "❔ inconclusive", case.findtext("reason/message")
+                  else:
                       continue
-                  message = (case.findtext("failure/message") or "").strip().splitlines()
-                  out.write(f"- ❌ `{case.get('fullname')}`: {message[0] if message else ''}\n")
+                  lines = (message or "").strip().splitlines()
+                  out.write(f"- {mark} `{case.get('fullname')}`: {' '.join(l.strip() for l in lines[:2])}\n")
 
       - uses: actions/upload-artifact@v4
         if: always()

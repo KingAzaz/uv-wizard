@@ -61,6 +61,8 @@ Read `AGENTS.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`
 
    A PR targeting `main` with no `EditMode tests` check (opened before the workflow existed, or just retargeted) has never run CI. If it merges cleanly (the `merge-tree` check above), trigger CI with `gh pr close <n> && gh pr reopen <n>`, then check again next run. If it conflicts, reopening runs nothing: it needs a fix (step 6).
 
+   GitHub's auto-merge sometimes stalls: a PR stays open with auto-merge on, every check green and `mergeStateStatus` `CLEAN`, as #123 and #132 did for 10 minutes. Re-arm it with `gh pr merge <n> --disable-auto && gh pr merge <n> --auto --squash`, and it merges within seconds.
+
    A red check on an `owner-agent` PR is left for the next slice run, which fixes it. On any other PR, comment with the failure.
 2. **Review.** For each open PR with no `> *Project-owner review` comment on its latest commit, call the Skill tool with `code-review` against its base. Inline the Codex peer's inputs (the diff, the spec and the changed files) into its prompt, because Codex's read-only sandbox can't read files on this machine. Post the verdict as one PR comment starting with `> *Project-owner review.*`, and mark each finding **blocking** or **follow-up**. File follow-ups as issues: `ready-for-agent` for engineering, `needs-triage` for product. Add `needs-unity` when the change needs checks that the EditMode tests in CI don't cover:
    - the NDMF pass;
@@ -78,7 +80,7 @@ Read `AGENTS.md`, `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`
    - open questions in `docs/adr/` and `docs/research/`;
    - bugs that Unity checks or CI exposed.
 
-   Write each as an agent-ready brief (`triage`'s AGENT-BRIEF.md). Label it `ready-for-agent` only when it's pure engineering inside a decided scope (a bug, a test gap, a refactor, performance, docs). Anything that adds or changes product behaviour goes to `needs-triage` with your recommendation.
+   Write each as an agent-ready brief (`triage`'s AGENT-BRIEF.md). Cite the source for each claim about what a shader does or how the device decodes a texture: the shader's `#pragma` keyword or include that applies the effect (not only its `Properties` block), the merged material's code that keeps or drops it, or Unity's `<Editor>/Data/CGIncludes` for built-in decoders. Write a claim you can't cite as an open question, not an acceptance criterion. Uncited claims sent #38 and #61 to build the wrong thing (#117, #133). Label it `ready-for-agent` only when it's pure engineering inside a decided scope (a bug, a test gap, a refactor, performance, docs). Anything that adds or changes product behaviour goes to `needs-triage` with your recommendation.
    - When every child of #3 is closed, post a v1-complete summary on #3. Then propose the next milestone as a single `needs-triage` issue with your recommended scope, and plan nothing further from it until KingAzaz labels it.
 6. **Dispatch.** Start a slice run with `run_scheduled_task` `uv-wizard-next-slice` when **all** of these hold:
    - the repo isn't busy;

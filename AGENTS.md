@@ -38,6 +38,7 @@ Both stand down while another session in this repo is running, another run holds
   - CI's Linux GPU differs from the Windows editor's, so a test can pass locally and fail in CI:
     - It can't create compressed `Texture3D`s (ASTC, for example). Build 3D textures in tests with an uncompressed format.
     - It samples a bake about a quarter texel away. Keep a colour test's sample points over a texel from any sharp edge in its source texture, such as a Repeat gradient's seam.
+    - An `Assume.That` that holds in the editor can fail there (#138's mesh metrics did). The test then reads Inconclusive, and the test runner fails the job on it. The job summary lists each Inconclusive test with its message.
 - **This checkout is Unity's.** A `git switch` here changes the code under the open editor. Do docs-only or other non-Unity work in a `git worktree` (e.g. `../uv-wizard-docs`).
 - **Unity MCP:** MCP for Unity (CoplayDev) **v10.2.0**. The package is in the dev project's manifest.
   - Each agent has its own server config: Claude Code in `.mcp.json`, Codex in `.codex/config.toml`. Both are stdio, `mcpforunityserver==10.2.0` via uvx, with telemetry off.
@@ -48,6 +49,7 @@ Both stand down while another session in this repo is running, another run holds
   - `refresh_unity` can report the editor ready before the recompile starts, or without compiling at all. After editing scripts, touch a marker file, refresh, and wait until the DLL of the assembly you edited (not its test assembly, which an internals-only change doesn't rebuild) in the dev project's `Library/ScriptAssemblies/` is newer than the marker. Then call `set_active_instance` again and run tests. Otherwise they fail with "No Unity Editor instances found" or run against the old code.
   - A file restored from a copy (a mutation-check backup, `git stash pop`, `cp -p`) can keep a timestamp Unity's refresh skips. `touch` it before `refresh_unity`, or the tests run the old compiled code.
   - If a tool reports "No Unity Editor instances found" while Unity is running, read `mcpforunity://instances` and call `set_active_instance` again.
+  - A modal dialog in the editor makes every MCP call time out, while `mcpforunity://instances` still lists the editor. Entering Play Mode in the dev scene opens one easily: NDMF's apply-on-play runs the VRChat upload callbacks on both test avatars, and Poiyomi's Thry once opened a first-run prompt there that only KingAzaz could answer (#134). For a Play Mode check, open a new empty scene first, or write a PlayMode test, and leave Play Mode before the run ends: the next run found the editor still playing.
   - Only the `core` tool group is on by default. Use `execute_code` for reads. It compiles C# 6 (CodeDom): no local functions, tuples or switch expressions, and write `UnityEngine.Object` in full.
 - **Compile-check without the editor:** run Unity's own Roslyn (`<Editor>/Data/NetCoreRuntime/dotnet.exe <Editor>/Data/DotNetSdkRoslyn/csc.dll`) against:
   - `Editor/Data/Managed/UnityEngine/*.dll`
