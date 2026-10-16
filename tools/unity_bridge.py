@@ -5,10 +5,12 @@ otherwise). After a one-line WELCOME handshake, each message is a frame: an
 8-byte big-endian length, then that many bytes of UTF-8 JSON. A request is
 {"type": <tool or resource name>, "params": {...}}.
 
-The bridge keeps one client: each new connection closes the others. So this
-client opens a connection per request and retries when it is dropped, which is
-also what happens when the editor reloads its domain. The MCP server an agent
-holds open does the same, so the two only cost each other a retry.
+The bridge keeps one client: each new connection closes the others
+(StdioBridgeHost.cs). So this client opens a connection per request and
+retries when it is dropped, which is also what happens when the editor reloads
+its domain. Each of its connections also drops the MCP server an agent holds
+open, and an MCP call in flight then loses its reply: make no MCP calls while
+unity-tests.sh runs.
 """
 
 import glob
@@ -46,7 +48,7 @@ def find_port(project_name=None):
     return best[1] if best else 6400
 
 
-def _read_exact(sock, count):
+def read_exact(sock, count):
     data = b""
     while len(data) < count:
         chunk = sock.recv(count - len(data))
@@ -70,8 +72,8 @@ def call_once(port, kind, params, timeout):
         payload = json.dumps({"type": kind, "params": params}).encode("utf-8")
         sock.sendall(struct.pack(">Q", len(payload)) + payload)
         try:
-            (length,) = struct.unpack(">Q", _read_exact(sock, 8))
-            return json.loads(_read_exact(sock, length).decode("utf-8"))
+            (length,) = struct.unpack(">Q", read_exact(sock, 8))
+            return json.loads(read_exact(sock, length).decode("utf-8"))
         except OSError as error:
             raise DroppedAfterSending("%s request sent, then: %s" % (kind, error))
 
