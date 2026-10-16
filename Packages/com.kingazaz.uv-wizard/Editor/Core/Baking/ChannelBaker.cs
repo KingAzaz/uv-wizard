@@ -31,10 +31,10 @@ namespace UVWizard.Core.Baking
         /// </summary>
         public static Texture2D Bake(BakePlan plan)
         {
-            var size = plan.AtlasSize;
+            int width = plan.Width, height = plan.Height;
             var normals = plan.NormalEncoding != null;
             var material = new Material(LoadShader()) { hideFlags = HideFlags.HideAndDontSave };
-            var target = RenderTexture.GetTemporary(new RenderTextureDescriptor(size, size, RenderTextureFormat.ARGB32, 0)
+            var target = RenderTexture.GetTemporary(new RenderTextureDescriptor(width, height, RenderTextureFormat.ARGB32, 0)
             {
                 sRGB = !normals,
                 useMipMap = false,
@@ -61,10 +61,10 @@ namespace UVWizard.Core.Baking
                 }
                 GL.PopMatrix();
 
-                var atlas = Atlas(size, TextureFormat.RGBA32, -1, normals);
-                atlas.ReadPixels(new Rect(0, 0, size, size), 0, 0, recalculateMipMaps: false);
+                var atlas = Atlas(width, height, TextureFormat.RGBA32, -1, normals);
+                atlas.ReadPixels(new Rect(0, 0, width, height), 0, 0, recalculateMipMaps: false);
                 var texels = atlas.GetPixels32(0);
-                FillGutters(texels, size);
+                FillGutters(texels, width, height);
                 if (plan.NormalEncoding == NormalEncoding.AG) ToAg(texels);
                 atlas.SetPixels32(texels, 0);
                 atlas.Apply(updateMipmaps: true, makeNoLongerReadable: false);
@@ -83,8 +83,11 @@ namespace UVWizard.Core.Baking
         /// An empty atlas texture of the given size, format and mip count (-1 for a full chain), linear for normals.
         /// </summary>
         public static Texture2D Atlas(int size, TextureFormat format, int mipCount, bool linear) =>
+            Atlas(size, size, format, mipCount, linear);
+
+        static Texture2D Atlas(int width, int height, TextureFormat format, int mipCount, bool linear) =>
             // Atlas UVs stay inside 0..1, so a chart at one edge mustn't be filtered with the opposite edge.
-            new Texture2D(size, size, format, mipCount, linear) { wrapMode = TextureWrapMode.Clamp };
+            new Texture2D(width, height, format, mipCount, linear) { wrapMode = TextureWrapMode.Clamp };
 
         static Shader LoadShader()
         {
@@ -120,7 +123,7 @@ namespace UVWizard.Core.Baking
         // The shader writes alpha 1 and the target starts at alpha 0, so alpha marks the texels a
         // chart covers. Every other texel takes the colour of a nearest covered texel (breadth-first
         // over 8 neighbours), so mips never mix in the empty background. Then all are made opaque.
-        static void FillGutters(Color32[] texels, int size)
+        static void FillGutters(Color32[] texels, int width, int height)
         {
             var queue = new int[texels.Length];
             int head = 0, tail = 0;
@@ -130,13 +133,13 @@ namespace UVWizard.Core.Baking
             while (head < tail)
             {
                 var i = queue[head++];
-                int x = i % size, y = i / size;
+                int x = i % width, y = i / width;
                 for (var dy = -1; dy <= 1; dy++)
                 for (var dx = -1; dx <= 1; dx++)
                 {
                     int nx = x + dx, ny = y + dy;
-                    if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
-                    var j = ny * size + nx;
+                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+                    var j = ny * width + nx;
                     if (texels[j].a > 0) continue;
                     texels[j] = texels[i];
                     queue[tail++] = j;

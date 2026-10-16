@@ -141,6 +141,32 @@ namespace UVWizard.Core.Tests.Baking
             AssertColour(new Color32(0, 0, 255, 255), Texel(atlas, 10, 7), "gutter texel nearer blue");
         }
 
+        [TestCase(true)]
+        [TestCase(false)]
+        public void ANonSquarePlanBakesAtItsWidthAndHeightWithItsGuttersFilled(bool wide)
+        {
+            // Along the long side, red fills texels 0..3 and blue texels 12..15; the texels between are gutter.
+            var red = Solid(new Color32(255, 0, 0, 255));
+            var blue = Solid(new Color32(0, 0, 255, 255));
+            BakeSource Band(Texture texture, float from, float to) => Quad(texture, Color.white, Identity,
+                Corners(0, 0, 1, 1), wide ? Corners(from, 0, to, 1) : Corners(0, from, 1, to));
+            var plan = new BakePlan(wide ? 16 : 4, wide ? 4 : 16, new[] { Band(red, 0, 0.25f), Band(blue, 0.75f, 1) });
+
+            var atlas = Bake(plan);
+
+            Assert.That((atlas.width, atlas.height), Is.EqualTo(wide ? (16, 4) : (4, 16)));
+            AssertColour(new Color32(255, 0, 0, 255), wide ? Texel(atlas, 5, 2) : Texel(atlas, 2, 5), "gutter texel nearer red");
+            AssertColour(new Color32(0, 0, 255, 255), wide ? Texel(atlas, 10, 2) : Texel(atlas, 2, 10), "gutter texel nearer blue");
+        }
+
+        [TestCase(0, 4)]
+        [TestCase(4, 0)]
+        public void APlanNeedsAPositiveWidthAndHeight(int width, int height)
+        {
+            Assert.That(() => new BakePlan(width, height, Array.Empty<BakeSource>()),
+                Throws.TypeOf<ArgumentOutOfRangeException>());
+        }
+
         [Test]
         public void AChartAtTheAtlasEdgeDoesntBlendWithTheOppositeEdge()
         {

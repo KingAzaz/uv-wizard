@@ -34,14 +34,16 @@ namespace UVWizard.Core.Tests
         }
 
         // A readable sRGB texture whose colour changes smoothly across it, differently per seed.
-        protected Texture2D Gradient(int size, int seed)
+        protected Texture2D Gradient(int size, int seed) => Gradient(size, size, seed);
+
+        protected Texture2D Gradient(int width, int height, int seed)
         {
-            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: false)
+            var texture = Keep(new Texture2D(width, height, TextureFormat.RGBA32, mipChain: false, linear: false)
                 { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear });
-            var texels = new Color32[size * size];
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-                texels[y * size + x] = new Color32((byte)(40 + 180 * x / size), (byte)(40 + 180 * y / size),
+            var texels = new Color32[width * height];
+            for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+                texels[y * width + x] = new Color32((byte)(40 + 180 * x / width), (byte)(40 + 180 * y / height),
                     (byte)(60 + 50 * seed), 255);
             texture.SetPixels32(texels);
             texture.Apply();
