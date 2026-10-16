@@ -19,8 +19,8 @@ namespace UVWizard.NDMF
     internal static class Originals
     {
         /// <summary>
-        /// Adds to the map the original of each renderer and non-asset material the report lists, unless the map
-        /// has one already: a later pass may find a renderer the bake listed destroyed.
+        /// Adds to the map the original of each renderer and non-asset material the report lists. A later pass keeps
+        /// what an earlier one found, since a renderer the bake listed may be gone by then.
         /// </summary>
         public static void Find(GameObject root, BakeReport report, Dictionary<Object, Object> originals)
         {
@@ -28,12 +28,12 @@ namespace UVWizard.NDMF
             if (avatar != null)
                 foreach (var renderer in report.Materials.SelectMany(row => row.Renderers)
                              .Concat(report.Leftovers.Select(leftover => leftover.Renderer)))
-                    if (!originals.ContainsKey(renderer) && OriginalRenderer(root, avatar, renderer) is { } original)
+                    if (OriginalRenderer(root, avatar, renderer) is { } original)
                         originals[renderer] = original;
 
             if (report.Result == null) return;
             foreach (var note in report.Result.Excluded.Concat(report.Result.Flagged))
-                if (!originals.ContainsKey(note.Material) && OriginalMaterial(note, originals) is { } original)
+                if (OriginalMaterial(note, originals) is { } original)
                     originals[note.Material] = original;
         }
 
@@ -51,7 +51,7 @@ namespace UVWizard.NDMF
             var sceneRoot = root.scene.GetRootGameObjects().FirstOrDefault(candidate => candidate.name == name);
             if (sceneRoot == null) return null;
             var avatar = slash < 0 ? sceneRoot.transform : sceneRoot.transform.Find(path.Substring(slash + 1));
-            return avatar != null && avatar != root.transform ? avatar.gameObject : null;
+            return avatar != null ? avatar.gameObject : null;
         }
 
         // NDMF's registry knows where the renderer was when the build first saw it; failing that, it's where it is.
@@ -69,12 +69,12 @@ namespace UVWizard.NDMF
         {
             var material = note.Material;
             if (material == null || EditorUtility.IsPersistent(material)) return null;
-            if (ObjectRegistry.GetReference(material)?.Object is Material source && source != null && source != material)
+            if (ObjectRegistry.GetReference(material)?.Object is Material source && source != material)
                 return source;
 
             if (!originals.TryGetValue(note.Renderer, out var found) || found is not Renderer renderer) return null;
             var slots = renderer.sharedMaterials;
-            return note.Slot < slots.Length && slots[note.Slot] != null && slots[note.Slot] != material ? slots[note.Slot] : null;
+            return note.Slot < slots.Length ? slots[note.Slot] : null;
         }
     }
 }
