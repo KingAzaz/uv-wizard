@@ -207,6 +207,29 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void TheSourcesOfAMergeSkinnedMeshTargetThatReadsNoUvsAreBaked()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var textures = SourceTextures(avatar);
+            var merged = new GameObject("Merged");
+            merged.transform.SetParent(avatar.transform);
+            var target = merged.AddComponent<SkinnedMeshRenderer>();
+            var merge = new SerializedObject(merged.AddComponent<MergeSkinnedMesh>());
+            var sources = merge.FindProperty("renderersSet.mainSet");
+            sources.arraySize = 2;
+            sources.GetArrayElementAtIndex(0).objectReferenceValue = avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>();
+            sources.GetArrayElementAtIndex(1).objectReferenceValue = avatar.transform.Find("Tail").GetComponent<SkinnedMeshRenderer>();
+            merge.ApplyModifiedPropertiesWithoutUndo();
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(OwnReports(errors), Has.None.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
+            Assert.That(target.sharedMaterials.Distinct().Count(), Is.EqualTo(1), "every slot is on the merged material");
+            AssertKeepsColours(target, textures);
+        }
+
+        [Test]
         public void RemoveMeshByMaskOnAMergeSkinnedMeshTargetDeletesTheRightTrianglesOfAStaticSource()
         {
             // The glasses have one quad under the mask's white and one under its black.
