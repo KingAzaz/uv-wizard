@@ -37,13 +37,14 @@ namespace UVWizard.Core.Tests.Pipeline
             var first = Stopwatch.StartNew();
             var fresh = Bake(CachedOptions(), Glowing());
             first.Stop();
-            // The quickest of a few cached bakes, so one slowed by the machine doesn't fail the test.
+            // The quickest of five cached bakes, so a few slowed by the machine don't fail the test. A cached bake took
+            // about a thirtieth of a fresh one's time in the editor, so half leaves a wide margin.
             var renderer = Glowing();
             var second = Stopwatch.StartNew();
             var cached = Bake(CachedOptions(), renderer);
             second.Stop();
             var quickest = second.Elapsed;
-            for (var run = 0; run < 2; run++)
+            for (var run = 0; run < 4; run++)
             {
                 var again = Stopwatch.StartNew();
                 Bake(CachedOptions(), Glowing());
@@ -116,6 +117,8 @@ namespace UVWizard.Core.Tests.Pipeline
         [TestCase("scale and offset")]
         [TestCase("wrap mode")]
         [TestCase("filter mode")]
+        [TestCase("mip bias")]
+        [TestCase("anisotropic level")]
         [TestCase("texture shape")]
         [TestCase("texture format")]
         [TestCase("shared texture")]
@@ -159,6 +162,9 @@ namespace UVWizard.Core.Tests.Pipeline
                 "scale and offset" => (Options(), WithMaterial(material => material.mainTextureOffset = new Vector2(0.05f, 0))),
                 "wrap mode" => (Options(), WithAlbedo(texture => texture.wrapMode = TextureWrapMode.Clamp)),
                 "filter mode" => (Options(), WithAlbedo(texture => texture.filterMode = FilterMode.Point)),
+                // The bake samples with implicit derivatives, so the bias and anisotropy pick the mips it reads.
+                "mip bias" => (Options(), WithAlbedo(texture => texture.mipMapBias = 1)),
+                "anisotropic level" => (Options(), WithAlbedo(texture => texture.anisoLevel = 9)),
                 // The same bytes, read as another shape or another format.
                 "texture shape" => (Options(), Plain(changed ? Raw(128, 256, TextureFormat.RGBA32) : Raw(256, 128, TextureFormat.RGBA32))),
                 "texture format" => (Options(), Plain(Raw(256, 256, changed ? TextureFormat.BGRA32 : TextureFormat.RGBA32))),
@@ -347,6 +353,121 @@ namespace UVWizard.Core.Tests.Pipeline
             {
                 AssetDatabase.DeleteAsset(folder);
             }
+        }
+
+        // The active quality level's texture settings override each texture's own when the bake samples it.
+        [TestCase("texture quality")]
+        [TestCase("anisotropic filtering")]
+        public void ChangingAQualitySettingBakesAfresh(string setting)
+        {
+            var limit = QualitySettings.globalTextureMipmapLimit;
+            var filtering = QualitySettings.anisotropicFiltering;
+            try
+            {
+                Bake(CachedOptions(), Glowing());
+                Assert.That(Bake(CachedOptions(), Glowing()).FromCache, Is.True, "unchanged");
+
+                if (setting == "texture quality") QualitySettings.globalTextureMipmapLimit = limit + 1;
+                else
+                    QualitySettings.anisotropicFiltering = filtering == AnisotropicFiltering.ForceEnable
+                        ? AnisotropicFiltering.Disable
+                        : AnisotropicFiltering.ForceEnable;
+
+                Assert.That(Bake(CachedOptions(), Glowing()).FromCache, Is.False, "changed");
+            }
+            finally
+            {
+                QualitySettings.globalTextureMipmapLimit = limit;
+                QualitySettings.anisotropicFiltering = filtering;
+            }
+        }
+
+        [Test]
+        public void ADirtyUnreadableTextureAssetBakesAfresh()
+        {
+            // Its texels in memory may differ from its saved file's, such as an edit not yet saved. A GPU write such as
+            // Graphics.CopyTexture doesn't mark it dirty, so that one still reads as unchanged.
+            const string folder = "Assets/UVWizardCacheTests";
+            const string path = folder + "/texture.asset";
+            Directory.CreateDirectory(folder);
+            try
+            {
+                // Made outside the test's list of objects to destroy: deleting the asset destroys it.
+                var made = new Texture2D(64, 64, TextureFormat.RGBA32, mipChain: false);
+                made.LoadRawTextureData(Enumerable.Range(0, 64 * 64 * 4).Select(i => (byte)(i * 7 % 251)).ToArray());
+                made.Apply(false, makeNoLongerReadable: true);
+                AssetDatabase.CreateAsset(made, path);
+                AssetDatabase.SaveAssets();
+                var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assume.That(texture.isReadable, Is.False);
+                Assume.That(EditorUtility.IsDirty(texture), Is.False);
+                Bake(CachedOptions(), Plain(texture));
+                var again = Bake(CachedOptions(), Plain(texture));
+
+                EditorUtility.SetDirty(texture);
+                var dirty = Bake(CachedOptions(), Plain(texture));
+
+                Assert.That(again.FromCache, Is.True, "saved");
+                Assert.That(dirty.FromCache, Is.False, "dirty");
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(folder);
+            }
+        }
+
+        [Test]
+        public void AReadOnlyEntryDoesntStopEviction()
+        {
+            BakeOptions Options() => StandardOptions(atlasSize: 256, cacheDirectory: CacheDirectory, cacheEntries: 2);
+            Bake(Options(), Glowing(seed: 0));
+            var readOnly = Directory.GetFiles(CacheDirectory).Single();
+            File.SetAttributes(readOnly, FileAttributes.ReadOnly);
+            var warnings = new System.Collections.Generic.List<string>();
+            void Log(string message, string stack, LogType type)
+            {
+                if (type == LogType.Warning) warnings.Add(message);
+            }
+            Application.logMessageReceived += Log;
+            try
+            {
+                foreach (var seed in new[] { 1, 2, 3 }) Bake(Options(), Glowing(seed: seed));
+
+                Assert.That(warnings, Has.None.Contains("couldn't cache"));
+                Assert.That(Bake(Options(), Glowing(seed: 3)).FromCache, Is.True, "the newest");
+                Assert.That(Bake(Options(), Glowing(seed: 1)).FromCache, Is.False, "evicted");
+            }
+            finally
+            {
+                Application.logMessageReceived -= Log;
+                // Only Windows refuses to delete a read-only file. Elsewhere, CI's Linux included, eviction deletes it.
+                if (File.Exists(readOnly)) File.SetAttributes(readOnly, FileAttributes.Normal);
+            }
+        }
+
+        [Test]
+        public void AStoreDeletesAPartialEntryLeftByAnInterruptedOne()
+        {
+            Directory.CreateDirectory(CacheDirectory);
+            var partial = Path.Combine(CacheDirectory, "0123456789abcdef0123456789abcdef.bake.partial");
+            File.WriteAllText(partial, "interrupted");
+
+            Bake(CachedOptions(), Glowing());
+
+            Assert.That(File.Exists(partial), Is.False);
+            Assert.That(Directory.GetFiles(CacheDirectory, "*.bake"), Has.Length.EqualTo(1));
+        }
+
+        [Test]
+        public void ANegativeEntryCountKeepsNoEntries()
+        {
+            var options = StandardOptions(atlasSize: 256, cacheDirectory: CacheDirectory, cacheEntries: -1);
+
+            var result = Bake(options, Glowing());
+
+            Assert.That(result.Fits, Is.True);
+            Assert.That(Directory.GetFiles(CacheDirectory), Is.Empty);
+            Assert.That(Bake(options, Glowing()).FromCache, Is.False);
         }
 
         [Test]

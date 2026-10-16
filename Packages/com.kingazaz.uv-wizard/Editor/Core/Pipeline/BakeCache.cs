@@ -23,6 +23,7 @@ namespace UVWizard.Core.Pipeline
         // is applied the way UnpackScaleNormal applies it (#63).
         const int Format = 3;
         const string Extension = ".bake";
+        const string Partial = ".partial";
 
         readonly string directory;
         readonly int maxEntries;
@@ -31,7 +32,7 @@ namespace UVWizard.Core.Pipeline
         public BakeCache(string directory, int maxEntries)
         {
             this.directory = directory;
-            this.maxEntries = maxEntries;
+            this.maxEntries = Math.Max(0, maxEntries);
         }
 
         /// <summary>
@@ -68,9 +69,8 @@ namespace UVWizard.Core.Pipeline
                 MarkUsed(path);
                 return new CachedBake(sizes, placements, atlases, packing);
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-                                                  or InvalidDataException or UnityException or ArgumentException
-                                                  or FormatException)
+            catch (Exception exception) when (IsFileError(exception) || exception is InvalidDataException
+                                                  or UnityException or ArgumentException or FormatException)
             {
                 foreach (var atlas in atlases.Values) Object.DestroyImmediate(atlas);
                 return null;
@@ -121,7 +121,7 @@ namespace UVWizard.Core.Pipeline
                 Write(PathOf(key), payload);
                 Evict();
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (IsFileError(exception))
             {
                 Debug.LogWarning($"UV Wizard couldn't cache this bake in {directory}, so the next one bakes afresh: " +
                     exception.Message);
@@ -132,7 +132,7 @@ namespace UVWizard.Core.Pipeline
         {
             Directory.CreateDirectory(directory);
             // Written beside the entry and moved into place, so an interrupted store leaves no half-written entry.
-            var partial = path + ".partial";
+            var partial = path + Partial;
             using (var writer = new BinaryWriter(File.Create(partial)))
             {
                 writer.Write(Format);
@@ -150,17 +150,33 @@ namespace UVWizard.Core.Pipeline
             {
                 File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
             }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            catch (Exception exception) when (IsFileError(exception))
             {
             }
         }
 
+        // Also drops what an interrupted store left. An entry that can't be deleted, such as a read-only one, stays.
         void Evict()
         {
-            var stored = new DirectoryInfo(directory).GetFiles("*" + Extension);
+            var cache = new DirectoryInfo(directory);
+            var stored = cache.GetFiles("*" + Extension);
             Array.Sort(stored, (a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
-            for (var e = maxEntries; e < stored.Length; e++) stored[e].Delete();
+            for (var e = maxEntries; e < stored.Length; e++) TryDelete(stored[e]);
+            foreach (var partial in cache.GetFiles("*" + Extension + Partial)) TryDelete(partial);
         }
+
+        static void TryDelete(FileInfo file)
+        {
+            try
+            {
+                file.Delete();
+            }
+            catch (Exception exception) when (IsFileError(exception))
+            {
+            }
+        }
+
+        static bool IsFileError(Exception exception) => exception is IOException or UnauthorizedAccessException;
 
         string PathOf(Hash128 key) => Path.Combine(directory, key + Extension);
 
@@ -220,6 +236,11 @@ namespace UVWizard.Core.Pipeline
             var shader = AssetDatabase.GetAssetDependencyHash(ChannelBaker.ShaderPath);
             hash.Append(ref shader);
             Add(Application.unityVersion);
+            // The bake reads and writes colours in the project's colour space, and samples with the active quality
+            // level's texture settings, which override a texture's own mip limit and anisotropy.
+            Add((int)QualitySettings.activeColorSpace);
+            Add(QualitySettings.globalTextureMipmapLimit);
+            Add((int)QualitySettings.anisotropicFiltering);
         }
 
         public Hash128? Hash => hashable ? hash : (Hash128?)null;
@@ -258,6 +279,9 @@ namespace UVWizard.Core.Pipeline
             Add((int)texture.wrapModeU);
             Add((int)texture.wrapModeV);
             Add((int)texture.filterMode);
+            // The bake samples with implicit derivatives, so these pick the mips it reads where a chart shrinks.
+            Add(texture.mipMapBias);
+            Add(texture.anisoLevel);
             var known = false;
             if (AssetDatabase.TryGetGUIDAndLocalFileIdentifier(texture, out var guid, out long file))
             {
@@ -265,7 +289,8 @@ namespace UVWizard.Core.Pipeline
                 Add(file);
                 var dependencies = AssetDatabase.GetAssetDependencyHash(AssetDatabase.GUIDToAssetPath(guid));
                 hash.Append(ref dependencies);
-                known = true;
+                // A dirty asset's texels may differ from its saved file's, which is all the dependency hash knows.
+                known = !EditorUtility.IsDirty(texture);
             }
             if (texture is Texture2D { isReadable: true } readable)
             {

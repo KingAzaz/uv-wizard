@@ -61,7 +61,6 @@ namespace UVWizard.Core.Baking
                 }
                 GL.PopMatrix();
 
-                // Atlas UVs stay inside 0..1, so a chart at one edge mustn't be filtered with the opposite edge.
                 var atlas = Atlas(size, TextureFormat.RGBA32, -1, normals);
                 atlas.ReadPixels(new Rect(0, 0, size, size), 0, 0, recalculateMipMaps: false);
                 var texels = atlas.GetPixels32(0);
