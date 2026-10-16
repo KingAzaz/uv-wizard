@@ -159,7 +159,7 @@ namespace UVWizard.Core.Tests.VRChat
             var emission = SourceShaderReader.Read(material).Emission;
 
             Assert.That(emission, Is.Not.Null);
-            AssertColour(new Color(0.6858f, 0.6858f, 0.6858f, 1f), emission!.Tint, "alpha untouched", 0.002f);
+            AssertColour(new Color(0.6858f, 0.6858f, 0.6858f, 1f), emission!.Tint, tolerance: 0.002f);
         }
 
         [Test]

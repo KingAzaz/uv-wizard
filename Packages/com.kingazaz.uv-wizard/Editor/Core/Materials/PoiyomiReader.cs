@@ -2,6 +2,7 @@
 
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using UnityEngine;
 
 namespace UVWizard.Core.Materials
@@ -52,9 +53,9 @@ namespace UVWizard.Core.Materials
             var reasons = new List<string>();
             var mode = (int)properties.Float("_Mode", Opaque);
             if (mode == Cutout || mode == TransClipping)
-                reasons.Add("Cutout becomes opaque: Toon Standard has no alpha cutoff.");
+                reasons.Add(MaterialProperties.CutoutDropped);
             else if (mode != Opaque)
-                reasons.Add("Transparent becomes opaque: Toon Standard has no transparency.");
+                reasons.Add(MaterialProperties.TransparencyDropped);
             // An unset texture samples its plain default, so panning it moves nothing.
             foreach (var (channel, texture, source) in textures)
                 if (source.Texture != null && properties.Pan(texture) != Vector2.zero)
@@ -140,8 +141,24 @@ namespace UVWizard.Core.Materials
                 this.material = material;
                 locked = IsLocked(material.shader);
                 // The suffix comes from the tags only, never from the material's name: NDMF clones can be
-                // renamed.
-                renameSuffix = Tag("thry_locked_rename_suffix") ?? Tag("thry_rename_suffix");
+                // renamed. A lock records thry_locked_rename_suffix already cleaned.
+                renameSuffix = Tag("thry_locked_rename_suffix") ??
+                               (Tag("thry_rename_suffix") is { } suffix ? CleanSuffix(suffix) : null);
+            }
+
+            // ThryEditor's ShaderOptimizer.CleanStringForPropertyNames: no spaces, and every UTF-8 byte that
+            // isn't a letter, digit or underscore as two hex digits.
+            static string CleanSuffix(string suffix)
+            {
+                var cleaned = new StringBuilder();
+                foreach (var b in Encoding.UTF8.GetBytes(suffix.Trim().Replace(" ", "")))
+                {
+                    if (b >= 'A' && b <= 'Z' || b >= 'a' && b <= 'z' || b >= '0' && b <= '9' || b == '_')
+                        cleaned.Append((char)b);
+                    else
+                        cleaned.Append(b.ToString("X2"));
+                }
+                return cleaned.ToString();
             }
 
             /// <summary>Renamed properties read so far whose new name matched more than one property.</summary>
