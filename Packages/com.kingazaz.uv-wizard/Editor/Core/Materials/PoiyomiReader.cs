@@ -83,11 +83,11 @@ namespace UVWizard.Core.Materials
         {
             if (properties.Float("_EnableEmission", 0) < 0.5f) return null;
             var tint = MaterialProperties.ScaleLinear(properties.Color("_EmissionColor", Color.white),
-                Strength(properties));
+                EmissionStrength(properties));
             return tint.maxColorComponent > 0 ? Source(properties, "_EmissionMap", tint) : null;
         }
 
-        static float Strength(Properties properties) =>
+        static float EmissionStrength(Properties properties) =>
             properties.Float("_EmissionStrength", 0) * properties.Color("_EmissionColor", Color.white).a;
 
         // Features that change the colours Poiyomi renders in ways the bake doesn't reproduce.
@@ -104,11 +104,16 @@ namespace UVWizard.Core.Materials
             if (properties.Float("_EnableEmission", 0) > 0.5f)
             {
                 // These two glow even where the bake reads no emission: a theme colour replaces the saved
-                // colour's rgb, and AudioLink adds to the saved strength.
-                if (properties.Float("_EmissionColorThemeIndex", 0) != 0 && Strength(properties) > 0)
-                    yield return "Emission takes a theme colour: the saved colour is baked.";
-                if (properties.Float("_EnableAudioLink", 0) > 0.5f && properties.Float("_EmissionAL0Enabled", 0) > 0.5f)
-                    yield return "Emission reacts to AudioLink: the saved strength is baked.";
+                // colour's rgb, and AudioLink adds to the saved strength before the colour's alpha scales it.
+                var dropped = emits ? null : "the glow isn't baked.";
+                var audioLink = properties.Float("_EnableAudioLink", 0) > 0.5f;
+                // poiThemeColor reads the ColorChord and AudioLink theme slots, index 5 on, only with AudioLink.
+                var theme = properties.Float("_EmissionColorThemeIndex", 0);
+                if (theme != 0 && (theme <= 4 || audioLink) && EmissionStrength(properties) > 0)
+                    yield return "Emission takes a theme colour: " + (dropped ?? "the saved colour is baked.");
+                if (audioLink && properties.Float("_EmissionAL0Enabled", 0) > 0.5f &&
+                    properties.Color("_EmissionColor", Color.white).a > 0)
+                    yield return "Emission reacts to AudioLink: " + (dropped ?? "the saved strength is baked.");
             }
             if (emits)
             {
@@ -123,7 +128,7 @@ namespace UVWizard.Core.Materials
                 if (properties.Float("_EmissionCenterOutEnabled", 0) > 0.5f)
                     yield return "Emission moves from the centre out: the emission map is baked still.";
                 if (properties.Float("_EnableGITDEmission", 0) > 0.5f)
-                    yield return "Emission follows the lighting: the glow is baked at full strength.";
+                    yield return "Emission follows the lighting: the saved strength is baked.";
                 if (properties.Float("_EmissionHueShiftEnabled", 0) > 0.5f)
                     yield return "Emission is hue-shifted: the saved colour is baked.";
                 if (properties.Float("_EmissionReplace0", 0) > 0.5f)

@@ -226,7 +226,8 @@ namespace UVWizard.Core.Tests.Poiyomi
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
             Assert.That(reading.Reason, Does.StartWith("Emission reacts to AudioLink"));
-            Assert.That(SourceShaderReader.Read(moduleOff).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+            var moduleOffReading = SourceShaderReader.Read(moduleOff);
+            Assert.That(moduleOffReading.Verdict, Is.EqualTo(MaterialVerdict.Merged), moduleOffReading.Reason);
         }
 
         // AudioLink adds to the strength, so the material can glow while the saved strength is 0.
@@ -242,7 +243,7 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission reacts to AudioLink"));
+            Assert.That(reading.Reason, Does.StartWith("Emission reacts to AudioLink: the glow isn't baked."));
         }
 
         // poiThemeColor replaces the rgb, so a black saved colour still glows in the theme colour.
@@ -256,19 +257,53 @@ namespace UVWizard.Core.Tests.Poiyomi
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
-            Assert.That(reading.Reason, Does.StartWith("Emission takes a theme colour"));
+            Assert.That(reading.Reason, Does.StartWith("Emission takes a theme colour: the glow isn't baked."));
         }
 
-        // The theme replaces only the colour: at strength 0 nothing glows.
-        [Test]
-        public void AThemeColourAtZeroStrengthIsIgnored()
+        // The theme replaces only the rgb: at strength 0, or a colour alpha of 0, nothing glows. Its ColorChord and
+        // AudioLink slots (index 5 on) fall back to the saved colour while the AudioLink module is off.
+        [TestCase(0f, 1f, 1)]
+        [TestCase(1f, 0f, 1)]
+        [TestCase(1f, 1f, 5)]
+        public void AThemeColourThatCantGlowIsIgnored(float strength, float alpha, int themeIndex)
         {
             var material = Material(PoiyomiToon);
             material.SetFloat("_EnableEmission", 1);
-            material.SetFloat("_EmissionStrength", 0);
-            material.SetFloat("_EmissionColorThemeIndex", 1);
+            material.SetFloat("_EmissionStrength", strength);
+            material.SetColor("_EmissionColor", new Color(0f, 0f, 0f, alpha));
+            material.SetFloat("_EmissionColorThemeIndex", themeIndex);
 
-            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+        }
+
+        [Test]
+        public void AnAudioLinkThemeColourIsFlaggedWhileAudioLinkIsOn()
+        {
+            var material = EmittingMaterial();
+            material.SetColor("_EmissionColor", new Color(0f, 0f, 0f, 1f));
+            material.SetFloat("_EmissionColorThemeIndex", 5);
+            material.SetFloat("_EnableAudioLink", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission takes a theme colour"));
+        }
+
+        // AudioLink adds to the strength before the colour's alpha scales it.
+        [Test]
+        public void AudioLinkEmissionWithAZeroColourAlphaIsIgnored()
+        {
+            var material = EmittingMaterial();
+            material.SetColor("_EmissionColor", new Color(1f, 1f, 1f, 0f));
+            material.SetFloat("_EnableAudioLink", 1);
+            material.SetFloat("_EmissionAL0Enabled", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
         }
 
         [Test]
