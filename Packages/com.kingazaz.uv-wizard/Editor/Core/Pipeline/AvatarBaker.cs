@@ -678,7 +678,8 @@ namespace UVWizard.Core.Pipeline
         {
             material.mainTexture = atlas;
             // The emission colour defaults to black, so without these the atlas wouldn't glow. A shader with no
-            // emission strength gets it on its emission colour instead, which is linearized before use.
+            // emission strength gets it on its emission colour instead, which is linearized before use, and has its
+            // _EMISSION keyword turned on: Standard compiles its emission out without it.
             if (emissionAtlas != null)
             {
                 material.SetTexture("_EmissionMap", emissionAtlas);
@@ -687,7 +688,11 @@ namespace UVWizard.Core.Pipeline
                     material.SetColor("_EmissionColor", Color.white);
                     material.SetFloat("_EmissionStrength", emissionStrength);
                 }
-                else material.SetColor("_EmissionColor", new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
+                else
+                {
+                    material.SetColor("_EmissionColor", new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
+                    material.EnableKeyword("_EMISSION");
+                }
                 if (material.HasProperty("_EmissionUV")) material.SetFloat("_EmissionUV", 0);
             }
             // The atlas already holds each source's strength.

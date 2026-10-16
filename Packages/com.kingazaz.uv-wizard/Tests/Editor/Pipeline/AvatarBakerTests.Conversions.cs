@@ -222,6 +222,7 @@ namespace UVWizard.Core.Tests.Pipeline
             Bake(Converting(), renderer);
 
             var converted = renderer.sharedMaterial;
+            Assert.That(converted.IsKeywordEnabled("_EMISSION"), Is.True);
             Assert.That(converted.IsKeywordEnabled("_NORMALMAP"), Is.True);
             Assert.That(converted.GetFloat("_BumpScale"), Is.EqualTo(1));
             Assert.That(((Texture2D)converted.GetTexture("_BumpMap")).isDataSRGB, Is.False);
