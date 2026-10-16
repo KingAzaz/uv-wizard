@@ -33,6 +33,17 @@ def log(message):
     print(message, file=sys.stderr, flush=True)
 
 
+def utf8_streams():
+    """Write UTF-8 whatever the console's code page.
+
+    Failure messages can quote AAO's reports, which use arrows, and Windows
+    consoles default to cp1252. `python -I` ignores PYTHONIOENCODING, so set it here.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def now_ms():
     return int(time.time() * 1000)
 
@@ -204,6 +215,7 @@ def main(argv=None):
     parser.add_argument("-t", "--timeout", type=float, default=900, help="seconds before giving up (default 900)")
     parser.add_argument("--project", default="uv-wizard", help="Unity project name in the bridge status file")
     args = parser.parse_args(argv)
+    utf8_streams()
 
     deadline = time.monotonic() + args.timeout
     port = bridge.find_port(args.project)
