@@ -19,8 +19,9 @@ namespace UVWizard.Core.Pipeline
     /// </summary>
     internal sealed class BakeCache
     {
-        // Bumped whenever an entry's layout changes.
-        const int Format = 2;
+        // Bumped whenever an entry's layout changes, or the bake's output for the same inputs does. 3: normal strength
+        // is applied the way UnpackScaleNormal applies it (#63).
+        const int Format = 3;
         const string Extension = ".bake";
 
         readonly string directory;

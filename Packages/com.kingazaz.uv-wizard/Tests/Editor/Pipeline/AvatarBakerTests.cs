@@ -446,9 +446,11 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
-        public void ANormalMapAtDoubleStrengthLightsLikeItsSource()
+        public void ANormalMapAboveStrengthOneLightsLikeItsSource()
         {
-            // The merged material reads the atlas at strength 1, so the atlas must hold the source's bend at 2.
+            // The merged material reads the atlas at strength 1, so the atlas must hold the source's bend at 2. This
+            // render takes the editor's desktop decoder only. It stays short of horizontal: there, rebuilding z
+            // magnifies bilinear filtering past the tolerance. ChannelBakerTests covers the clamp point-filtered.
             var renderer = MeshRenderer(TangentQuad(new Vector2(0, 0), new Vector2(1, 1)),
                 NormalMapped(Keep(new Material(Shader.Find("Standard"))), NormalGradient(64, 0), 2));
             var before = WorldNormals(renderer);

@@ -77,10 +77,16 @@ Shader "Hidden/UVWizard/BakeChannel"
             {
                 float4 packed = tex2D(_MainTex, i.uv);
                 float x = _SourceEncoding > 0.5 ? packed.a : packed.r * packed.a;
-                // As UnpackScaleNormal does: scale x and y, then rebuild z from them. Past horizontal z is 0 and
-                // the vector is longer than 1, so it's normalized for the merged shader to read at strength 1.
-                float2 xy = (float2(x, packed.g) * 2 - 1) * _Strength;
-                float3 n = normalize(float3(xy, sqrt(1 - saturate(dot(xy, xy)))));
+                // As the device's UnpackScaleNormal does (UnityStandardUtils.cginc, UnpackScaleNormalRGorAG). For
+                // RG or AG it scales x and y, then rebuilds z from them; for AG, the mobile ASTC branch, it rebuilds
+                // z first and scales after. Either way the vector may be longer than 1, so it's normalized for the
+                // merged shader to read at strength 1.
+                float2 xy = float2(x, packed.g) * 2 - 1;
+                float z = sqrt(1 - saturate(dot(xy, xy)));
+                xy *= _Strength;
+                if (_SourceEncoding < 0.5)
+                    z = sqrt(1 - saturate(dot(xy, xy)));
+                float3 n = normalize(float3(xy, z));
                 return float4(n * 0.5 + 0.5, 1);
             }
             ENDCG
