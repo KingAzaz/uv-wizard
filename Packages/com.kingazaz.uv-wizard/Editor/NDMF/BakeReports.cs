@@ -20,14 +20,30 @@ namespace UVWizard.NDMF
         /// <summary>Raised each time a report is published, so an open report window can repaint.</summary>
         public static event Action? Published;
 
-        public static void Publish(BakeReport report)
+        static IReadOnlyDictionary<UnityEngine.Object, UnityEngine.Object> originals =
+            new Dictionary<UnityEngine.Object, UnityEngine.Object>();
+
+        /// <param name="report">The report.</param>
+        /// <param name="originals">The original avatar's object for each listed one the build cloned or copied.</param>
+        public static void Publish(BakeReport report, IReadOnlyDictionary<UnityEngine.Object, UnityEngine.Object> originals)
         {
             Latest = report;
+            BakeReports.originals = originals;
             Published?.Invoke();
         }
 
         /// <summary>Forgets the last report.</summary>
         public static void Clear() => Latest = null;
+
+        /// <summary>
+        /// The object a listed renderer or material links to: its original on the avatar, when the build cloned or
+        /// copied it, or else itself. Null when it's gone and has no original.
+        /// </summary>
+        public static UnityEngine.Object? Link(UnityEngine.Object? target)
+        {
+            if (target is not null && originals.TryGetValue(target, out var original) && original != null) return original;
+            return target != null ? target : null;
+        }
     }
 
     /// <summary>
@@ -51,9 +67,16 @@ namespace UVWizard.NDMF
         /// <summary>True once the bake has run, so later passes know there's a report to finish.</summary>
         public bool Baked { get; set; }
 
-        /// <summary>Publishes the report as it stands.</summary>
-        public void Publish(GameObject root) => BakeReports.Publish(new BakeReport(AvatarName(root),
-            ManualBake.Previewing, Result, Target, Before, After, Leftovers));
+        // Kept across passes: a renderer the bake listed may be gone by the last pass.
+        readonly Dictionary<UnityEngine.Object, UnityEngine.Object> originals = new Dictionary<UnityEngine.Object, UnityEngine.Object>();
+
+        /// <summary>Publishes the report as it stands, linked to the original avatar.</summary>
+        public void Publish(GameObject root)
+        {
+            var report = new BakeReport(AvatarName(root), ManualBake.Previewing, Result, Target, Before, After, Leftovers);
+            if (!ManualBake.Running) Originals.Find(root, report, originals);
+            BakeReports.Publish(report, originals);
+        }
 
         // NDMF builds a clone named after the avatar.
         static string AvatarName(GameObject root) =>
