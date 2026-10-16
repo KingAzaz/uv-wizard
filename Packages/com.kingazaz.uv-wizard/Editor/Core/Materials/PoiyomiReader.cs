@@ -1,4 +1,3 @@
-#if UVWIZARD_POIYOMI
 #nullable enable
 
 using System.Collections.Generic;
@@ -206,4 +205,3 @@ namespace UVWizard.Core.Materials
         }
     }
 }
-#endif
