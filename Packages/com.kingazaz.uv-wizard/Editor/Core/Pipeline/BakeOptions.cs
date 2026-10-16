@@ -41,7 +41,8 @@ namespace UVWizard.Core.Pipeline
         /// <param name="tintProperty">The merged shader's tint colour, set to white since the atlas carries every tint.</param>
         /// <param name="vertexColourProperty">The merged shader's toggle that multiplies in vertex colour.</param>
         /// <param name="representativeProperties">
-        /// Properties copied from the representative source: the merged-shader source with the most chart area.
+        /// Properties copied from the representative source: the merged-shader source with the most chart area, or,
+        /// when no such source draws, the source with the most chart area that has every one of these properties.
         /// </param>
         /// <param name="normalMapKeyword">The merged shader's keyword that turns its normal map on.</param>
         /// <param name="normalEncoding">

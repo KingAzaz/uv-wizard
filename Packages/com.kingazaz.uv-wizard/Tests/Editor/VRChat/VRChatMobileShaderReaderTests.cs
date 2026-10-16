@@ -369,6 +369,33 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That($"{SourceShaderReader.Read(material).Reason}", Does.Not.Contain(ReasonText.HueShiftDropped));
         }
 
+        // The slider's maximum, 6.283185, is a full turn: ApplyHue (Helpers.cginc) rotates the colour about grey by
+        // that angle, which leaves it as it was.
+        [TestCase("_HueShift")]
+        [TestCase("_EmissionHueShift")]
+        [TestCase("_DetailHueShift")]
+        public void AFullTurnHueShiftLeavesToonStandardUnflagged(string hueShift)
+        {
+            var material = HueShifted(ToonStandard);
+            material.SetFloat(hueShift, 6.283185f);
+
+            Assert.That($"{SourceShaderReader.Read(material).Reason}", Does.Not.Contain(ReasonText.HueShiftDropped));
+        }
+
+        // A script or animation can set a value off the slider. Only its angle within a turn counts, and a value with
+        // no angle, which the shader's sin and cos can't draw, is flagged.
+        [TestCase(-1.5f, true)]
+        [TestCase(4 * Mathf.PI, false)]
+        [TestCase(float.NaN, true)]
+        [TestCase(float.PositiveInfinity, true)]
+        public void AHueShiftOffTheSliderCountsByItsAngleWithinATurn(float hueShift, bool flagged)
+        {
+            var material = HueShifted(ToonStandard);
+            material.SetFloat("_HueShift", hueShift);
+
+            Assert.That($"{SourceShaderReader.Read(material).Reason}".Contains(ReasonText.HueShiftDropped), Is.EqualTo(flagged));
+        }
+
         [Test]
         public void AnEmissionHueShiftOnAMaterialThatDoesntEmitIsntFlagged()
         {
@@ -422,6 +449,17 @@ namespace UVWizard.Core.Tests.VRChat
             var material = Material(ToonStandard);
             material.DisableKeyword("USE_COLOR_MASK");
             material.SetTexture("_ColorMask", Texture());
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        [Test]
+        public void AColourMaskTurnedOnWithNoTextureLeavesToonStandardMerged()
+        {
+            // With no texture the shader samples _ColorMask's black default, which masks nothing.
+            var material = Material(ToonStandard);
+            material.EnableKeyword("USE_COLOR_MASK");
+            material.SetTexture("_ColorMask", null);
 
             Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }

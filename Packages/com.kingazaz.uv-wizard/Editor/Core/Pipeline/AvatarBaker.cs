@@ -96,7 +96,7 @@ namespace UVWizard.Core.Pipeline
             var priorities = head != null ? Priorities(slots, charts, head) : null;
 
             // The merged material is made before the atlas, since its own textures, such as the ramp, take budget.
-            var representative = Representative(slots, charts, options.MergedShader);
+            var representative = Representative(slots, charts, options);
             var merged = MergedMaterial(options, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             conversions.Merged = merged;
             var channels = Needed(slots, options.Channels);
@@ -605,10 +605,20 @@ namespace UVWizard.Core.Pipeline
                 corners, strength, encoding);
         }
 
-        // The source with the merged shader whose charts cover the most texels, first in slot order on a tie. A
-        // chart counts once for each material it holds, so stacked islands don't count twice. A source on empty
-        // submeshes alone has no charts, draws nothing, and so can't represent.
-        static Material? Representative(List<Slot> slots, Chart[] charts, Shader mergedShader)
+        // The source with the merged shader whose charts cover the most texels, first in slot order on a tie. When no
+        // source has it, a source with every shared setting does instead, such as Toon Standard (Outline) on an
+        // avatar with no plain Toon Standard. A chart counts once for each material it holds, so stacked islands don't
+        // count twice. A source on empty submeshes alone has no charts, draws nothing, and so can't represent.
+        static Material? Representative(List<Slot> slots, Chart[] charts, BakeOptions options)
+        {
+            var area = Areas(slots, charts);
+            return Largest(slots, area, material => material.shader == options.MergedShader)
+                ?? (options.RepresentativeProperties.Count == 0
+                    ? null
+                    : Largest(slots, area, material => options.RepresentativeProperties.All(material.HasProperty)));
+        }
+
+        static Dictionary<Material, long> Areas(List<Slot> slots, Chart[] charts)
         {
             var area = new Dictionary<Material, long>();
             foreach (var chart in charts)
@@ -618,10 +628,15 @@ namespace UVWizard.Core.Pipeline
                     if (counted.Add(slots[s].Material))
                         area[slots[s].Material] = (area.TryGetValue(slots[s].Material, out var sum) ? sum : 0) + chart.FootprintTexels;
             }
+            return area;
+        }
+
+        static Material? Largest(List<Slot> slots, Dictionary<Material, long> area, Func<Material, bool> qualifies)
+        {
             Material? best = null;
             // Every slot that draws has charts, so it has an area.
             foreach (var slot in slots)
-                if (slot.Draws && slot.Material.shader == mergedShader && (best == null || area[slot.Material] > area[best]))
+                if (slot.Draws && qualifies(slot.Material) && (best == null || area[slot.Material] > area[best]))
                     best = slot.Material;
             return best;
         }

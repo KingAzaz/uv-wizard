@@ -76,8 +76,8 @@ namespace UVWizard.Core.Pipeline
         public float EmissionStrength { get; }
 
         /// <summary>
-        /// The source the merged material's shared settings came from, or null when no source with its shader draws
-        /// any merged triangles.
+        /// The source the merged material's shared settings came from, or null when no source with its shader, or
+        /// with every representative property, draws any merged triangles.
         /// </summary>
         public Material? Representative { get; }
 

@@ -79,8 +79,10 @@ namespace UVWizard.Core.Materials
             return detail == null ? reading : reading.Excluded(detail);
         }
 
-        // What Toon Standard draws that the bake drops, checked against VRChat SDK 3.10.5's shader. Rim light and
-        // AudioLink aren't listed: the merged Toon Standard material can turn them back on for the whole avatar.
+        // The features Toon Standard draws that the bake drops and that #38 asked to flag, checked against VRChat SDK
+        // 3.10.5's shader. Specular and occlusion are dropped too but aren't checked: #38 left them out of scope. Rim
+        // light and AudioLink aren't listed: the merged Toon Standard material can turn them back on for the whole
+        // avatar.
         // Hue shift and colour mask are dynamic-branch keywords; the inspector turns a group off by clearing its
         // keyword alone, so a turned-off group keeps its values.
         static List<Reason> ToonStandardDropped(Material material, bool emits, bool outline)
@@ -89,8 +91,8 @@ namespace UVWizard.Core.Materials
             var detailMaps = material.IsKeywordEnabled("USE_DETAIL_MAPS");
             // Each layer's shift shows only where the layer does: emission that glows, detail maps that are on.
             if (material.IsKeywordEnabled("USE_HUE_SHIFT") &&
-                (material.GetFloat("_HueShift") != 0 || emits && material.GetFloat("_EmissionHueShift") != 0 ||
-                 detailMaps && material.GetFloat("_DetailHueShift") != 0))
+                (Shifts(material, "_HueShift") || emits && Shifts(material, "_EmissionHueShift") ||
+                 detailMaps && Shifts(material, "_DetailHueShift")))
                 reasons.Add(new Reason(ReasonText.HueShiftDropped));
             // _ColorMask defaults to black, which has no effect. Its emission glows even with a black _EmissionColor.
             if (material.IsKeywordEnabled("USE_COLOR_MASK") && material.GetTexture("_ColorMask") != null)
@@ -102,6 +104,17 @@ namespace UVWizard.Core.Materials
             if (outline && material.GetFloat("_OutlineThickness") > 0)
                 reasons.Add(new Reason(ReasonText.OutlineDropped));
             return reasons;
+        }
+
+        // Whether a hue shift changes colours. ApplyHue (Helpers.cginc) rotates them about grey by the angle, so a
+        // whole number of turns, such as the slider's 2π maximum, leaves them as they were. NaN or infinity has no
+        // angle, and its sin and cos draw garbage.
+        static bool Shifts(Material material, string hueShift)
+        {
+            var angle = material.GetFloat(hueShift);
+            if (!float.IsFinite(angle)) return true;
+            var turn = Mathf.Repeat(angle, 2 * Mathf.PI);
+            return Mathf.Min(turn, 2 * Mathf.PI - turn) > 1e-3f;
         }
 
         static SourceMaterialReading Reading(ChannelSource albedo, ChannelSource? emission, ChannelSource? normal,
