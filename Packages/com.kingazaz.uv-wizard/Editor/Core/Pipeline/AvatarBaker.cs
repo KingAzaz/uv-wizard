@@ -299,9 +299,12 @@ namespace UVWizard.Core.Pipeline
             {
                 var sources = renderer.sharedMaterials;
                 for (var s = 0; s < sources.Length; s++)
+                {
                     if (sources[s] != null)
                         excluded.Add(new SlotNote(renderer, s, sources[s], "A tool that runs after the bake reads " +
                             "this mesh's UV0, and the bake can't keep it where that tool would find it."));
+                    ExcludeSwappedIn(renderer, s, sources[s], AnimationsOf(animated, renderer, s), excluded);
+                }
                 return;
             }
             using var removals = laterEdits?.Removals(renderer);
@@ -309,22 +312,19 @@ namespace UVWizard.Core.Pipeline
             using var meshes = MeshUtility.AcquireReadOnlyMeshData(mesh);
             var data = meshes[0];
             Vector2[]? uv0 = null;
-            for (var s = 0; s < Math.Min(materials.Length, data.subMeshCount); s++)
+            // Every slot, extra and empty ones too, so the materials animations swap into them are all listed.
+            for (var s = 0; s < materials.Length; s++)
             {
                 var material = materials[s];
-                if (material == null) continue;
-                void Exclude(string reason) => excluded.Add(new SlotNote(renderer, s, material, reason));
-
                 var animations = AnimationsOf(animated, renderer, s);
                 if (animations.Count > 0)
                 {
-                    Exclude(animations[0].Reason);
-                    var listed = new HashSet<Material> { material };
-                    foreach (var animation in animations)
-                    foreach (var swapped in animation.SwappedIn)
-                        if (listed.Add(swapped)) excluded.Add(new SlotNote(renderer, s, swapped, animation.Reason));
+                    if (material != null) excluded.Add(new SlotNote(renderer, s, material, animations[0].Reason));
+                    ExcludeSwappedIn(renderer, s, material, animations, excluded);
                     continue;
                 }
+                if (material == null || s >= data.subMeshCount) continue;
+                void Exclude(string reason) => excluded.Add(new SlotNote(renderer, s, material, reason));
 
                 if (materials.Length > data.subMeshCount && s == data.subMeshCount - 1)
                 {
@@ -378,6 +378,18 @@ namespace UVWizard.Core.Pipeline
                     flagged.Add(new SlotNote(renderer, s, material, reading.Reason ?? "It may look different after the bake."));
                 slots.Add(slot);
             }
+        }
+
+        // Lists each material the animations swap into the slot once, with the first animation that swaps it in,
+        // unless it's the slot's own material.
+        static void ExcludeSwappedIn(Renderer renderer, int slot, Material? source, List<AnimatedSlot> animations,
+            List<SlotNote> excluded)
+        {
+            var listed = new HashSet<Material>();
+            if (source != null) listed.Add(source);
+            foreach (var animation in animations)
+            foreach (var swapped in animation.SwappedIn)
+                if (listed.Add(swapped)) excluded.Add(new SlotNote(renderer, slot, swapped, animation.Reason));
         }
 
         // The animations that swap or change the renderer's slot.
