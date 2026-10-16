@@ -82,10 +82,13 @@ namespace UVWizard.Core.Materials
         static ChannelSource? Emission(Properties properties)
         {
             if (properties.Float("_EnableEmission", 0) < 0.5f) return null;
-            var colour = properties.Color("_EmissionColor", Color.white);
-            var tint = MaterialProperties.ScaleLinear(colour, properties.Float("_EmissionStrength", 0) * colour.a);
+            var tint = MaterialProperties.ScaleLinear(properties.Color("_EmissionColor", Color.white),
+                Strength(properties));
             return tint.maxColorComponent > 0 ? Source(properties, "_EmissionMap", tint) : null;
         }
+
+        static float Strength(Properties properties) =>
+            properties.Float("_EmissionStrength", 0) * properties.Color("_EmissionColor", Color.white).a;
 
         // Features that change the colours Poiyomi renders in ways the bake doesn't reproduce.
         static IEnumerable<string> Unbaked(Properties properties, bool emits)
@@ -98,14 +101,37 @@ namespace UVWizard.Core.Materials
                 yield return "Albedo has decals: decals aren't baked.";
             if (properties.Float("_DetailEnabled", 0) > 0.5f)
                 yield return "Albedo takes detail textures: the detail texture and normal aren't baked.";
+            if (properties.Float("_EnableEmission", 0) > 0.5f)
+            {
+                // These two glow even where the bake reads no emission: a theme colour replaces the saved
+                // colour's rgb, and AudioLink adds to the saved strength.
+                if (properties.Float("_EmissionColorThemeIndex", 0) != 0 && Strength(properties) > 0)
+                    yield return "Emission takes a theme colour: the saved colour is baked.";
+                if (properties.Float("_EnableAudioLink", 0) > 0.5f && properties.Float("_EmissionAL0Enabled", 0) > 0.5f)
+                    yield return "Emission reacts to AudioLink: the saved strength is baked.";
+            }
             if (emits)
             {
-                if (properties.Float("_EmissionColorThemeIndex", 0) != 0)
-                    yield return "Emission takes a theme colour: the saved colour is baked.";
                 if (properties.Float("_EmissionBaseColorAsMap", 0) > 0.5f)
                     yield return "Emission takes the base colour: only the emission colour is baked.";
                 if (properties.Texture("_EmissionMask") != null)
                     yield return "Emission is masked: the mask isn't baked.";
+                if (properties.Float("_EmissionBlinkingEnabled", 0) > 0.5f)
+                    yield return "Emission blinks: the glow is baked steady.";
+                if (properties.Float("_ScrollingEmission", 0) > 0.5f)
+                    yield return "Emission scrolls: the glow is baked steady.";
+                if (properties.Float("_EmissionCenterOutEnabled", 0) > 0.5f)
+                    yield return "Emission moves from the centre out: the emission map is baked still.";
+                if (properties.Float("_EnableGITDEmission", 0) > 0.5f)
+                    yield return "Emission follows the lighting: the glow is baked at full strength.";
+                if (properties.Float("_EmissionHueShiftEnabled", 0) > 0.5f)
+                    yield return "Emission is hue-shifted: the saved colour is baked.";
+                if (properties.Float("_EmissionReplace0", 0) > 0.5f)
+                    yield return "Emission overrides the base colour: the glow is baked on top of it.";
+                if (properties.Float("_EmissionMaskInvert", 0) > 0.5f)
+                    yield return "Emission's mask is inverted: the glow is baked unmasked.";
+                if (properties.Float("_EmissionMask0GlobalMask", 0) > 0)
+                    yield return "Emission takes a global mask: the glow is baked unmasked.";
             }
             for (var i = 1; i <= 3; i++)
                 if (properties.Float($"_EnableEmission{i}", 0) > 0.5f)

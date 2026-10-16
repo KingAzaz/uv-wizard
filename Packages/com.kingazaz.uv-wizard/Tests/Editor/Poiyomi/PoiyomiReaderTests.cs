@@ -192,6 +192,73 @@ namespace UVWizard.Core.Tests.Poiyomi
             Assert.That(reading.Reason, Does.StartWith("Emission"));
         }
 
+        // Each animates or reshapes the glow, which the bake turns into a steady one.
+        [TestCase("_EmissionBlinkingEnabled", "Emission blinks")]
+        [TestCase("_ScrollingEmission", "Emission scrolls")]
+        [TestCase("_EmissionCenterOutEnabled", "Emission moves from the centre out")]
+        [TestCase("_EnableGITDEmission", "Emission follows the lighting")]
+        [TestCase("_EmissionHueShiftEnabled", "Emission is hue-shifted")]
+        [TestCase("_EmissionReplace0", "Emission overrides the base colour")]
+        [TestCase("_EmissionMaskInvert", "Emission's mask is inverted")]
+        [TestCase("_EmissionMask0GlobalMask", "Emission takes a global mask")]
+        public void AnimatedAndReshapedEmissionIsFlagged(string property, string reason)
+        {
+            var material = EmittingMaterial();
+            material.SetFloat(property, 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith(reason));
+        }
+
+        // Poiyomi applies emission AudioLink only while the AudioLink module is on.
+        [Test]
+        public void AudioLinkEmissionIsFlaggedWhileAudioLinkIsOn()
+        {
+            var on = EmittingMaterial();
+            on.SetFloat("_EnableAudioLink", 1);
+            on.SetFloat("_EmissionAL0Enabled", 1);
+            var moduleOff = EmittingMaterial();
+            moduleOff.SetFloat("_EmissionAL0Enabled", 1);
+
+            var reading = SourceShaderReader.Read(on);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission reacts to AudioLink"));
+            Assert.That(SourceShaderReader.Read(moduleOff).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        // AudioLink adds to the strength, so the material can glow while the saved strength is 0.
+        [Test]
+        public void AudioLinkEmissionIsFlaggedWhenTheSavedStrengthIsZero()
+        {
+            var material = Material(PoiyomiToon);
+            material.SetFloat("_EnableEmission", 1);
+            material.SetFloat("_EmissionStrength", 0);
+            material.SetFloat("_EnableAudioLink", 1);
+            material.SetFloat("_EmissionAL0Enabled", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission reacts to AudioLink"));
+        }
+
+        // poiThemeColor replaces the rgb, so a black saved colour still glows in the theme colour.
+        [Test]
+        public void AThemeColourIsFlaggedWhenTheSavedEmissionColourIsBlack()
+        {
+            var material = EmittingMaterial();
+            material.SetColor("_EmissionColor", new Color(0f, 0f, 0f, 1f));
+            material.SetFloat("_EmissionColorThemeIndex", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission takes a theme colour"));
+        }
+
         [Test]
         public void EmissionOptionsAreIgnoredWhileEmissionIsOff()
         {
@@ -199,6 +266,10 @@ namespace UVWizard.Core.Tests.Poiyomi
             material.SetFloat("_EmissionBaseColorAsMap", 1);
             material.SetFloat("_EmissionColorThemeIndex", 1);
             material.SetTexture("_EmissionMask", Texture());
+            material.SetFloat("_EmissionBlinkingEnabled", 1);
+            material.SetFloat("_EmissionMaskInvert", 1);
+            material.SetFloat("_EnableAudioLink", 1);
+            material.SetFloat("_EmissionAL0Enabled", 1);
 
             Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }

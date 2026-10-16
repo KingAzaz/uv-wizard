@@ -124,6 +124,23 @@ namespace UVWizard.Core.Tests.Poiyomi
             Assert.That(reading.Reason, Does.Contain("_Color"));
         }
 
+        // The lock renamed only the properties it declared animated; a property it left alone keeps its name.
+        [Test]
+        public void ARecordedSuffixTheShaderDoesntDeclareReadsThePropertyUnderItsOwnName()
+        {
+            var material = Track(new Material(OlderLock("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "",
+                @"_Color (""Color"", Color) = (1, 1, 1, 1)")));
+            material.SetOverrideTag("_ColorAnimated", "2");
+            material.SetOverrideTag("thry_locked_rename_suffix", "Hand");
+            material.SetColor("_Color", new Color(0f, 0f, 1f, 1f));
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Merged), reading.Reason);
+            Assert.That(reading.Albedo, Is.Not.Null);
+            AssertColour(new Color(0f, 0f, 1f, 1f), reading.Albedo!.Tint);
+        }
+
         // A hand-written stand-in for a shader an older ThryEditor locked.
         Shader OlderLock(string shaderName, string optimizerProperty, string colourProperties) =>
             Track(ShaderUtil.CreateShaderAsset($@"Shader ""{shaderName}""
