@@ -40,8 +40,9 @@ namespace UVWizard.NDMF
                 }
                 foreach (var ((renderer, slot), materials) in swaps)
                     animated.Add(new AnimatedSlot(renderer, slot,
-                        $"The animation \"{clip.Name}\" swaps the material in one of this renderer's slots, so that slot " +
-                        "keeps its own UVs. In a slot no animation swaps, the same material can still be merged.",
+                        $"The animation \"{clip.Name}\" swaps the material in Element {slot} of this renderer's " +
+                        "materials, so that slot keeps its own UVs. In a slot no animation swaps, the same material can " +
+                        "still be merged.",
                         materials));
 
                 var properties = new Dictionary<Renderer, string>();

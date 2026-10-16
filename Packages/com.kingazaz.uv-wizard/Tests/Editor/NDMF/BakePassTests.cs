@@ -608,10 +608,7 @@ namespace UVWizard.NDMF.Tests
             AnimationUtility.SetObjectReferenceCurve(swap,
                 EditorCurveBinding.PPtrCurve("", typeof(MeshRenderer), "m_Materials.Array.data[0]"),
                 new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 6)) } });
-            var controller = Keep(new AnimatorController { name = "Hat" });
-            controller.AddLayer("Recolour");
-            controller.layers[0].stateMachine.AddState(swap.name).motion = swap;
-            hat.gameObject.AddComponent<Animator>().runtimeAnimatorController = controller;
+            WithAnimator(hat.gameObject, swap);
 
             MobileBuild.Override = true;
             var errors = Build(avatar);
@@ -643,10 +640,7 @@ namespace UVWizard.NDMF.Tests
                 new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 6)) } });
             AnimationUtility.SetObjectReferenceCurve(swap, Slot("Tail", 0),
                 new[] { new ObjectReferenceKeyframe { time = 0, value = Standard(Gradient(16, 7)) } });
-            var controller = Keep(new AnimatorController { name = "Hat" });
-            controller.AddLayer("Recolour");
-            controller.layers[0].stateMachine.AddState(swap.name).motion = swap;
-            hat.gameObject.AddComponent<Animator>().runtimeAnimatorController = controller;
+            WithAnimator(hat.gameObject, swap);
             WithFx(avatar, swap);
 
             MobileBuild.Override = true;
@@ -674,11 +668,7 @@ namespace UVWizard.NDMF.Tests
             AnimationUtility.SetObjectReferenceCurve(swap,
                 EditorCurveBinding.PPtrCurve("", typeof(MeshRenderer), "m_Materials.Array.data[2]"),
                 new[] { new ObjectReferenceKeyframe { time = 0, value = red } });
-            var controller = Keep(new AnimatorController { name = "Hat" });
-            controller.AddLayer("Recolour");
-            controller.layers[0].stateMachine.AddState(swap.name).motion = swap;
-            var animator = hat.gameObject.AddComponent<Animator>();
-            animator.runtimeAnimatorController = controller;
+            var animator = WithAnimator(hat.gameObject, swap);
 
             MobileBuild.Override = true;
             Build(avatar);
@@ -806,6 +796,17 @@ namespace UVWizard.NDMF.Tests
 
         static EditorCurveBinding Slot(string path, int slot) =>
             EditorCurveBinding.PPtrCurve(path, typeof(SkinnedMeshRenderer), $"m_Materials.Array.data[{slot}]");
+
+        // Gives the object an Animator of its own, whose controller has one state playing the clip.
+        Animator WithAnimator(GameObject target, AnimationClip clip)
+        {
+            var controller = Keep(new AnimatorController { name = target.name });
+            controller.AddLayer("Recolour");
+            controller.layers[0].stateMachine.AddState(clip.name).motion = clip;
+            var animator = target.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+            return animator;
+        }
 
         // Gives the avatar an FX controller with one layer holding a state for each clip.
         void WithFx(GameObject avatar, params AnimationClip[] clips)

@@ -1016,7 +1016,7 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
-        public void ALaterToolThatReadsMaterialSlotsMovesNoSlotsAnAnimationSwaps()
+        public void ALaterToolThatReadsMaterialSlotsMovesNoSlotBesideAnAnimatedOne()
         {
             var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) },
                 new[] { Quad(2, 0.1f, 0.1f, 0.3f, 0.3f) });
