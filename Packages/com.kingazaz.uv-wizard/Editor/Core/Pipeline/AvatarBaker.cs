@@ -433,16 +433,17 @@ namespace UVWizard.Core.Pipeline
 
         // Source texels per unit of the charts' UV space, the albedo's with its tiling applied: the most that any
         // channel the slot bakes needs, so none is baked below its own detail. A channel tiled more finely than the
-        // albedo needs more texels per unit. Channels turned off don't count.
-        static Vector2Int TextureSize(SourceMaterialReading reading, Channels on)
+        // albedo needs more texels per unit. Channels turned off don't count. Without an albedo texture the slot
+        // keeps the untextured floor for its tint, even when a map tiled zero times needs no texels on an axis.
+        internal static Vector2Int TextureSize(SourceMaterialReading reading, Channels on)
         {
-            Vector2Int? size = null;
+            var size = (on & Channels.Albedo) != 0 && reading.Albedo?.Texture != null ? Vector2Int.zero : UntexturedSize;
             foreach (var (texture, tiling) in BakedTextures(reading, on))
             {
                 var needed = Vector2Int.CeilToInt(Vector2.Scale(new Vector2(texture.width, texture.height), tiling));
-                size = Vector2Int.Max(size ?? Vector2Int.zero, needed);
+                size = Vector2Int.Max(size, needed);
             }
-            return size ?? UntexturedSize;
+            return size;
         }
 
         // The tile period on each axis of the charts' UV space: islands shift between tiles only by whole periods, so
