@@ -259,6 +259,18 @@ namespace UVWizard.Core.Tests.Poiyomi
             Assert.That(reading.Reason, Does.StartWith("Emission takes a theme colour"));
         }
 
+        // The theme replaces only the colour: at strength 0 nothing glows.
+        [Test]
+        public void AThemeColourAtZeroStrengthIsIgnored()
+        {
+            var material = Material(PoiyomiToon);
+            material.SetFloat("_EnableEmission", 1);
+            material.SetFloat("_EmissionStrength", 0);
+            material.SetFloat("_EmissionColorThemeIndex", 1);
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
         [Test]
         public void EmissionOptionsAreIgnoredWhileEmissionIsOff()
         {
