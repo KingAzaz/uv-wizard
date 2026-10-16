@@ -54,6 +54,18 @@ class ReportTest(unittest.TestCase):
         self.assertEqual(outcome, "red")
         self.assertIn("only the first 1 failures", out)
 
+    def test_a_failure_message_prints_on_a_cp1252_console(self):
+        # AAO's reports put arrows in NDMF failure messages; Windows consoles default to cp1252.
+        raw = io.BytesIO()
+        console = io.TextIOWrapper(raw, encoding="cp1252")
+        with unittest.mock.patch.object(sys, "stdout", console), \
+                unittest.mock.patch.object(sys, "stderr", console):
+            unity_tests.utf8_streams()
+            with self.assertRaises(unity_tests.Failed):
+                unity_tests.report(failed_job([{"full_name": "A", "message": "Body → Merged"}]))
+            sys.stdout.flush()
+        self.assertIn("Body → Merged".encode("utf-8"), raw.getvalue())
+
     def test_a_failed_job_with_an_error_is_broken_not_red(self):
         job = {"status": "failed", "error": "Job orphaned after domain reload"}
         self.assertEqual(self.report(job)[0], "broken")
