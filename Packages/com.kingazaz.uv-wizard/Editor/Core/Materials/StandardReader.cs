@@ -32,10 +32,10 @@ namespace UVWizard.Core.Materials
             var mode = material.GetFloat("_Mode");
             var reasons = new List<string>();
             if (mode == Cutout || material.IsKeywordEnabled("_ALPHATEST_ON"))
-                reasons.Add("Cutout becomes opaque: Toon Standard has no alpha cutoff.");
+                reasons.Add(MaterialProperties.CutoutDropped);
             else if (mode >= Fade || material.IsKeywordEnabled("_ALPHABLEND_ON") ||
                      material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON"))
-                reasons.Add("Transparent becomes opaque: Toon Standard has no transparency.");
+                reasons.Add(MaterialProperties.TransparencyDropped);
             if (MaterialProperties.DetailOnUv0(material, "_DETAIL_MULX2", "_UVSec"))
                 reasons.Add(MaterialProperties.DetailMapsDropped);
             var reading = new SourceMaterialReading(albedo, emission, normal,

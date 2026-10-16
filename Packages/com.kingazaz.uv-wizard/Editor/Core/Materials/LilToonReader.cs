@@ -81,8 +81,8 @@ namespace UVWizard.Core.Materials
                 outline = shader.Contains("Outline");
                 fur = shader.Contains("Fur");
             }
-            if (cutout) yield return "Cutout becomes opaque: Toon Standard has no alpha cutoff.";
-            if (transparent) yield return "Transparent becomes opaque: Toon Standard has no transparency.";
+            if (cutout) yield return MaterialProperties.CutoutDropped;
+            if (transparent) yield return MaterialProperties.TransparencyDropped;
             if (outline) yield return "Outline isn't baked: Toon Standard has no outline.";
             if (fur) yield return "Fur isn't baked: only the surface under it is.";
         }

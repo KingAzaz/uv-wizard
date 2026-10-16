@@ -362,13 +362,49 @@ namespace UVWizard.Core.Tests.Materials
             Assert.That(reading.Reason, Does.Contain("UV1"));
         }
 
+        [Test]
+        public void APoiyomiUvModePastTheKnownOnesIsNamedByNumber()
+        {
+            var material = Track(new Material(LockedPoiyomi()));
+            material.SetTexture("_MainTex", Texture());
+            material.SetFloat("_MainTexUV", 11);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
+            Assert.That(reading.Reason, Does.Contain("UV mode 11"));
+        }
+
+        // ThryEditor cleans a thry_rename_suffix before renaming: it drops spaces and hex-encodes the UTF-8
+        // bytes of anything but letters, digits and underscores (ShaderOptimizer.CleanStringForPropertyNames).
+        [TestCase("My Hand", "_Color_MyHand")]
+        [TestCase(" Left_Hand ", "_Color_Left_Hand")]
+        [TestCase("Body 2", "_Color_Body2")]
+        [TestCase("Hand!", "_Color_Hand21")]
+        [TestCase("Hände", "_Color_HC3A4nde")]
+        public void ALockedPoiyomiMaterialReadsARenamedPropertyUnderThryEditorsCleanedSuffix(string suffix,
+            string renamed)
+        {
+            var material = Track(new Material(LockedPoiyomi($@"{renamed} (""Color"", Color) = (1, 1, 1, 1)")));
+            material.SetOverrideTag("_ColorAnimated", "2");
+            material.SetOverrideTag("thry_rename_suffix", suffix);
+            material.SetColor("_Color", Color.white);
+            material.SetColor(renamed, new Color(0f, 1f, 0f, 1f));
+
+            var albedo = SourceShaderReader.Read(material).Albedo;
+
+            Assert.That(albedo, Is.Not.Null);
+            AssertColour(new Color(0f, 1f, 0f, 1f), albedo!.Tint);
+        }
+
         // A hand-written stand-in for a shader Poiyomi's lock generated, as an avatar ships it.
-        Shader LockedPoiyomi() =>
+        Shader LockedPoiyomi(string renamedProperties = "") =>
             Track(ShaderUtil.CreateShaderAsset(@"
                 Shader ""Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef""
                 {
                     Properties
                     {
+                        " + renamedProperties + @"
                         _MainTex (""Texture"", 2D) = ""white"" {}
                         _MainTexUV (""UV"", Int) = 0
                         _Color (""Color"", Color) = (1, 1, 1, 1)

@@ -56,14 +56,9 @@ namespace UVWizard.Core.Materials
             var albedo = new ChannelSource(material.GetTexture("_MainTex"), material.GetColor("_Color"),
                 MaterialProperties.ScaleOffset(material, "_MainTex"), 0);
 
-            // Toon Standard always adds emission map x colour x strength, so black or zero emits nothing. The
-            // strength scales the linearized colour (VRChat projects are always in Linear colour space), so
-            // the tint is that product turned back into a colour.
-            var emissionColour = material.GetColor("_EmissionColor");
-            var emissionStrength = material.GetFloat("_EmissionStrength");
-            var linear = emissionColour.linear;
-            var emissionTint = new Color(linear.r * emissionStrength, linear.g * emissionStrength,
-                linear.b * emissionStrength, emissionColour.a).gamma;
+            // Toon Standard always adds emission map x colour x strength, so black or zero emits nothing.
+            var emissionTint = MaterialProperties.ScaleLinear(material.GetColor("_EmissionColor"),
+                material.GetFloat("_EmissionStrength"));
             var emissionMap = material.GetTexture("_EmissionMap");
             // Without a map the shader samples its white default, which is the same from every UV channel.
             var emissionUv = emissionMap != null ? material.GetInt("_EmissionUV") : 0;

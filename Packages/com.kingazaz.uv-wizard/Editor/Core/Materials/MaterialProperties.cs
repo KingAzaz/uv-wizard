@@ -24,6 +24,12 @@ namespace UVWizard.Core.Materials
             return new Color(linear.r * strength, linear.g * strength, linear.b * strength, 1).gamma;
         }
 
+        /// <summary>Why a material that clips by alpha is flagged.</summary>
+        public const string CutoutDropped = "Cutout becomes opaque: Toon Standard has no alpha cutoff.";
+
+        /// <summary>Why a material that blends by alpha is flagged.</summary>
+        public const string TransparencyDropped = "Transparent becomes opaque: Toon Standard has no transparency.";
+
         /// <summary>Why a material whose detail maps are sampled from UV0 is flagged.</summary>
         public const string DetailMapsDropped = "Detail maps aren't baked: only the main maps are.";
 
