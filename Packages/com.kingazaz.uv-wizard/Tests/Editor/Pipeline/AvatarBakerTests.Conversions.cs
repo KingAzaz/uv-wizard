@@ -354,11 +354,82 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That((converted.width, converted.height), Is.EqualTo((512, 128)));
         }
 
-        // Standard as the merged shader, converting every material whose shader isn't one of the given ones.
+        [Test]
+        public void AConvertedTextureKeepsItsSourcesWrapAndFilterModes()
+        {
+            // A point-filtered texture would turn bilinear on mobile, which it didn't before it was converted.
+            var texture = Gradient(16, 1);
+            texture.wrapModeU = TextureWrapMode.Clamp;
+            texture.wrapModeV = TextureWrapMode.Mirror;
+            texture.filterMode = FilterMode.Point;
+            var renderer = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }), Standard(texture, Color.white));
+
+            Bake(Converting(), renderer);
+
+            var converted = renderer.sharedMaterial.mainTexture;
+            Assert.That(converted, Is.Not.SameAs(texture));
+            Assert.That((converted.wrapModeU, converted.wrapModeV, converted.filterMode),
+                Is.EqualTo((TextureWrapMode.Clamp, TextureWrapMode.Mirror, FilterMode.Point)));
+        }
+
+        [Test]
+        public void WithNothingMergedAConvertedMaterialTakesTheDefaultRamp()
+        {
+            var ramp = Gradient(8, 3);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }), Standard(Gradient(16, 1), Color.white));
+
+            var result = Bake(Converting(defaultRamp: ramp), renderer);
+
+            Assert.That(result.MergedMaterial, Is.Null);
+            Assert.That(renderer.sharedMaterial.GetTexture("_DetailAlbedoMap"), Is.SameAs(ramp));
+        }
+
+        [Test]
+        public void WhenNoChartsFitEveryConvertedMaterialTakesTheRepresentativesSharedSettings()
+        {
+            // As ChartsThatFitAtNoScaleLeaveEveryMaterialConverted, plus an excluded slot whose material an animation
+            // swaps. The preset converts the excluded slot's material before packing, to count it in the budget; the
+            // others are converted after packing fails.
+            var many = Standard(Gradient(1024, 2), Color.white);
+            many.SetFloat("_Glossiness", 0.2f);
+            var eyes = Standard(Gradient(16, 1), Color.white);
+            var red = Standard(Gradient(16, 3), Color.white);
+            var renderer = MeshRenderer(Mesh(Enumerable.Range(0, 320)
+                    .Select(i => Quad(2, (i % 20) / 20f, (i / 20) / 16f, (i % 20 + 0.4f) / 20f, (i / 20 + 0.4f) / 16f)).ToArray(),
+                new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) }), many, eyes);
+
+            var result = Bake(Converting(atlasSize: 64, preset: Preset.Excellent, representativeProperties: new[] { "_Glossiness" }),
+                new Renderer[] { renderer }, new AnimatedSlot(renderer, 1, new Reason("A"), new[] { red }));
+
+            Assert.That(result.Fits, Is.False);
+            Assert.That(result.ConvertedMaterials.Select(c => c.Source), Is.EquivalentTo(new[] { many, eyes, red }));
+            Assert.That(result.ConvertedMaterials.Select(c => c.Converted.GetFloat("_Glossiness")), Has.All.EqualTo(0.2f));
+        }
+
+        [Test]
+        public void AConvertedMaterialIsFlaggedOnEachRendererWhosePropertiesAnAnimationChanges()
+        {
+            // The same source on two renderers, of which only the second's properties are animated. The second has it
+            // on two slots, and is flagged once.
+            var glowing = Standard(Gradient(16, 1), Color.white);
+            var still = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }), glowing);
+            var animated = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }, new[] { Quad(2, 0, 0, 5, 1) }), glowing, glowing);
+
+            var result = Bake(Converting(), new Renderer[] { still, animated },
+                new AnimatedSlot(animated, null, new Reason("Glows in \"Glow\".")));
+
+            Assert.That(still.sharedMaterial, Is.SameAs(animated.sharedMaterial));
+            Assert.That(result.Flagged.Where(note => note.Reason.Keys.Contains(ReasonText.AnimatedProperties))
+                .Select(note => (note.Renderer, note.Material)), Is.EqualTo(new[] { ((Renderer)animated, glowing) }));
+        }
+
+        // Standard as the merged shader, converting every material whose shader isn't one of the given ones. Standard's
+        // detail map stands in for the ramp slot.
         static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Preset? preset = null,
             string[]? mobileShaders = null, Channels channels = Channels.All, string[]? representativeProperties = null,
-            NormalEncoding normalEncoding = NormalEncoding.RGorAG) =>
-            new BakeOptions(Shader.Find("Standard"), atlasSize, padding: 0, compress, normalMapKeyword: "_NORMALMAP",
+            NormalEncoding normalEncoding = NormalEncoding.RGorAG, Texture? defaultRamp = null) =>
+            new BakeOptions(Shader.Find("Standard"), atlasSize, padding: 0, compress, rampProperty: "_DetailAlbedoMap",
+                defaultRamp: defaultRamp, normalMapKeyword: "_NORMALMAP",
                 normalEncoding: normalEncoding, preset: preset, channels: channels, representativeProperties: representativeProperties,
                 mobileShaders: mobileShaders ?? System.Array.Empty<string>());
     }

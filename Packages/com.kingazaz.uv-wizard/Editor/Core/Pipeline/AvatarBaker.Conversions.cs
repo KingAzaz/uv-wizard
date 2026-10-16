@@ -37,6 +37,8 @@ namespace UVWizard.Core.Pipeline
             // Each source seen, and what takes its place: its converted material, or itself when it can't be converted.
             readonly Dictionary<Material, Material> converted = new Dictionary<Material, Material>();
             readonly List<SlotNote> flagged = new List<SlotNote>();
+            // Each renderer and source whose animated properties have been checked.
+            readonly HashSet<(Renderer, Material)> checkedAnimated = new HashSet<(Renderer, Material)>();
 
             public Conversions(BakeOptions options, IReadOnlyList<AnimatedSlot>? animated)
             {
@@ -68,18 +70,25 @@ namespace UVWizard.Core.Pipeline
                     Leave(source, renderer, slot, new Reason(ReasonText.MeshRenderersOnly));
                     return source;
                 }
-                if (converted.TryGetValue(source, out var made)) return made;
-                var reading = SourceShaderReader.Read(source);
-                // An add-on layer has no surface of its own: converted, it would paint over the one beneath.
-                if (reading.Albedo == null)
+                if (!converted.TryGetValue(source, out var made))
                 {
-                    converted.Add(source, source);
-                    var noSurface = new Reason(ReasonText.NoSurface);
-                    Leave(source, renderer, slot, reading.Reason?.Then(noSurface) ?? noSurface);
-                    return source;
+                    var reading = SourceShaderReader.Read(source);
+                    // An add-on layer has no surface of its own: converted, it would paint over the one beneath.
+                    if (reading.Albedo == null)
+                    {
+                        converted.Add(source, source);
+                        var noSurface = new Reason(ReasonText.NoSurface);
+                        Leave(source, renderer, slot, reading.Reason?.Then(noSurface) ?? noSurface);
+                        return source;
+                    }
+                    converted.Add(source, made = Convert(source, reading, renderer, slot));
+                    Made.Add((source, made));
                 }
-                converted.Add(source, made = Convert(source, reading, renderer, slot));
-                Made.Add((source, made));
+                // The conversion is flagged on each renderer whose properties an animation changes, once, whichever
+                // renderer converted the source.
+                if (made != source && checkedAnimated.Add((renderer, source))
+                    && animated.Any(a => a.Renderer == renderer && a.EverySlot))
+                    flagged.Add(new SlotNote(renderer, slot, source, new Reason(ReasonText.AnimatedProperties)));
                 return made;
             }
 
@@ -144,15 +153,10 @@ namespace UVWizard.Core.Pipeline
             {
                 void Flag(Reason reason) => flagged.Add(new SlotNote(renderer, slot, source, reason));
                 if (reading.FlaggedReason != null) Flag(reading.FlaggedReason);
-                if (animated.Any(a => a.Renderer == renderer && a.EverySlot))
-                    Flag(new Reason(ReasonText.AnimatedProperties));
 
-                var material = new Material(options.MergedShader) { name = $"{source.name} (UV Wizard)" };
-                if (Merged != null)
-                    foreach (var property in options.RepresentativeProperties) CopyProperty(Merged, material, property);
-                else if (options.DefaultRamp != null && material.HasTexture(options.RampProperty))
-                    material.SetTexture(options.RampProperty, options.DefaultRamp);
-                SetTintAndVertexColour(material, options, reading.UsesVertexColour);
+                // The merged material's shared settings, which are the representative's, or the default ramp.
+                var material = MergedMaterial(options, Merged, reading.UsesVertexColour);
+                material.name = $"{source.name} (UV Wizard)";
                 // The source's own culling, under the merged shader's name or under lilToon's and Poiyomi's, which
                 // take the same values.
                 foreach (var cull in new[] { options.CullingProperty, "_Cull" })
@@ -227,6 +231,7 @@ namespace UVWizard.Core.Pipeline
                 {
                     baked.wrapModeU = texture.wrapModeU;
                     baked.wrapModeV = texture.wrapModeV;
+                    baked.filterMode = texture.filterMode;
                 }
                 if (options.Compress) AtlasCompressor.Compress(baked, AtlasSizing.Finest(channel, Mathf.Max(size.x, size.y))[channel]!.Value.Format);
                 baked.name = $"UV Wizard {channel} {source.name}";

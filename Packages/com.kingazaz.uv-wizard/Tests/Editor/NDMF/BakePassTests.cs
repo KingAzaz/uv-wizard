@@ -746,7 +746,7 @@ namespace UVWizard.NDMF.Tests
                 .Select(assembly => assembly.GetType("VRC.SDKBase.Validation.AvatarValidation")).FirstOrDefault(type => type != null);
             var whitelist = validation?.GetField("ShaderWhiteList",
                 System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-            Assume.That(whitelist, Is.Not.Null, "the SDK keeps its whitelist where 3.10.5 did");
+            Assert.That(whitelist, Is.Not.Null, "the SDK keeps its whitelist where 3.10.5 did");
 
             Assert.That(ToonStandard.MobileShaders, Is.EquivalentTo((IEnumerable<string>)whitelist!.GetValue(null)));
         }

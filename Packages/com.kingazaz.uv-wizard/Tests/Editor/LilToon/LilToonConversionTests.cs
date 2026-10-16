@@ -55,6 +55,37 @@ namespace UVWizard.Core.Tests.LilToon
         }
 
         [Test]
+        public void AnAddOnLayerOnARendererWhosePropertiesAnAnimationChangesIsntFlagged()
+        {
+            // The flag says a converted material may look different, and the add-on layer isn't converted. It's on two
+            // extra slots, so the second finds it already read.
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var mesh = Track(new Mesh
+            {
+                vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
+                uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
+                triangles = new[] { 0, 2, 1, 1, 2, 3 },
+            });
+            var go = Track(new GameObject("renderer"));
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            var main = Material("lilToon");
+            renderer.sharedMaterials = new[] { main, outline, outline };
+
+            var result = AvatarBaker.Bake(new Renderer[] { renderer },
+                new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
+                animated: new[] { new AnimatedSlot(renderer, null, new Reason("Glows in \"Glow\".")) });
+            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
+            if (result.MergedMaterial != null) Track(result.MergedMaterial);
+            if (result.Atlas != null) Track(result.Atlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Track(rewritten);
+
+            Assert.That(result.Unconverted.Select(note => note.Material), Is.EqualTo(new[] { outline }));
+            Assert.That(result.Flagged.Where(note => note.Reason.Keys.Contains(ReasonText.AnimatedProperties))
+                .Select(note => note.Material), Is.EqualTo(new[] { main }));
+        }
+
+        [Test]
         public void ATransparentMaterialExcludedForItsEmissionUvsIsStillFlaggedForBecomingOpaque()
         {
             var glass = Material("Hidden/lilToonTransparent");

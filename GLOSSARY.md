@@ -73,11 +73,19 @@ The most texture memory a preset allows, counted across all channels: 10 MB for 
 _Avoid_: VRAM limit, size limit, texture cap
 
 **Excluded material**:
-A source material that the bake keeps out of the atlas because merging it would break the avatar, such as one swapped by an animation. It still gets its own Toon Standard material, since mobile allows no other shader, and so costs a material slot of its own.
+A source material that the bake keeps out of the atlas because merging it would break the avatar, such as one swapped by an animation. It gets a converted material, since mobile allows no other shader, unless mobile allows its own shader, its renderer doesn't upload, or it can't be converted. Either way it costs a material slot of its own.
 _Avoid_: Skipped material, ignored material, unmerged material
 
+**Converted material**:
+The Toon Standard material that takes an excluded material's place, and that of each material an animation swaps into an excluded slot. When no charts fit, every source material that stays on the avatar gets one. Its channels are baked into textures of its own, in the source texture's UV space, so its slot keeps its mesh and UVs. It takes the merged material's shared settings, which are the representative's, or the default ramp when the bake has no representative to take them from. The textures of those on the avatar's renderers count toward the budget.
+_Avoid_: Replacement material, mobile copy
+
+**Unconverted material**:
+A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: it's on a renderer other than a mesh renderer, such as a particle system, or it has no surface of its own, such as a lilToon add-on layer. The SDK refuses such an upload.
+_Avoid_: Failed material, unsupported material
+
 **Flagged material**:
-A source material that is merged but may look different afterwards, such as a transparent or cutout material that becomes opaque.
+A source material that is merged or converted but may look different afterwards, such as a transparent or cutout material that becomes opaque.
 _Avoid_: Warning material, lossy material
 
 **Report**:
@@ -100,5 +108,5 @@ _Avoid_: Premium, paid version, plus
 - A **Source material**'s mesh surface splits into many **Islands**. One or more **Islands** form a **Chart**.
 - A **Bake** takes one **Avatar** and one **Preset**. It produces one **Atlas**, one **Merged material** and one **Report**.
 - An **Atlas** holds one texture per enabled **Channel**. Together they must fit the **Preset**'s **Budget**.
-- Every **Source material** ends up merged, merged and **Flagged**, or **Excluded**. The **Report** lists the last two.
+- Every **Source material** ends up merged or **Excluded**. An **Excluded material** gets a **Converted material**, unless mobile allows its shader, its renderer doesn't upload, or it is **Unconverted**. Merged and converted ones may also be **Flagged**. The **Report** lists the **Excluded** and **Flagged** ones. The build's error report names each **Unconverted** one.
 - **Pro** depends on **Core**. **Core** never depends on **Pro**.
