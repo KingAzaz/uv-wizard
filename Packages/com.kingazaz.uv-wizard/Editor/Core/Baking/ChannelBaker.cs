@@ -41,8 +41,12 @@ namespace UVWizard.Core.Baking
             });
             var meshes = new List<Mesh>();
             var previous = RenderTexture.active;
+            // DrawMeshNow takes its view from the current camera over GL.LoadOrtho's, and a build can leave the
+            // SceneView's camera current (#112), so none is current while the charts draw.
+            var camera = Camera.current;
             try
             {
+                Camera.SetupCurrent(null);
                 RenderTexture.active = target;
                 GL.Clear(clearDepth: true, clearColor: true, Color.clear);
                 GL.PushMatrix();
@@ -73,6 +77,7 @@ namespace UVWizard.Core.Baking
             finally
             {
                 RenderTexture.active = previous;
+                Camera.SetupCurrent(camera);
                 RenderTexture.ReleaseTemporary(target);
                 foreach (var mesh in meshes) UnityEngine.Object.DestroyImmediate(mesh);
                 UnityEngine.Object.DestroyImmediate(material);

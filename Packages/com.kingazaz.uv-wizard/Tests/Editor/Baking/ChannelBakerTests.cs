@@ -332,6 +332,49 @@ namespace UVWizard.Core.Tests.Baking
             AssertDecodes(SourceNormal(3, 3), Texel(atlas, 10, 7), "gutter texel nearer the right chart");
         }
 
+        // Graphics.DrawMeshNow takes its view from Camera.current, if one is set, over GL.LoadOrtho's. A SceneView
+        // camera left current after a build (#112) moved every chart off the target, and the bake came back black.
+        [Test]
+        public void ABakeDrawsWhileAnotherCameraIsCurrent()
+        {
+            var camera = new GameObject("A camera away from the origin").AddComponent<Camera>();
+            created.Add(camera.gameObject);
+            camera.transform.position = new Vector3(10, 10, 10);
+            var source = Solid(new Color32(200, 100, 50, 255));
+            var plan = Plan(8, Quad(source, Color.white, Identity, Corners(0, 0, 1, 1), Corners(0, 0, 0.5f, 0.5f)));
+
+            try
+            {
+                Camera.SetupCurrent(camera);
+                var atlas = Bake(plan);
+                AssertColour(new Color32(200, 100, 50, 255), Texel(atlas, 1, 1), "a texel the quad covers");
+            }
+            finally
+            {
+                Camera.SetupCurrent(null);
+            }
+        }
+
+        [Test]
+        public void ABakeLeavesTheCurrentCameraAsItFoundIt()
+        {
+            var camera = new GameObject("The caller's camera").AddComponent<Camera>();
+            created.Add(camera.gameObject);
+            var plan = Plan(8, Quad(Solid(new Color32(200, 100, 50, 255)), Color.white, Identity,
+                Corners(0, 0, 1, 1), Corners(0, 0, 0.5f, 0.5f)));
+
+            try
+            {
+                Camera.SetupCurrent(camera);
+                Bake(plan);
+                Assert.That(Camera.current, Is.SameAs(camera));
+            }
+            finally
+            {
+                Camera.SetupCurrent(null);
+            }
+        }
+
         static readonly Vector4 Identity = new Vector4(1, 1, 0, 0);
 
         Texture2D Bake(BakePlan plan)

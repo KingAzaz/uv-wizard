@@ -1202,8 +1202,11 @@ namespace UVWizard.Core.Tests.Pipeline
             var material = Keep(new Material(shader));
             var target = RenderTexture.GetTemporary(new RenderTextureDescriptor(size, size, RenderTextureFormat.ARGBFloat, 24) { sRGB = false });
             var previous = RenderTexture.active;
+            // As in ChannelBaker: DrawMeshNow would take its view from a camera left current (#112).
+            var camera = Camera.current;
             try
             {
+                Camera.SetupCurrent(null);
                 RenderTexture.active = target;
                 GL.Clear(clearDepth: true, clearColor: true, Color.clear);
                 GL.PushMatrix();
@@ -1227,6 +1230,7 @@ namespace UVWizard.Core.Tests.Pipeline
             finally
             {
                 RenderTexture.active = previous;
+                Camera.SetupCurrent(camera);
                 RenderTexture.ReleaseTemporary(target);
             }
         }
