@@ -139,6 +139,16 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void ABakeWhoseSearchRanOutOfTimeBeforeAnythingFitSaysToBakeAgain()
+        {
+            var report = new BakeReport("Avatar", false, BakeResult.Unchanged(false, Array.Empty<SlotNote>(),
+                Array.Empty<SlotNote>(), ranOutOfTime: true), null);
+
+            Assert.That(report.PackingLines.Select(line => line.Key),
+                Is.EqualTo(new[] { ReportText.NothingMerged, ReportText.NoFitRanOutOfTime }));
+        }
+
+        [Test]
         public void LeftoverRenderersAreListedOnlyWhenSlotsOrMeshesKeepTheAvatarBelowItsPreset()
         {
             var leftovers = new[] { new LeftoverRenderer(Renderer("Hat"), LeftoverReason.StaticMesh) };

@@ -19,6 +19,7 @@ namespace UVWizard.NDMF
         public const string Excluded = "uvwizard.excluded";
         public const string Flagged = "uvwizard.flagged";
         public const string NoFit = "uvwizard.no-fit";
+        public const string NoFitRanOutOfTime = "uvwizard.no-fit-ran-out-of-time";
         public const string NothingToBake = "uvwizard.nothing-to-bake";
         public const string NoToonStandard = "uvwizard.no-toon-standard";
         public const string OverBudget = "uvwizard.over-budget";
@@ -41,6 +42,9 @@ namespace UVWizard.NDMF
             (NoFit, "Nothing was merged"),
             (NoFit + ":description", "The materials don't fit in the atlas even at the lowest detail, so none is merged. " +
                 "Each still gets a Toon Standard material of its own."),
+            (NoFitRanOutOfTime, "Nothing was merged"),
+            (NoFitRanOutOfTime + ":description", "UV Wizard ran out of time looking for a packing, so none is merged. " +
+                "Bake again, or merge fewer materials. Each still gets a Toon Standard material of its own."),
             (NothingToBake, "Nothing to bake"),
             (NothingToBake + ":description", "Albedo is off, and so are Emission and Normal, or no material that " +
                 "would merge emits or has a normal map. So nothing was merged. With every channel off, UV Wizard left " +
@@ -87,6 +91,8 @@ namespace UVWizard.NDMF
             (ReportText.RanOutOfTime, "UV Wizard stopped looking for a tighter fit when its time ran out. A faster " +
                 "computer may keep more detail."),
             (ReportText.NothingMerged, "Nothing was merged, so the avatar's materials are as they were."),
+            (ReportText.NoFitRanOutOfTime, "UV Wizard ran out of time looking for a packing. Bake again, or merge " +
+                "fewer materials."),
             (ReportText.LeftoverMmdBody, "{0} stays a mesh of its own because Trace and Optimize keeps a mesh named " +
                 "Body under the avatar for MMD worlds, which animate its blend shapes. If you don't use MMD worlds, " +
                 "add Trace and Optimize to the avatar yourself and turn off its MMD World Compatibility."),

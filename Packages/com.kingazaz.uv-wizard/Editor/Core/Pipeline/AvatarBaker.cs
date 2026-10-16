@@ -40,8 +40,13 @@ namespace UVWizard.Core.Pipeline
         /// <param name="laterEdits">What a tool after the bake will do to the rewritten meshes, or null for none.</param>
         /// <param name="animated">Slots that animations swap or change, which stay out of the atlas.</param>
         /// <param name="head">The avatar's humanoid Head bone, whose charts get priority, or null for none.</param>
+        /// <param name="outOfTime">
+        /// Stands in for the scale search's clock: each search asks it whether its time is up, and skips the Burst
+        /// warm-up the clock waits for. Null gives each search <see cref="ScaleSearch.TimeBudget"/>.
+        /// </param>
         public static BakeResult Bake(IReadOnlyList<Renderer> renderers, BakeOptions options,
-            ILaterMeshEdits? laterEdits = null, IReadOnlyList<AnimatedSlot>? animated = null, Transform? head = null)
+            ILaterMeshEdits? laterEdits = null, IReadOnlyList<AnimatedSlot>? animated = null, Transform? head = null,
+            Func<bool>? outOfTime = null)
         {
             var excluded = new List<SlotNote>();
             var flagged = new List<SlotNote>();
@@ -122,12 +127,12 @@ namespace UVWizard.Core.Pipeline
                 AtlasSizes SizesUpTo(int largest) =>
                     share is { } bytes ? AtlasSizing.Fit(channels, largest, bytes) : AtlasSizing.Finest(channels, largest);
                 sizes = SizesUpTo(options.AtlasSize);
-                var search = Pack(shapes, priorities, sizes, options.Padding);
+                var search = Pack(shapes, priorities, sizes, options.Padding, outOfTime);
                 // Charts that fit at full detail would only be upscaled, so the atlas shrinks while they still do. Each
                 // smaller size gets the finest formats that fit it.
                 while (share != null && search.FitsAtFullDetail && sizes.Largest / 2 >= AtlasSizing.MinSize
                        && SizesUpTo(sizes.Largest / 2) is var halved
-                       && Pack(shapes, priorities, halved, options.Padding) is { FitsAtFullDetail: true } smaller)
+                       && Pack(shapes, priorities, halved, options.Padding, outOfTime) is { FitsAtFullDetail: true } smaller)
                 {
                     sizes = halved;
                     search = smaller;
@@ -139,7 +144,8 @@ namespace UVWizard.Core.Pipeline
                     conversions.Apply(renderers, null);
                     Object.DestroyImmediate(merged);
                     return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
-                        conversions.Made, conversions.Unconverted).Measured(renderers, options.Preset, null);
+                        conversions.Made, conversions.Unconverted, ranOutOfTime: search.RanOutOfTime)
+                        .Measured(renderers, options.Preset, null);
                 }
                 placements = search.Packing.Placements;
                 packing = new PackingOutcome(search.Packer, search.Scale, search.RanOutOfTime);
@@ -249,9 +255,14 @@ namespace UVWizard.Core.Pipeline
         }
 
         // Packs the charts at the largest channel's size, with the padding widened so it holds at the smallest.
-        static ScaleSearchResult Pack(List<ChartShape> shapes, float[]? priorities, AtlasSizes sizes, int padding) =>
-            ScaleSearch.Search(shapes, new PackSettings(sizes.Largest,
-                (padding * sizes.Largest + sizes.Smallest - 1) / sizes.Smallest), priorities);
+        static ScaleSearchResult Pack(List<ChartShape> shapes, float[]? priorities, AtlasSizes sizes, int padding,
+            Func<bool>? outOfTime)
+        {
+            var settings = new PackSettings(sizes.Largest, (padding * sizes.Largest + sizes.Smallest - 1) / sizes.Smallest);
+            return outOfTime != null
+                ? ScaleSearch.Search(shapes, settings, priorities, ScaleSearch.ExactPackerChartLimit, outOfTime)
+                : ScaleSearch.Search(shapes, settings, priorities);
+        }
 
         // Each chart's priority: HeadPriority for a chart on the head, where most of its vertices follow the head or a
         // bone below it, and 1 for the rest.

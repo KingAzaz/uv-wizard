@@ -92,7 +92,11 @@ namespace UVWizard.Core.Reporting
         static List<ReportLine> Packing(BakeResult? result)
         {
             if (result?.Packing is not { } packing || !result.Fits)
-                return new List<ReportLine> { new ReportLine(ReportText.NothingMerged) };
+            {
+                var nothing = new List<ReportLine> { new ReportLine(ReportText.NothingMerged) };
+                if (result is { RanOutOfTime: true }) nothing.Add(new ReportLine(ReportText.NoFitRanOutOfTime));
+                return nothing;
+            }
             var lines = new List<ReportLine>
             {
                 new ReportLine(packing.Packer == Packer.Shelf ? ReportText.ShelfPacker : ReportText.ExactPacker,
@@ -262,6 +266,7 @@ namespace UVWizard.Core.Reporting
         public const string ShelfPacker = "uvwizard.report.shelf-packer";
         public const string RanOutOfTime = "uvwizard.report.ran-out-of-time";
         public const string NothingMerged = "uvwizard.report.nothing-merged";
+        public const string NoFitRanOutOfTime = "uvwizard.report.no-fit-ran-out-of-time";
         public const string LeftoverMmdBody = "uvwizard.report.leftover-mmd-body";
         public const string LeftoverToggle = "uvwizard.report.leftover-toggle";
         public const string LeftoverStaticMesh = "uvwizard.report.leftover-static-mesh";
