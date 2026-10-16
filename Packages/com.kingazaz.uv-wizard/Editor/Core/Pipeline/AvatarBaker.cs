@@ -87,7 +87,10 @@ namespace UVWizard.Core.Pipeline
             var merged = MergedMaterial(options, representative, slots.Exists(slot => slot.Draws && slot.Reading.UsesVertexColour));
             conversions.Merged = merged;
             var channels = Needed(slots, options.Channels);
-            var share = options.Budget is { } budget ? budget.Bytes - OutsideBytes(renderers, slots, merged, conversions) : (long?)null;
+            var outside = options.Budget != null ? OutsideBytes(renderers, slots, merged, conversions) : 0;
+            var sizedFor = options.Budget is { } budget ? AtlasSizing.SizedFor(budget, outside, channels) : null;
+            // When no rank is within reach, no atlas size changes the outcome, so the atlas keeps its finest sizes.
+            var share = options.Budget == null ? (long?)null : sizedFor != null ? sizedFor.Bytes - outside : long.MaxValue;
             var cache = options.CacheDirectory is { } directory ? new BakeCache(directory, options.CacheEntries) : null;
             var key = cache != null ? Key(slots, surfaces, priorities, channels, share, options) : null;
             var cached = key is { } hash ? cache!.Load(hash, options.Compress) : null;
@@ -121,7 +124,7 @@ namespace UVWizard.Core.Pipeline
                     Object.DestroyImmediate(merged);
                     conversions.Apply(renderers, null);
                     return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
-                        conversions.Made, conversions.Unconverted).Measured(renderers, options.Budget);
+                        conversions.Made, conversions.Unconverted).Measured(renderers, options.Budget, sizedFor);
                 }
                 placements = search.Packing.Placements;
                 packing = new PackingOutcome(search.Packer, search.Scale, search.RanOutOfTime);
@@ -161,7 +164,7 @@ namespace UVWizard.Core.Pipeline
             conversions.Apply(renderers, merged);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
                 emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, packing, conversions.Made,
-                conversions.Unconverted).Measured(renderers, options.Budget);
+                conversions.Unconverted).Measured(renderers, options.Budget, sizedFor);
         }
 
         // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.

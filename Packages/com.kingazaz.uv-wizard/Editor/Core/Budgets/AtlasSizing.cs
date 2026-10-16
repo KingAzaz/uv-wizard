@@ -52,6 +52,27 @@ namespace UVWizard.Core.Budgets
             return new AtlasSizes(textures, largest);
         }
 
+        /// <summary>
+        /// The budget to size the atlas for: <paramref name="budget"/> when <paramref name="outside"/>, the bytes of
+        /// textures that stay outside the atlas, leave room in it for the smallest atlas; otherwise the first lower
+        /// rank's budget that does. Null when none does, since then no atlas size reaches a better rank.
+        /// </summary>
+        public static Budget? SizedFor(Budget budget, long outside, Channels channels)
+        {
+            var smallest = new Dictionary<Channels, ChannelTexture>();
+            foreach (var channel in GivesWayFirst)
+                if ((channels & channel) != 0)
+                {
+                    var formats = Formats(channel);
+                    smallest.Add(channel, new ChannelTexture(MinSize, formats[formats.Length - 1]));
+                }
+            var needed = outside + Bytes(smallest);
+            if (needed <= budget.Bytes) return budget;
+            foreach (var lower in Budget.Ranks)
+                if (lower.Bytes > budget.Bytes && needed <= lower.Bytes) return lower;
+            return null;
+        }
+
         static long Bytes(Dictionary<Channels, ChannelTexture> textures)
         {
             long bytes = 0;

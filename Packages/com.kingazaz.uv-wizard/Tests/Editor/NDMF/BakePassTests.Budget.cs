@@ -57,6 +57,20 @@ namespace UVWizard.NDMF.Tests
             var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
 
             Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudget)));
+            Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverEveryBudget)));
+        }
+
+        [Test]
+        public void ABakeOverEveryPresetsBudgetSaysSo()
+        {
+            // A kept 25.6 MB texture is past even Medium's 25 MB, so the atlas keeps its finest sizes.
+            var avatar = Avatar(withComponent: true);
+            Kept(avatar, Keep(new Texture2D(2592, 2592, TextureFormat.RGBA32, mipChain: false)), "VRChat/Mobile/Standard Lite");
+
+            var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
+
+            Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverEveryBudget)));
+            Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudget)));
         }
 
         [Test]

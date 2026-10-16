@@ -6,6 +6,7 @@ using nadena.dev.ndmf.animator;
 using UnityEngine;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.NDMF
 {
@@ -86,14 +87,26 @@ namespace UVWizard.NDMF
                     note.Material, note.Renderer, note.Reason);
             if (result.Budget is { } budget)
             {
-                if (result.TextureBytes > budget.Bytes)
+                var megabytes = $"{result.TextureBytes / (double)TextureMemory.BytesPerMegabyte:0.##}";
+                if (result.TextureBytes > budget.Bytes && result.SizedFor is { } sizedFor)
                     ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudget,
-                        $"{result.TextureBytes / (double)TextureMemory.BytesPerMegabyte:0.##}", $"{budget.Megabytes:0.##}");
+                        megabytes, $"{budget.Megabytes:0.##}", RankName(sizedFor), $"{sizedFor.Megabytes:0.##}");
+                else if (result.TextureBytes > budget.Bytes)
+                    ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverEveryBudget,
+                        megabytes, $"{budget.Megabytes:0.##}", $"{Budget.Ranks[Budget.Ranks.Count - 1].Megabytes:0.##}");
                 if (!result.WithinMaterialSlots)
                     ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.TooManySlots,
                         result.MaterialSlots, budget.MaterialSlots);
             }
             return result;
+        }
+
+        // The preset's rank as creators read it.
+        static string RankName(Budget budget)
+        {
+            for (var r = 0; r < Budget.Ranks.Count; r++)
+                if (Budget.Ranks[r] == budget) return Messages.Text(ReportText.Rank(PerformanceRank.Excellent + r));
+            return Messages.Text(ReportText.NotMeasured);
         }
     }
 }

@@ -69,6 +69,69 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void APresetWithinReachSizesTheAtlasForItself()
+        {
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), Detailed());
+
+            Assert.That(result.SizedFor, Is.SameAs(Budget.Excellent));
+        }
+
+        [Test]
+        public void WhenTexturesOutsideTheAtlasExceedThePresetTheAtlasIsSizedForTheNextRank()
+        {
+            // The kept material's 16 MB texture leaves no room under Excellent's 10 MB, but 2 MB under Good's 18 MB.
+            var renderer = Detailed();
+            var kept = Kept(Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+
+            Assert.That(result.SizedFor, Is.SameAs(Budget.Good));
+            Assert.That(result.TextureBytes, Is.GreaterThan(Budget.Excellent.Bytes));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Good.Bytes));
+            Assert.That(result.Atlas!.width, Is.GreaterThan(AtlasSizing.MinSize), "the atlas keeps the detail Good's 2 MB affords");
+        }
+
+        [Test]
+        public void TheFallbackSkipsARankThatIsAlsoOutOfReach()
+        {
+            // A 20.25 MB kept texture is past Excellent's and Good's budgets, and leaves 4.75 MB under Medium's 25 MB.
+            var renderer = Detailed();
+            var kept = Kept(Keep(new Texture2D(2304, 2304, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+
+            Assert.That(result.SizedFor, Is.SameAs(Budget.Medium));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Medium.Bytes));
+        }
+
+        [Test]
+        public void WhenNoRankIsWithinReachTheAtlasKeepsItsFinestSizes()
+        {
+            // A 25.6 MB kept texture is past even Medium's 25 MB, so no atlas size changes the rank.
+            var renderer = Detailed();
+            var kept = Kept(Keep(new Texture2D(2592, 2592, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+
+            Assert.That(result.SizedFor, Is.Null);
+            Assert.That((result.Atlas!.width, result.Atlas.format), Is.EqualTo((2048, TextureFormat.ASTC_6x6)));
+            Assert.That((result.EmissionAtlas!.width, result.EmissionAtlas.format), Is.EqualTo((2048, TextureFormat.ASTC_6x6)));
+            Assert.That((result.NormalAtlas!.width, result.NormalAtlas.format), Is.EqualTo((2048, TextureFormat.ASTC_4x4)));
+        }
+
+        [Test]
+        public void WithNoRankWithinReachChartsThatFitAtFullDetailStillGetASmallerAtlas()
+        {
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(64, 0), Color.white));
+            var kept = Kept(Keep(new Texture2D(2592, 2592, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(budget: Budget.Excellent), renderer, kept);
+
+            Assert.That(result.SizedFor, Is.Null);
+            Assert.That(result.Atlas!.width, Is.LessThan(2048));
+        }
+
+        [Test]
         public void WhenTheChartsFitAtFullDetailASmallerAtlasIsChosen()
         {
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(64, 0), Color.white));
