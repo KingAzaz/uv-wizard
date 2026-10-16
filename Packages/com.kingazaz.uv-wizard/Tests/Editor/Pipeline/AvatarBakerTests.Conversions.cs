@@ -165,7 +165,8 @@ namespace UVWizard.Core.Tests.Pipeline
                 Has.Some.EqualTo(ReasonText.AnimatedProperties));
         }
 
-        // The channels as an int: the enum is internal, and a test's parameters must be public.
+        // The channels as an int: the enum is internal, and a test's parameters must be public. Albedo is baked either
+        // way: its toggle is about the atlas, and converted materials aren't in it (#107).
         [TestCase((int)Channels.Albedo)]
         [TestCase((int)(Channels.Emission | Channels.Normal))]
         public void ChannelsTurnedOffArentBakedIntoConvertedMaterials(int on)
@@ -178,9 +179,30 @@ namespace UVWizard.Core.Tests.Pipeline
             Bake(Converting(channels: channels), renderer);
 
             var converted = renderer.sharedMaterial;
-            Assert.That(converted.mainTexture != null, Is.EqualTo((channels & Channels.Albedo) != 0), "albedo");
+            Assert.That(converted.mainTexture, Is.Not.Null, "albedo");
             Assert.That(converted.GetTexture("_EmissionMap") != null, Is.EqualTo((channels & Channels.Emission) != 0), "emission");
             Assert.That(converted.GetTexture("_BumpMap") != null, Is.EqualTo((channels & Channels.Normal) != 0), "normal");
+        }
+
+        [Test]
+        public void WithAlbedoOffAConvertedMaterialStillSamplesItsTintedColourWhileTheMergedMaterialDrawsWhite()
+        {
+            // As AnExcludedMaterialGetsItsOwnMaterialSamplingItsTintedColourAtItsOwnUvs, with Albedo off.
+            var repeated = Standard(Gradient(16, 1), new Color(1, 0.5f, 0.25f), new Vector4(2, 1, 0.1f, 0.5f));
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) });
+            var renderer = MeshRenderer(mesh, Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 2), Color.white),
+                repeated);
+            var before = Centroids(renderer).Skip(2).Select(SourceColour).ToArray();
+
+            var result = Bake(Converting(channels: Channels.Emission | Channels.Normal), renderer);
+
+            Assert.That(result.MergedMaterial!.mainTexture, Is.Null, "the merged material draws plain white");
+            var converted = renderer.sharedMaterials[1];
+            Assert.That(converted.mainTexture, Is.Not.Null);
+            Assert.That(converted.color, Is.EqualTo(Color.white), "the tint is baked into its texture");
+            var after = Centroids(renderer).Skip(2).Select(SourceColour).ToArray();
+            for (var k = 0; k < before.Length; k++)
+                AssertClose(before[k], after[k], $"triangle {k}");
         }
 
         [Test]

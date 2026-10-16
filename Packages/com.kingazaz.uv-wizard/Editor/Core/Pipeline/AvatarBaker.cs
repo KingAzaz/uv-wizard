@@ -51,7 +51,7 @@ namespace UVWizard.Core.Pipeline
             foreach (var renderer in renderers)
                 CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
                     laterEdits, needs, options.Channels);
-            // With every channel off, conversions would lose every texture too, so the renderers stay as they were (#84).
+            // With every channel off, the bake touches nothing: the renderers, conversions included, stay as they were (#84).
             if (options.Channels == Channels.None)
                 return BakeResult.Unchanged(true, excluded, Array.Empty<SlotNote>(), nothingToBake: true)
                     .Measured(renderers, options.Preset, null);
@@ -63,7 +63,7 @@ namespace UVWizard.Core.Pipeline
                     conversions.Unconverted).Measured(renderers, options.Preset, null);
             }
             // With only channels no slot to merge has on, an atlas would hold nothing, so nothing merges (#84). The
-            // channels that are on still carry the conversions, as when nothing fits.
+            // conversions still go ahead, as when nothing fits, with their Albedo and the other channels that are on.
             if (Needed(slots, options.Channels) == Channels.None)
             {
                 conversions.Apply(renderers, null);
