@@ -387,10 +387,11 @@ namespace UVWizard.Core.Tests.Pipeline
         [Test]
         public void AConvertedMaterialIsFlaggedOnEachRendererWhosePropertiesAnAnimationChanges()
         {
-            // The same source on two renderers, of which only the second's properties are animated.
+            // The same source on two renderers, of which only the second's properties are animated. The second has it
+            // on two slots, and is flagged once.
             var glowing = Standard(Gradient(16, 1), Color.white);
             var still = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }), glowing);
-            var animated = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }), glowing);
+            var animated = MeshRenderer(Mesh(new[] { Quad(1, 0, 0, 5, 1) }, new[] { Quad(2, 0, 0, 5, 1) }), glowing, glowing);
 
             var result = Bake(Converting(), new Renderer[] { still, animated },
                 new AnimatedSlot(animated, null, new Reason("Glows in \"Glow\".")));
