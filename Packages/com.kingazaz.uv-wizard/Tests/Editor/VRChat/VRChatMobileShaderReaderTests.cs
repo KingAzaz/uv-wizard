@@ -369,6 +369,19 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That($"{SourceShaderReader.Read(material).Reason}", Does.Not.Contain(ReasonText.HueShiftDropped));
         }
 
+        // The slider's maximum, 6.283185, is a full turn: ApplyHue (Helpers.cginc) rotates the colour about grey by
+        // that angle, which leaves it as it was.
+        [TestCase("_HueShift")]
+        [TestCase("_EmissionHueShift")]
+        [TestCase("_DetailHueShift")]
+        public void AFullTurnHueShiftLeavesToonStandardUnflagged(string hueShift)
+        {
+            var material = HueShifted(ToonStandard);
+            material.SetFloat(hueShift, 6.283185f);
+
+            Assert.That($"{SourceShaderReader.Read(material).Reason}", Does.Not.Contain(ReasonText.HueShiftDropped));
+        }
+
         [Test]
         public void AnEmissionHueShiftOnAMaterialThatDoesntEmitIsntFlagged()
         {
@@ -422,6 +435,17 @@ namespace UVWizard.Core.Tests.VRChat
             var material = Material(ToonStandard);
             material.DisableKeyword("USE_COLOR_MASK");
             material.SetTexture("_ColorMask", Texture());
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        [Test]
+        public void AColourMaskTurnedOnWithNoTextureLeavesToonStandardMerged()
+        {
+            // With no texture the shader samples _ColorMask's black default, which masks nothing.
+            var material = Material(ToonStandard);
+            material.EnableKeyword("USE_COLOR_MASK");
+            material.SetTexture("_ColorMask", null);
 
             Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }
