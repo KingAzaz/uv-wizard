@@ -132,10 +132,10 @@ namespace UVWizard.NDMF
             (ReasonText.OutlineDropped, "Outline isn't baked: Toon Standard has no outline."),
             (ReasonText.UnknownShader, "UV Wizard doesn't know the shader {0}, so only its main texture and colour " +
                 "are baked."),
-            (ReasonText.DetailMapsOffMainUvs, "Its detail maps use the mesh's UV{0} map, but the atlas can only " +
-                "rearrange the main UV map."),
-            (ReasonText.ChannelOffMainUvs, "{0} uses the mesh's UV{1} map, but the atlas can only rearrange the main " +
-                "UV map."),
+            (ReasonText.DetailMapsOffMainUvs, "Its detail maps use another of the mesh's UV maps (UV{0}), but the " +
+                "atlas can only rearrange the main one."),
+            (ReasonText.ChannelOffMainUvs, "{0} uses another of the mesh's UV maps (UV{1}), but the atlas can only " +
+                "rearrange the main one."),
             (ReasonText.ChannelMappedWithoutUvs, "{0} is mapped by {1} instead of the mesh's UV maps, but the atlas " +
                 "can only rearrange the main UV map."),
             (ReasonText.UvMode, "UV mode {0}"),
@@ -165,7 +165,7 @@ namespace UVWizard.NDMF
             (ReasonText.PoiyomiMaskInverted, "Emission's mask is inverted: the glow is baked unmasked."),
             (ReasonText.PoiyomiGlobalMask, "Emission takes a global mask: the glow is baked unmasked."),
             (ReasonText.PoiyomiExtraEmission, "Emission {0} isn't baked: only the first emission is."),
-            (ReasonText.LilToonAddOn, "{0} draws a layer over another material: it has no surface of its own."),
+            (ReasonText.LilToonAddOn, "{0} draws a layer over another material, so there's nothing of its own to bake."),
             (ReasonText.LilToonRimMapped, "Emission is mapped by the rim instead of the mesh's UV maps, but the atlas " +
                 "can only rearrange the main UV map."),
             (ReasonText.LilToonFur, "Fur isn't baked: only the surface under it is."),

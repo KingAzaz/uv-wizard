@@ -123,7 +123,7 @@ namespace UVWizard.NDMF.Tests
         static System.Collections.Generic.IEnumerable<string> ReasonKeys() =>
             typeof(ReasonText).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue())
-                .Concat(new[] { Core.Materials.Channel.Albedo, Core.Materials.Channel.Emission, Core.Materials.Channel.Normal }
+                .Concat(((Core.Materials.Channel[])System.Enum.GetValues(typeof(Core.Materials.Channel)))
                     .Select(channel => ReasonText.Channel(channel).Key));
 
         [Test]

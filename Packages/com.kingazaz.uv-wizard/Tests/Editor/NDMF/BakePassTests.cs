@@ -495,6 +495,7 @@ namespace UVWizard.NDMF.Tests
             Assert.That(Texts(errors), Has.Count.EqualTo(2));
             Assert.That(Texts(errors), Has.Some.Contain("Eyes blue").And.Some.Contain("Eyes red"));
             Assert.That(Texts(errors), Has.All.Contain("Red eyes on"));
+            Assert.That(Texts(errors), Has.All.Contain("Element 2"), "the reason names the slot it swaps, as the source avatar numbers it");
             var swaps = FxClips(avatar).SelectMany(clip => AnimationUtility.GetObjectReferenceCurveBindings(clip)
                 .Select(binding => (binding.path, binding.propertyName,
                     AnimationUtility.GetObjectReferenceCurve(clip, binding)[0].value.name)));

@@ -340,27 +340,27 @@ namespace UVWizard.Core.Pipeline
                     continue;
                 }
                 if (material == null || s >= data.subMeshCount) continue;
-                void Exclude(string reason, params object[] args) => excluded.Add(new SlotNote(renderer, s, material, new Reason(reason, args)));
+                void Exclude(Reason reason) => excluded.Add(new SlotNote(renderer, s, material, reason));
 
                 if (materials.Length > data.subMeshCount && s == data.subMeshCount - 1)
                 {
-                    Exclude(ReasonText.ExtraSlots);
+                    Exclude(new Reason(ReasonText.ExtraSlots));
                     continue;
                 }
                 if (data.GetSubMesh(s).topology != MeshTopology.Triangles)
                 {
-                    Exclude(ReasonText.LinesOrPoints);
+                    Exclude(new Reason(ReasonText.LinesOrPoints));
                     continue;
                 }
                 if (!data.HasVertexAttribute(VertexAttribute.TexCoord0))
                 {
-                    Exclude(ReasonText.NoUvs);
+                    Exclude(new Reason(ReasonText.NoUvs));
                     continue;
                 }
                 var uvFormat = data.GetVertexAttributeFormat(VertexAttribute.TexCoord0);
                 if (!Uv0Rewriter.CanHoldAtlasUvs(uvFormat, data.GetVertexAttributeDimension(VertexAttribute.TexCoord0)))
                 {
-                    Exclude(ReasonText.UvFormat, uvFormat);
+                    Exclude(new Reason(ReasonText.UvFormat, uvFormat));
                     continue;
                 }
                 if (!readings.TryGetValue(material, out var reading))
@@ -369,7 +369,7 @@ namespace UVWizard.Core.Pipeline
                 // An empty submesh is merged whatever its material, since it draws nothing to keep.
                 if (reading.Verdict == MaterialVerdict.Excluded && DrawsAny(corners))
                 {
-                    excluded.Add(new SlotNote(renderer, s, material, reading.Reason ?? new Reason(ReasonText.CantMerge)));
+                    Exclude(reading.Reason ?? new Reason(ReasonText.CantMerge));
                     continue;
                 }
 
@@ -385,7 +385,7 @@ namespace UVWizard.Core.Pipeline
                 var islands = IslandBuilder.Build(sampled, triangles, periodU, periodV);
                 if (Array.Exists(islands, island => island.ExceedsRepeatLimit))
                 {
-                    Exclude(ReasonText.RepeatsTooOften);
+                    Exclude(new Reason(ReasonText.RepeatsTooOften));
                     continue;
                 }
                 var slot = new Slot(renderer, mesh, s, material, reading, uv0, sampled, corners, removed, triangles,

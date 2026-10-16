@@ -64,6 +64,19 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void ReasonsAreEqualOnlyWithTheSameKeysAndArguments()
+        {
+            var culls = new Reason(ReasonText.Culling, new ReportLine(ReasonText.CullsNoFaces), new ReportLine(ReasonText.CullsBackFaces));
+
+            Assert.That(culls, Is.EqualTo(new Reason(ReasonText.Culling, new ReportLine(ReasonText.CullsNoFaces),
+                new ReportLine(ReasonText.CullsBackFaces))));
+            Assert.That(culls, Is.Not.EqualTo(new Reason(ReasonText.Culling, new ReportLine(ReasonText.CullsFrontFaces),
+                new ReportLine(ReasonText.CullsBackFaces))), "another argument");
+            Assert.That(new Reason(ReasonText.CutoutDropped), Is.Not.EqualTo(new Reason(ReasonText.TransparencyDropped)),
+                "another key");
+        }
+
+        [Test]
         public void TheSameReasonWithOtherArgumentsIsListedApart()
         {
             var body = Renderer("Body");

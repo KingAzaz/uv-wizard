@@ -274,18 +274,20 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That(normal!.Strength, Is.EqualTo(0.25f));
         }
 
-        [TestCase(StandardLite, "_DETAIL", "_UVSec")]
-        [TestCase(ToonStandard, "USE_DETAIL_MAPS", "_DetailUV")]
-        public void DetailMapsOnUv1ExcludeTheMaterial(string shader, string detailKeyword, string uvProperty)
+        [TestCase(StandardLite, "_DETAIL", "_UVSec", 1)]
+        [TestCase(ToonStandard, "USE_DETAIL_MAPS", "_DetailUV", 1)]
+        [TestCase(ToonStandard, "USE_DETAIL_MAPS", "_DetailUV", 3)]
+        public void DetailMapsOffUv0ExcludeTheMaterialAndNameTheirUvChannel(string shader, string detailKeyword,
+            string uvProperty, int uv)
         {
             var material = Material(shader);
             material.EnableKeyword(detailKeyword);
-            material.SetFloat(uvProperty, 1);
+            material.SetFloat(uvProperty, uv);
 
             var reading = SourceShaderReader.Read(material);
 
             Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Excluded));
-            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.DetailMapsOffMainUvs, 1)));
+            Assert.That(reading.Reason, Is.EqualTo(new Reason(ReasonText.DetailMapsOffMainUvs, uv)));
         }
 
         [TestCase(StandardLite, "_DETAIL", "_UVSec")]
