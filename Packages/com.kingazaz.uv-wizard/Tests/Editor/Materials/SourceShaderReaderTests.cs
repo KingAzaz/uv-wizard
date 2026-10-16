@@ -379,6 +379,7 @@ namespace UVWizard.Core.Tests.Materials
         // bytes of anything but letters, digits and underscores (ShaderOptimizer.CleanStringForPropertyNames).
         [TestCase("My Hand", "_Color_MyHand")]
         [TestCase(" Left_Hand ", "_Color_Left_Hand")]
+        [TestCase("Body 2", "_Color_Body2")]
         [TestCase("Hand!", "_Color_Hand21")]
         [TestCase("Hände", "_Color_HC3A4nde")]
         public void ALockedPoiyomiMaterialReadsARenamedPropertyUnderThryEditorsCleanedSuffix(string suffix,
