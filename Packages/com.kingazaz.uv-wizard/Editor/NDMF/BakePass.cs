@@ -100,16 +100,16 @@ namespace UVWizard.NDMF
         static void ReportOverBudget(BakeResult result, Preset preset)
         {
             var megabytes = $"{result.TextureBytes / (double)TextureMemory.BytesPerMegabyte:0.##}";
-            var budget = $"{preset.BudgetMegabytes:0.##}";
+            var budgetMegabytes = $"{preset.BudgetMegabytes:0.##}";
             if (result.MergedMaterial == null || result.SizedFor == preset)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudget,
-                    megabytes, budget);
+                    megabytes, budgetMegabytes);
             else if (result.SizedFor is { } sizedFor)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudgetLowerRank,
-                    megabytes, budget, RankName(sizedFor), $"{sizedFor.BudgetMegabytes:0.##}");
+                    megabytes, budgetMegabytes, RankName(sizedFor), $"{sizedFor.BudgetMegabytes:0.##}");
             else
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverEveryBudget,
-                    megabytes, budget, $"{Preset.Ranks[Preset.Ranks.Count - 1].BudgetMegabytes:0.##}");
+                    megabytes, budgetMegabytes, $"{Preset.Ranks[Preset.Ranks.Count - 1].BudgetMegabytes:0.##}");
         }
 
         // The preset's rank as creators read it.

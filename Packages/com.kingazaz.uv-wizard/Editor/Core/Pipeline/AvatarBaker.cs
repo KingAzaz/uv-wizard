@@ -661,10 +661,10 @@ namespace UVWizard.Core.Pipeline
             return coloured;
         }
 
-        // The merged material without the atlas: its tint, vertex colour, and the representative's shared settings.
         /// <summary>The merged material's name.</summary>
         internal const string MergedMaterialName = "UV Wizard merged";
 
+        // The merged material without the atlas: its tint, vertex colour, and the representative's shared settings.
         static Material MergedMaterial(BakeOptions options, Material? representative, bool vertexColour)
         {
             var material = new Material(options.MergedShader) { name = MergedMaterialName };
