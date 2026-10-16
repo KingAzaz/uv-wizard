@@ -24,6 +24,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import tempfile
 
 DEFAULT_LEASE_FILE = r"C:\Users\Azaz\AI\uv-wizard\.git\uv-wizard-checkout.lease"
@@ -31,6 +32,7 @@ STALE_AFTER = datetime.timedelta(hours=3)
 # A takeover holds its claim for milliseconds. One older than this belongs to a run that died
 # mid-takeover, and the next run to find it clears it.
 CLAIM_STALE_AFTER = datetime.timedelta(minutes=5)
+REPLACE_ATTEMPTS = 5
 
 
 def now():
@@ -83,6 +85,24 @@ def write_temp(path, session, title, at):
     return temp
 
 
+def replace(path, session, title, at):
+    """Renames a new lease over the old one. On Windows the rename fails while another process
+    has the lease open to read it, which lasts milliseconds, so it's retried."""
+    temp = write_temp(path, session, title, at)
+    try:
+        for attempt in range(REPLACE_ATTEMPTS):
+            try:
+                os.replace(temp, path)
+                return
+            except PermissionError:
+                if attempt == REPLACE_ATTEMPTS - 1:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+    finally:
+        if os.path.exists(temp):
+            os.remove(temp)
+
+
 def create(path, session, title, at):
     temp = write_temp(path, session, title, at)
     try:
@@ -116,7 +136,7 @@ def take_over(path, stale, session, title, at):
         if current is None or current["token"] != stale["token"]:
             # Another run replaced or released it after our first read.
             return refusal(current)
-        os.replace(write_temp(path, session, title, at), path)
+        replace(path, session, title, at)
     finally:
         os.remove(claim)
     return True, f"stale lease replaced ({describe(stale)})"
@@ -128,11 +148,13 @@ def take(path, session, title, at=None):
     lease = read(path)
     if lease is None:
         return create(path, session, title, at)
-    if lease["session"] == session:
-        os.replace(write_temp(path, session, title, at), path)
+    stale = at - lease["since_dt"] >= STALE_AFTER
+    if lease["session"] == session and not stale:
+        replace(path, session, title, at)
         return True, "lease renewed"
-    if blocking(lease, session, at):
+    if not stale:
         return False, describe(lease)
+    # Another run may be taking over this stale lease, even when it's ours.
     return take_over(path, lease, session, title, at)
 
 

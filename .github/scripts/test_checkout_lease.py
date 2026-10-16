@@ -89,12 +89,57 @@ class LeaseTest(unittest.TestCase):
                 with self.interrupt_at_read(nth, lambda: results.setdefault(
                         "c", take(self.path, "c", "UV Wizard owner", at))):
                     results["b"] = take(self.path, "b", "UV Wizard next slice", at)
-                winners = [s for s, (ok, _) in results.items() if ok]
-                self.assertEqual(len(winners), 1, results)
-                self.assertEqual(self.holder()["session"], winners[0])
-                loser = ({"b", "c"} - set(winners)).pop()
-                self.assertEqual(results[loser][0], False)
-                self.assertNotIn("replaced", results[loser][1])
+                stale = "checkout leased by UV Wizard next slice (a) since 2026-10-15T17:05:00+00:00"
+                if nth == 1:
+                    # c takes over before b claims; b's re-read finds c's lease.
+                    self.assertEqual(results, {
+                        "c": (True, f"stale lease replaced ({stale})"),
+                        "b": (False, "checkout leased by UV Wizard owner (c) since 2026-10-15T20:05:00+00:00")})
+                    self.assertEqual(self.holder()["session"], "c")
+                else:
+                    # c finds b's claim.
+                    self.assertEqual(results, {
+                        "c": (False, f"another run is taking over the stale lease ({stale})"),
+                        "b": (True, f"stale lease replaced ({stale})")})
+                    self.assertEqual(self.holder()["session"], "b")
+
+    def test_a_holder_renewing_a_stale_lease_cannot_overwrite_a_takeover(self):
+        take(self.path, "a", "UV Wizard next slice", T0)
+        at = T0 + STALE_AFTER
+        results = {}
+        with self.interrupt_at_read(1, lambda: results.setdefault(
+                "b", take(self.path, "b", "UV Wizard owner", at))):
+            results["a"] = take(self.path, "a", "UV Wizard next slice", at)
+        self.assertEqual(results["a"],
+                         (False, "checkout leased by UV Wizard owner (b) since 2026-10-15T20:05:00+00:00"))
+        self.assertEqual(self.holder()["session"], "b")
+
+    def test_a_renewal_retries_while_another_process_has_the_lease_open(self):
+        take(self.path, "a", "UV Wizard owner", T0)
+        real = os.replace
+        calls = []
+
+        def busy_once(src, dst):
+            calls.append(src)
+            if len(calls) == 1:
+                raise PermissionError(5, "Access is denied")
+            real(src, dst)
+
+        later = T0 + datetime.timedelta(hours=1)
+        with mock.patch.object(checkout_lease.os, "replace", busy_once), \
+                mock.patch.object(checkout_lease.time, "sleep"):
+            self.assertEqual(take(self.path, "a", "UV Wizard owner", later), (True, "lease renewed"))
+        self.assertEqual(self.holder()["since"], "2026-10-15T18:05:00+00:00")
+        self.assertEqual(os.listdir(self.dir.name), ["lease"])
+
+    def test_a_renewal_that_stays_blocked_fails_and_leaves_no_temp_file(self):
+        take(self.path, "a", "UV Wizard owner", T0)
+        with mock.patch.object(checkout_lease.os, "replace", side_effect=PermissionError(5, "Access is denied")), \
+                mock.patch.object(checkout_lease.time, "sleep"):
+            with self.assertRaises(PermissionError):
+                take(self.path, "a", "UV Wizard owner", T0 + datetime.timedelta(hours=1))
+        self.assertEqual(os.listdir(self.dir.name), ["lease"])
+        self.assertEqual(self.holder()["since"], "2026-10-15T17:05:00+00:00")
 
     def test_a_takeover_is_refused_when_the_lease_is_rewritten_with_the_same_contents(self):
         open(self.path, "w").close()
@@ -107,9 +152,22 @@ class LeaseTest(unittest.TestCase):
             open(self.path, "w").close()
 
         with self.interrupt_at_read(1, rewrite):
-            ok, message = take(self.path, "b", "UV Wizard owner", old + STALE_AFTER)
-        self.assertFalse(ok)
+            result = take(self.path, "b", "UV Wizard owner", old + STALE_AFTER)
+        self.assertEqual(result, (False, "checkout leased by unreadable lease (?) since "
+                                         + self.mtime().isoformat(timespec="seconds")))
         self.assertEqual(os.path.getsize(self.path), 0)
+
+    def test_a_lease_missing_a_field_or_not_an_object_holds_until_its_file_is_old(self):
+        for body in ('{"session": "x", "since": "2026-10-15T17:05:00+00:00"}', "[]"):
+            with self.subTest(body=body):
+                with open(self.path, "w") as f:
+                    f.write(body)
+                self.assertEqual(
+                    take(self.path, "a", "UV Wizard owner", self.mtime() + datetime.timedelta(minutes=1)),
+                    (False, "checkout leased by unreadable lease (?) since "
+                            + self.mtime().isoformat(timespec="seconds")))
+                self.assertTrue(take(self.path, "a", "UV Wizard owner", self.mtime() + STALE_AFTER)[0])
+                os.remove(self.path)
 
     def test_a_takeover_is_refused_when_the_lease_is_released_meanwhile(self):
         take(self.path, "a", "UV Wizard next slice", T0)
@@ -137,7 +195,7 @@ class LeaseTest(unittest.TestCase):
     def test_a_just_created_empty_lease_is_held(self):
         open(self.path, "w").close()
         self.assertEqual(take(self.path, "a", "UV Wizard owner", self.mtime() + datetime.timedelta(minutes=1)),
-                         (False, f"checkout leased by unreadable lease (?) since {self.mtime().isoformat(timespec="seconds")}"))
+                         (False, f"checkout leased by unreadable lease (?) since {self.mtime().isoformat(timespec='seconds')}"))
 
     def test_an_unreadable_lease_counts_as_stale_once_its_file_is_old(self):
         with open(self.path, "w") as f:
