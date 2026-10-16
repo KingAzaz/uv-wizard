@@ -38,21 +38,30 @@ namespace UVWizard.VRChat
             InPhase(BuildPhase.Optimizing)
                 .AfterPlugin("com.kingazaz.uv-wizard")
                 .AfterPlugin("com.anatawa12.avatar-optimizer")
-                // The toggles are read from the controllers as the build leaves them: Avatar Optimizer merges meshes
-                // that share a toggle into a new object, and moves the toggle onto it.
-                .WithRequiredExtension(typeof(AnimatorServicesContext), sequence => sequence.Run("Measure after the build", context =>
+                .Run("Measure after the build", context =>
                 {
                     // By now the UV Wizard component may be gone, since it's editor-only; the bake marked the draft.
                     var draft = context.GetState<ReportDraft>();
                     if (!draft.Baked) return;
                     var root = context.AvatarRootObject;
                     draft.After = Measure(root);
-                    var toggled = MaterialAnimations.Toggled(context.Extension<AnimatorServicesContext>(), root);
+                    // The toggles are read from the controllers as the build leaves them: Avatar Optimizer merges
+                    // meshes that share a toggle into a new object, and moves the toggle onto it. Not through NDMF's
+                    // animator services, which a required extension would activate on every build, baking or not (#104).
+                    var toggled = MaterialAnimations.Toggled(AnimatorBindings, root);
                     draft.Leftovers = LeftoverRenderers.Find(root, toggled, draft.MmdWorldCompatibility);
                     BudgetWarnings.Report(draft);
                     draft.Publish(root);
-                }));
+                });
         }
+
+        // The controllers NDMF's animator services would read on this platform.
+        static IPlatformAnimatorBindings AnimatorBindings =>
+#if UVWIZARD_VRCHAT_AVATARS
+            VRChatPlatformAnimatorBindings.Instance;
+#else
+            GenericPlatformAnimatorBindings.Instance;
+#endif
 
         // The bake's own condition: a mobile build of an avatar with the UV Wizard component.
         static bool Bakes(BuildContext context) =>

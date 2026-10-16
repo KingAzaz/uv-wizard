@@ -32,6 +32,11 @@
             "name": "com.vrchat.base",
             "expression": "",
             "define": "UVWIZARD_VRCHAT_SDK"
+        },
+        {
+            "name": "com.vrchat.avatars",
+            "expression": "",
+            "define": "UVWIZARD_VRCHAT_AVATARS"
         }
     ],
     "noEngineReferences": false
