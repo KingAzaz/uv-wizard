@@ -88,6 +88,19 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void WhenTheChartsFitAtNoScaleNoBudgetIsSizedFor()
+        {
+            // 320 separate quads on a 1024 px texture, each its own chart: no scale fits them in a 64 px atlas.
+            var quads = Enumerable.Range(0, 320).Select(i => Quad(0, (i % 20) / 20f, (i / 20) / 16f, (i % 20 + 0.4f) / 20f, (i / 20 + 0.4f) / 16f)).ToArray();
+            var renderer = MeshRenderer(Mesh(quads), Standard(Gradient(1024, 0), Color.white));
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 0, budget: Budget.Good), renderer);
+
+            Assert.That(result.Fits, Is.False);
+            Assert.That(result.SizedFor, Is.Null);
+        }
+
+        [Test]
         public void ABudgetTighterThanEveryPresetIsKeptWhenWithinReach()
         {
             var tight = new Budget(4, 1);
