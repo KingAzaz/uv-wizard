@@ -19,7 +19,7 @@ namespace UVWizard.Core.Meshes
         /// Returns a copy of the mesh whose merged triangles sample the atlas. A vertex whose
         /// triangles want different UV0s, because they sit in different charts or some belong to an
         /// excluded material, gets one copy per UV0 with every other attribute copied. The merged
-        /// submeshes collapse into one, unless <paramref name="keepSubmeshes"/> is set.
+        /// submeshes collapse into one, unless <paramref name="needs"/> keeps them apart.
         /// </summary>
         /// <param name="atlasUvs">
         /// One entry per submesh. Null keeps the submesh's UV0, for an excluded material. Otherwise
@@ -27,30 +27,27 @@ namespace UVWizard.Core.Meshes
         /// wherever its corners' UVs differ at all, so the corners of a vertex in one chart must
         /// get bit-identical atlas UVs.
         /// </param>
-        /// <param name="keepSourceUv0In">
-        /// A UV channel, 1 to 7, that the mesh doesn't use, to hold every copy's UV0 as the source has it, for
-        /// a later tool that reads the source UVs. Null keeps no copy.
-        /// </param>
-        /// <param name="keepSubmeshes">
-        /// Keeps every merged submesh in its own place, for a later tool that reads the mesh per material slot.
+        /// <param name="needs">
+        /// What a tool that runs after the bake needs kept: the source UV0 in a channel the mesh doesn't use,
+        /// and the merged submeshes in their own places.
         /// </param>
         /// <remarks>
         /// UV0 keeps its format: Float32, Float16 or UNorm16. Float16 holds atlas UVs to within
         /// 2^-11, a texel of a 2048 atlas.
         /// </remarks>
-        public static RewrittenMesh Rewrite(Mesh source, IReadOnlyList<Vector2[]?> atlasUvs, int? keepSourceUv0In = null,
-            bool keepSubmeshes = false)
+        public static RewrittenMesh Rewrite(Mesh source, IReadOnlyList<Vector2[]?> atlasUvs,
+            LaterToolNeeds needs = default)
         {
             // The editor's MeshUtility variant reads meshes whose Read/Write is off.
             using var meshes = MeshUtility.AcquireReadOnlyMeshData(source);
             var data = meshes[0];
             if (atlasUvs.Count != data.subMeshCount)
                 throw new ArgumentException($"{atlasUvs.Count} entries for {data.subMeshCount} submeshes.", nameof(atlasUvs));
-            if (keepSourceUv0In is { } keptIn)
+            if (needs.KeepSourceUv0In is { } keptIn)
             {
-                if (keptIn is < 1 or > 7) throw new ArgumentOutOfRangeException(nameof(keepSourceUv0In));
+                if (keptIn is < 1 or > 7) throw new ArgumentOutOfRangeException(nameof(needs));
                 if (data.HasVertexAttribute(TexCoord(keptIn)))
-                    throw new ArgumentException($"The mesh already uses UV{keptIn}.", nameof(keepSourceUv0In));
+                    throw new ArgumentException($"The mesh already uses UV{keptIn}.", nameof(needs));
             }
 
             var indices = new int[data.subMeshCount][];
@@ -128,7 +125,7 @@ namespace UVWizard.Core.Meshes
                 CopyBoneWeights(data, source, mesh, sourceOf);
                 CopyBlendShapes(source, mesh, sourceOf);
             }
-            if (keepSourceUv0In is { } channel)
+            if (needs.KeepSourceUv0In is { } channel)
             {
                 using var sourceUv0 = new NativeArray<Vector2>(data.vertexCount, Allocator.Temp);
                 data.GetUVs(0, sourceUv0);
@@ -136,7 +133,7 @@ namespace UVWizard.Core.Meshes
                 for (var v = 0; v < kept.Length; v++) kept[v] = sourceUv0[sourceOf[v]];
                 mesh.SetUVs(channel, kept);
             }
-            var (submeshOf, merged) = WriteSubmeshes(data, mesh, atlasUvs, corners, keepSubmeshes);
+            var (submeshOf, merged) = WriteSubmeshes(data, mesh, atlasUvs, corners, needs.KeepSubmeshes);
             mesh.bounds = source.bounds;
             // Mip streaming picks the atlas's mip level from UV0's texel density. Unity's
             // recalculation logs an error on a mesh with line or point submeshes, so those keep the

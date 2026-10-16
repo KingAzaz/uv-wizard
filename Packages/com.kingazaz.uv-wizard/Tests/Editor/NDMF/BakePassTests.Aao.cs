@@ -282,7 +282,7 @@ namespace UVWizard.NDMF.Tests
             foreach (var source in new[] { torso, tail })
                 source.sharedMesh.uv2 = Enumerable.Repeat(new Vector2(1.5f, 0.5f), source.sharedMesh.vertexCount).ToArray();
             var target = MergeInto(avatar, "Merged", torso, tail);
-            var tiles = new SerializedObject(target.gameObject.AddComponent(typeof(TraceAndOptimize).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile")));
+            var tiles = new SerializedObject(target.gameObject.AddComponent(AaoMeshEdits.RemoveMeshByUVTile!));
             var slots = tiles.FindProperty("materials");
             slots.arraySize = 3;
             for (var s = 0; s < 3; s++)
@@ -377,7 +377,7 @@ namespace UVWizard.NDMF.Tests
             var renderer = glasses.AddComponent<MeshRenderer>();
             var materials = new[] { Standard(Gradient(16, 5)) };
             renderer.sharedMaterials = materials;
-            glasses.AddComponent(typeof(TraceAndOptimize).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile"));
+            glasses.AddComponent(AaoMeshEdits.RemoveMeshByUVTile!);
 
             MobileBuild.Override = true;
             var errors = BesidesSlots(Build(avatar));
@@ -396,7 +396,7 @@ namespace UVWizard.NDMF.Tests
             var avatar = MergeableAvatar(addTraceAndOptimize: false);
             var torso = avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>();
             torso.sharedMesh.uv2 = Enumerable.Repeat(new Vector2(1.5f, 0.5f), torso.sharedMesh.vertexCount).ToArray();
-            var type = typeof(TraceAndOptimize).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile");
+            var type = AaoMeshEdits.RemoveMeshByUVTile!;
             var serialized = new SerializedObject(torso.gameObject.AddComponent(type));
             var slots = serialized.FindProperty("materials");
             slots.arraySize = 2;

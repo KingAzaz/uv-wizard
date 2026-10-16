@@ -44,7 +44,7 @@ namespace UVWizard.Core.Pipeline
             var excluded = new List<SlotNote>();
             var flagged = new List<SlotNote>();
             var slots = new List<Slot>();
-            var needs = new Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)>();
+            var needs = new Dictionary<Renderer, LaterToolNeeds>();
             var readings = new Dictionary<Material, SourceMaterialReading>();
             foreach (var renderer in renderers)
                 CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
@@ -289,12 +289,13 @@ namespace UVWizard.Core.Pipeline
         static void CollectSlots(Renderer renderer, IReadOnlyList<AnimatedSlot> animated,
             Dictionary<Material, SourceMaterialReading> readings, List<Slot> slots, List<SlotNote> excluded,
             List<SlotNote> flagged, ILaterMeshEdits? laterEdits,
-            Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs, Channels channels)
+            Dictionary<Renderer, LaterToolNeeds> needs, Channels channels)
         {
             var mesh = MeshOf(renderer);
             if (mesh == null) return;
-            if (laterEdits?.Needs(renderer) is { } rendererNeeds) needs[renderer] = rendererNeeds;
-            else if (laterEdits != null)
+            var rendererNeeds = laterEdits?.Needs(renderer) ?? default;
+            if (rendererNeeds.CanKeepSourceUv0) needs[renderer] = rendererNeeds;
+            else
             {
                 var sources = renderer.sharedMaterials;
                 for (var s = 0; s < sources.Length; s++)
@@ -714,7 +715,7 @@ namespace UVWizard.Core.Pipeline
         // where each of its slots went.
         static (List<(Mesh Source, Mesh Rewritten)> Replaced, List<(Renderer Renderer, int[] SlotOf)> Moved)
             RewriteRenderers(List<Slot> slots, Material merged, ILaterMeshEdits? laterEdits,
-                Dictionary<Renderer, (int? KeepSourceUv0In, bool KeepSubmeshes)> needs)
+                Dictionary<Renderer, LaterToolNeeds> needs)
         {
             // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was.
             var changes = new List<(Renderer Renderer, Mesh Source, Mesh Rewritten, Material[] Materials, int[] SlotOf,
@@ -729,8 +730,9 @@ namespace UVWizard.Core.Pipeline
                     atlasUvs[slots[end].Submesh] = CornerAtlasUvs(slots[end]);
                 first = end;
 
-                var (keptIn, keepSubmeshes) = needs.TryGetValue(renderer, out var rendererNeeds) ? rendererNeeds : (null, false);
-                var rewritten = Uv0Rewriter.Rewrite(mesh, atlasUvs, keptIn, keepSubmeshes);
+                needs.TryGetValue(renderer, out var rendererNeeds);
+                var keptIn = rendererNeeds.KeepSourceUv0In;
+                var rewritten = Uv0Rewriter.Rewrite(mesh, atlasUvs, rendererNeeds);
                 var materials = renderer.sharedMaterials;
                 var drawn = Math.Min(materials.Length, mesh.subMeshCount);
                 var count = 0;

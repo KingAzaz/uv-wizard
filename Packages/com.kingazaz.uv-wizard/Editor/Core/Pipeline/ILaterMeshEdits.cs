@@ -2,6 +2,7 @@
 
 using System;
 using UnityEngine;
+using UVWizard.Core.Meshes;
 
 namespace UVWizard.Core.Pipeline
 {
@@ -19,12 +20,11 @@ namespace UVWizard.Core.Pipeline
         ITriangleRemovals? Removals(Renderer renderer);
 
         /// <summary>
-        /// How the renderer's rewritten mesh must look for the tool: a UV channel its source mesh doesn't use, to
-        /// keep the source UV0 in (null: none), and whether its merged submeshes keep their places. Null when the
-        /// tool reads the source UV0 but couldn't find it after the bake, such as when the mesh has no free
-        /// channel to keep it in, so the renderer stays as it is. Asked while the renderer still has its source mesh.
+        /// How the renderer's rewritten mesh must look for the tool, or <see cref="LaterToolNeeds.CantKeepSourceUv0"/>
+        /// when the tool reads the source UV0 but couldn't find it after the bake, so the renderer stays as it is.
+        /// Asked while the renderer still has its source mesh.
         /// </summary>
-        (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer);
+        LaterToolNeeds Needs(Renderer renderer);
 
         /// <summary>
         /// Called once every renderer has its rewritten mesh, for each renderer whose source UV0 was kept.
