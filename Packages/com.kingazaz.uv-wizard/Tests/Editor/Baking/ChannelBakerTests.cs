@@ -343,6 +343,7 @@ namespace UVWizard.Core.Tests.Baking
             var source = Solid(new Color32(200, 100, 50, 255));
             var plan = Plan(8, Quad(source, Color.white, Identity, Corners(0, 0, 1, 1), Corners(0, 0, 0.5f, 0.5f)));
 
+            var previous = Camera.current;
             try
             {
                 Camera.SetupCurrent(camera);
@@ -351,7 +352,7 @@ namespace UVWizard.Core.Tests.Baking
             }
             finally
             {
-                Camera.SetupCurrent(null);
+                Camera.SetupCurrent(previous);
             }
         }
 
@@ -363,6 +364,7 @@ namespace UVWizard.Core.Tests.Baking
             var plan = Plan(8, Quad(Solid(new Color32(200, 100, 50, 255)), Color.white, Identity,
                 Corners(0, 0, 1, 1), Corners(0, 0, 0.5f, 0.5f)));
 
+            var previous = Camera.current;
             try
             {
                 Camera.SetupCurrent(camera);
@@ -371,7 +373,7 @@ namespace UVWizard.Core.Tests.Baking
             }
             finally
             {
-                Camera.SetupCurrent(null);
+                Camera.SetupCurrent(previous);
             }
         }
 
