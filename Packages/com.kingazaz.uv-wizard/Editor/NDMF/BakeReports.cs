@@ -69,9 +69,9 @@ namespace UVWizard.NDMF
         public bool MmdWorldCompatibility { get; set; }
 
         /// <summary>
-        /// True when a Trace and Optimize runs on the avatar, its own or one UV Wizard added, to merge its meshes.
+        /// True when a Trace and Optimize on the avatar, its own or one UV Wizard added, merges its skinned meshes.
         /// </summary>
-        public bool TraceAndOptimize { get; set; }
+        public bool MergesMeshes { get; set; }
 
         /// <summary>True once the bake has run, so later passes know there's a report to finish.</summary>
         public bool Baked { get; set; }
@@ -83,7 +83,7 @@ namespace UVWizard.NDMF
         public void Publish(GameObject root)
         {
             var report = new BakeReport(AvatarName(root), ManualBake.Previewing, Result, Target, Before, After, Leftovers,
-                TraceAndOptimize);
+                MergesMeshes);
             if (!ManualBake.Running) Originals.Find(root, report, originals);
             BakeReports.Publish(report, originals);
         }

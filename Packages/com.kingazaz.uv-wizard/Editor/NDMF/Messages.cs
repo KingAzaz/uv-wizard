@@ -97,9 +97,10 @@ namespace UVWizard.NDMF
             (ReportText.LeftoverBoundsOrRootBone, "{0} stays a mesh of its own because its bounds or root bone " +
                 "differ from the main mesh's."),
             (ReportText.LeftoverOther, "{0} stays a mesh of its own, and UV Wizard can't tell why."),
-            (ReportText.NoMeshMerge, "No meshes were merged, because Avatar Optimizer's Trace and Optimize didn't run " +
-                "on the avatar. Turn on Add Trace And Optimize on the UV Wizard component, or add Trace and Optimize " +
-                "to the avatar yourself. Both need Avatar Optimizer installed."),
+            (ReportText.NoMeshMerge, "Avatar Optimizer's Trace and Optimize didn't merge the avatar's skinned meshes, " +
+                "so UV Wizard can't say why each stays apart. Turn on Add Trace And Optimize on the UV Wizard " +
+                "component, or turn on Merge Skinned Meshes on the avatar's own Trace and Optimize. Both need Avatar " +
+                "Optimizer installed."),
             (ReportText.WindowTitle, "UV Wizard report"),
             (ReportText.NoReport, "No bake yet. Bake the avatar from the UV Wizard component, or build it for mobile."),
             (ReportText.ManualBakeButton, "Bake for mobile now"),

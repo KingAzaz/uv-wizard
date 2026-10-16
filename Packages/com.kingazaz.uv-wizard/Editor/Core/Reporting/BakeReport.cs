@@ -24,7 +24,7 @@ namespace UVWizard.Core.Reporting
         /// <param name="after">The SDK's figures at the end of the build, or null when they weren't measured.</param>
         /// <param name="leftovers">The renderers left beside the avatar's main skinned mesh, each with why.</param>
         /// <param name="meshesMerged">
-        /// False when no Trace and Optimize ran, so nothing merged the meshes and none was kept apart for a reason.
+        /// False when no Trace and Optimize merged the skinned meshes, so no leftover has a reason to give.
         /// </param>
         public BakeReport(string avatarName, bool mobilePreview, BakeResult? result, PerformanceRank? target,
             ReportFigures? before = null, ReportFigures? after = null, IReadOnlyList<LeftoverRenderer>? leftovers = null,
@@ -67,7 +67,7 @@ namespace UVWizard.Core.Reporting
 
         /// <summary>
         /// The one line in place of the leftovers when material slots or meshes keep the avatar below the preset's
-        /// rank and no Trace and Optimize ran to merge them. Null otherwise.
+        /// rank and no Trace and Optimize merged the skinned meshes. Null otherwise.
         /// </summary>
         public ReportLine? NoMergeLine { get; }
 
@@ -165,7 +165,7 @@ namespace UVWizard.Core.Reporting
         }
 
         public MaterialOutcome Outcome { get; }
-        /// <summary>The material, which is gone once the build's clone is when the build made it.</summary>
+        /// <summary>The material. One the build made is gone with the build's clone.</summary>
         public Material Material { get; }
 
         /// <summary>The material's name, kept for when the material is gone.</summary>

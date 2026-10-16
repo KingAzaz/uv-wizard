@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
@@ -87,7 +88,7 @@ namespace UVWizard.NDMF.Tests
         {
             // A bake that throws, or doesn't run, publishes nothing, so the window mustn't keep the previous avatar's.
             BakeReports.Publish(new BakeReport("Previous", false, null, null),
-                new System.Collections.Generic.Dictionary<Object, Object>());
+                new Dictionary<Object, Object>());
             var avatar = Avatar(withComponent: false);
 
             var told = 0;
@@ -152,7 +153,7 @@ namespace UVWizard.NDMF.Tests
                     .And.Not.Contain("submesh").IgnoreCase.And.Not.Contain("UV0").IgnoreCase, key);
         }
 
-        static System.Collections.Generic.IEnumerable<string> ReasonKeys() =>
+        static IEnumerable<string> ReasonKeys() =>
             typeof(ReasonText).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue())
                 .Concat(((Core.Materials.Channel[])System.Enum.GetValues(typeof(Core.Materials.Channel)))

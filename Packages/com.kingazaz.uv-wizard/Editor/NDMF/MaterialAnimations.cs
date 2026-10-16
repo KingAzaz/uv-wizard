@@ -61,10 +61,11 @@ namespace UVWizard.NDMF
         }
 
         /// <summary>
-        /// The objects the avatar's animations turn on or off, and the renderers whose enabled flag they animate.
-        /// Avatar Optimizer keeps renderers on or under those objects out of the merge (ADR 0001). It merges a renderer
-        /// whose enabled flag is animated only with others the same animation turns on and off, and moves the toggle
-        /// onto the merged mesh's object (AutoMergeSkinnedMesh, 1.9.20), so alone such a renderer stays apart too.
+        /// The objects the avatar's animations turn on or off, and the skinned meshes whose enabled flag they animate.
+        /// Avatar Optimizer keeps renderers on or under those objects out of the merge (ADR 0001). It merges a skinned
+        /// mesh whose enabled flag is animated only with others the same animation turns on and off, and moves the
+        /// toggle onto the merged mesh's object (AutoMergeSkinnedMesh, 1.9.20), so alone such a mesh stays apart too.
+        /// It merges no static mesh, so a static mesh's enabled flag doesn't count.
         /// </summary>
         public static HashSet<UnityEngine.Object> Toggled(AnimatorServicesContext animators, GameObject root)
         {
@@ -74,7 +75,7 @@ namespace UVWizard.NDMF
                     if (binding.type == typeof(GameObject) && binding.propertyName == "m_IsActive"
                         && resolve(binding.path) is { } target)
                         toggled.Add(target);
-                    else if (binding.propertyName == "m_Enabled" && Target(binding, resolve) is { } renderer)
+                    else if (binding.propertyName == "m_Enabled" && Target(binding, resolve) is SkinnedMeshRenderer renderer)
                         toggled.Add(renderer);
             return toggled;
         }
