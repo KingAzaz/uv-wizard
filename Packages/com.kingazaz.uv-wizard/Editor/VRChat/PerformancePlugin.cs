@@ -17,7 +17,8 @@ namespace UVWizard.VRChat
     /// <summary>
     /// Fills in the report's figures from the VRChat SDK's own mobile performance stats, so they match the SDK by
     /// construction: once on the avatar just before the bake, and once after Avatar Optimizer has merged its meshes
-    /// and repacked its textures (ADR 0001, #66). The second pass also names the renderers left apart.
+    /// and repacked its textures (ADR 0001, #66). The second pass also names the renderers left apart, and checks
+    /// the figures against the preset's budget (#83).
     /// </summary>
     internal sealed class PerformancePlugin : Plugin<PerformancePlugin>
     {
@@ -48,6 +49,7 @@ namespace UVWizard.VRChat
                     draft.After = Measure(root);
                     var toggled = MaterialAnimations.Toggled(context.Extension<AnimatorServicesContext>(), root);
                     draft.Leftovers = LeftoverRenderers.Find(root, toggled, draft.MmdWorldCompatibility);
+                    BudgetWarnings.Report(draft);
                     draft.Publish(root);
                 }));
         }

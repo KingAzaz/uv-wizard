@@ -42,7 +42,7 @@ namespace UVWizard.NDMF.Tests
             var avatar = MergeableAvatar(addTraceAndOptimize: false);
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Is.Empty);
             Assert.That(avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true), Has.Length.EqualTo(2));
@@ -70,7 +70,7 @@ namespace UVWizard.NDMF.Tests
             own.ApplyModifiedPropertiesWithoutUndo();
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Is.Empty);
             Assert.That(avatar.GetComponentsInChildren<SkinnedMeshRenderer>(true), Has.Length.EqualTo(2));
@@ -127,7 +127,7 @@ namespace UVWizard.NDMF.Tests
             };
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Is.Empty);
             var mesh = body.sharedMesh;
@@ -408,7 +408,7 @@ namespace UVWizard.NDMF.Tests
             serialized.ApplyModifiedPropertiesWithoutUndo();
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Is.Empty);
             var mesh = torso.sharedMesh;

@@ -4,9 +4,7 @@ using System.Collections.Generic;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using UnityEngine;
-using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
-using UVWizard.Core.Reporting;
 
 namespace UVWizard.NDMF
 {
@@ -85,38 +83,7 @@ namespace UVWizard.NDMF
             foreach (var note in result.Flagged)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.Flagged,
                     note.Material, note.Renderer, note.Reason);
-            if (result.Budget is { } budget)
-            {
-                if (result.TextureBytes > budget.Bytes) ReportOverBudget(result, budget);
-                if (!result.WithinMaterialSlots)
-                    ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.TooManySlots,
-                        result.MaterialSlots, budget.MaterialSlots);
-            }
             return result;
-        }
-
-        // Says the avatar is over the budget, and, when the atlas was sized for a lower rank or kept its finest
-        // sizes because textures outside it left no room, which.
-        static void ReportOverBudget(BakeResult result, Budget budget)
-        {
-            var megabytes = $"{result.TextureBytes / (double)TextureMemory.BytesPerMegabyte:0.##}";
-            if (result.MergedMaterial == null || result.SizedFor == budget)
-                ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudget,
-                    megabytes, $"{budget.Megabytes:0.##}");
-            else if (result.SizedFor is { } sizedFor)
-                ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudgetLowerRank,
-                    megabytes, $"{budget.Megabytes:0.##}", RankName(sizedFor), $"{sizedFor.Megabytes:0.##}");
-            else
-                ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverEveryBudget,
-                    megabytes, $"{budget.Megabytes:0.##}", $"{Budget.Ranks[Budget.Ranks.Count - 1].Megabytes:0.##}");
-        }
-
-        // The preset's rank as creators read it.
-        static string RankName(Budget budget)
-        {
-            for (var r = 0; r < Budget.Ranks.Count; r++)
-                if (Budget.Ranks[r] == budget) return Messages.Text(ReportText.Rank(PerformanceRank.Excellent + r));
-            return Messages.Text(ReportText.NotMeasured);
         }
     }
 }

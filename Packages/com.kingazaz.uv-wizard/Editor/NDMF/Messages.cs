@@ -22,6 +22,7 @@ namespace UVWizard.NDMF
         public const string OverBudget = "uvwizard.over-budget";
         public const string OverBudgetLowerRank = "uvwizard.over-budget-lower-rank";
         public const string OverEveryBudget = "uvwizard.over-every-budget";
+        public const string SlotsKeptForMmd = "uvwizard.slots-kept-for-mmd";
         public const string TooManySlots = "uvwizard.too-many-slots";
         public const string Unconverted = "uvwizard.unconverted";
 
@@ -40,23 +41,29 @@ namespace UVWizard.NDMF
                 "Each still gets a Toon Standard material of its own."),
             (NoToonStandard, "VRChat's Toon Standard shader is missing"),
             (OverBudget, "Over the preset's texture memory"),
-            (OverBudget + ":description", "After the bake, the avatar's textures take {0} MB, more than the preset's " +
+            (OverBudget + ":description", "After the build, the avatar's textures take {0} MB, more than the preset's " +
                 "{1} MB. Textures that stay outside the atlas, such as excluded materials' own, count too. Choose a " +
                 "lower preset, or reduce those textures."),
             (OverBudgetLowerRank, "Over the preset's texture memory"),
-            (OverBudgetLowerRank + ":description", "After the bake, the avatar's textures take {0} MB, more than the " +
+            (OverBudgetLowerRank + ":description", "After the build, the avatar's textures take {0} MB, more than the " +
                 "preset's {1} MB. Textures that stay outside the atlas, such as excluded materials' own, leave no room " +
                 "for an atlas within it, so UV Wizard sized the atlas for {2}'s {3} MB instead. Choose a lower preset, " +
                 "or reduce those textures."),
             (OverEveryBudget, "Over every preset's texture memory"),
-            (OverEveryBudget + ":description", "After the bake, the avatar's textures take {0} MB, more than the " +
+            (OverEveryBudget + ":description", "After the build, the avatar's textures take {0} MB, more than the " +
                 "preset's {1} MB. Textures that stay outside the atlas, such as excluded materials' own, take more than " +
                 "even the lowest preset's {2} MB, so no atlas size changes the rank, and UV Wizard kept the atlas at full " +
                 "detail. Reduce those textures."),
             (TooManySlots, "Over the preset's material slots"),
-            (TooManySlots + ":description", "After the bake, the avatar will have {0} material slots, but the preset " +
-                "allows {1}. Each excluded material keeps a slot of its own. Choose a lower preset, or remove what keeps " +
-                "those materials out of the atlas."),
+            (TooManySlots + ":description", "After the build, the avatar has {0} material slots, but the preset " +
+                "allows {1}. Each excluded material keeps a slot of its own, and each mesh Avatar Optimizer leaves apart " +
+                "adds the slots it draws. The UV Wizard report says which meshes stay apart and why. Choose a lower " +
+                "preset, or remove what keeps those materials out of the atlas or those meshes apart."),
+            (SlotsKeptForMmd, "{2} keeps material slots of its own for MMD worlds"),
+            (SlotsKeptForMmd + ":description", "After the build, the avatar has {0} material slots, more than the " +
+                "preset's {1}, only because Trace and Optimize keeps {2}, a mesh named Body under the avatar, apart for " +
+                "MMD worlds, which animate its blend shapes. If you don't use MMD worlds, add Trace and Optimize to the " +
+                "avatar yourself and turn off its MMD World Compatibility."),
             (Unconverted, "Mobile doesn't allow this material's shader: {0}"),
             (Unconverted + ":description", "{2} It stays on {1} as it is, and the VRChat SDK won't upload the avatar " +
                 "for mobile until it's replaced with one of VRChat's mobile shaders."),

@@ -82,25 +82,13 @@ namespace UVWizard.Core.Pipeline
         /// <summary>
         /// The texture memory, in bytes, of everything on the renderers right after the bake, counted the way the
         /// VRChat SDK counts it. Tools that run later, such as Avatar Optimizer repacking the atlas, can only lower
-        /// it, so the uploaded avatar's figure, which the SDK reports, is at most this.
+        /// it, so the uploaded avatar's figure, which the SDK reports, is at most this. The budget warnings use the
+        /// SDK's figure at the end of the build (#83).
         /// </summary>
         public long TextureBytes { get; private set; }
 
-        /// <summary>
-        /// The material slots the avatar will have once Avatar Optimizer merges its meshes into one (ADR 0001): one
-        /// per distinct material on the renderers after the bake, since merging joins slots that share a material.
-        /// The SDK counts submeshes, so before that merge, or for renderers it leaves apart, it counts more.
-        /// </summary>
-        public int MaterialSlots { get; private set; }
-
         /// <summary>The budget the bake aimed for, or null when it had none.</summary>
         public Budget? Budget { get; private set; }
-
-        /// <summary>
-        /// False when the avatar has more material slots than the budget allows, such as when excluded materials
-        /// take slots of their own. True without a budget.
-        /// </summary>
-        public bool WithinMaterialSlots => Budget == null || MaterialSlots <= Budget.MaterialSlots;
 
         /// <summary>
         /// The budget the atlas was sized for: <see cref="Budget"/> itself, or, when textures outside the atlas
@@ -110,15 +98,13 @@ namespace UVWizard.Core.Pipeline
         public Budget? SizedFor { get; private set; }
 
         /// <summary>
-        /// Records the avatar's texture memory and material slots after the bake, against the budget, and the budget
-        /// the atlas was sized for.
+        /// Records the avatar's texture memory after the bake, the budget, and the budget the atlas was sized for.
         /// </summary>
         internal BakeResult Measured(IReadOnlyList<Renderer> renderers, Budget? budget, Budget? sizedFor)
         {
             Budget = budget;
             SizedFor = sizedFor;
             TextureBytes = TextureMemory.Bytes(renderers);
-            MaterialSlots = TextureMemory.Materials(renderers).Count;
             return this;
         }
 

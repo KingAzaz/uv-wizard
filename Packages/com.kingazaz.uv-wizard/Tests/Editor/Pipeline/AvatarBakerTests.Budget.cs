@@ -248,30 +248,6 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.Atlas!.width, Is.EqualTo(AtlasSizing.MinSize));
         }
 
-        [Test]
-        public void AnExcludedMaterialTakesASlotOfItsOwn()
-        {
-            var merged = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
-            var kept = Kept(Gradient(16, 1));
-
-            var good = Bake(StandardOptions(budget: Budget.Good), merged, kept);
-
-            Assert.That(good.MaterialSlots, Is.EqualTo(2));
-            Assert.That(good.WithinMaterialSlots, Is.False);
-        }
-
-        [Test]
-        public void MediumAllowsAnExcludedMaterialBesideTheMergedOne()
-        {
-            var merged = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
-            var kept = Kept(Gradient(16, 1));
-
-            var medium = Bake(StandardOptions(budget: Budget.Medium), merged, kept);
-
-            Assert.That(medium.MaterialSlots, Is.EqualTo(2));
-            Assert.That(medium.WithinMaterialSlots, Is.True);
-        }
-
         // Quads sampling 4096 albedo, emission and normal textures, by default one across most of their width, so at
         // full detail the charts would need more than a 2048 atlas.
         MeshRenderer Detailed(params (Vector3[] Positions, Vector2[] Uvs)[] quads)

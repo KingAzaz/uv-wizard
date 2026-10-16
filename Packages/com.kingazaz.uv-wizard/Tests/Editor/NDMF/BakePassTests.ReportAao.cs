@@ -65,6 +65,53 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void ABodyKeptApartForMmdWorldsIsReportedAsInformationNotOverTheSlots()
+        {
+            // The SDK counts a slot on the merged mesh and one on the Body, over Good's one (#83).
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            AddUnmergeable(avatar, Unmergeable.MmdBody);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(BakeReports.Latest!.After!.MaterialSlots, Is.EqualTo(2));
+            Assert.That(OwnReports(errors), Has.Member((ErrorSeverity.Information, (string?)Messages.SlotsKeptForMmd)));
+            Assert.That(OwnReports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)));
+            Assert.That(Texts(errors), Has.Some.Contains("Body"));
+        }
+
+        [Test]
+        public void AToggledMeshKeptApartIsOverTheSlots()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            AddUnmergeable(avatar, Unmergeable.ToggledOutfit);
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(OwnReports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)));
+            Assert.That(OwnReports(errors), Has.No.Member((ErrorSeverity.Information, (string?)Messages.SlotsKeptForMmd)));
+            Assert.That(Texts(errors), Has.Some.Contains("2 material slots"));
+        }
+
+        [Test]
+        public void MediumAllowsAKeptMaterialsSlotBesideTheMergedMesh()
+        {
+            // Avatar Optimizer merges the torso and tail, and the kept static mesh adds the second slot Medium allows.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            avatar.GetComponent<UVWizardAvatar>().preset = UVWizardAvatar.Preset.Medium;
+            Kept(avatar, Gradient(16, 9));
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
+
+            Assert.That(BakeReports.Latest!.After!.MaterialSlots, Is.EqualTo(2));
+            Assert.That(OwnReports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)));
+        }
+
+        [Test]
         public void MeshesAvatarOptimizerMergesUnderOneToggleAreReportedAsToggled()
         {
             // Avatar Optimizer merges the shirt and pants, which share one toggle, into a new object and moves the

@@ -23,7 +23,7 @@ namespace UVWizard.NDMF.Tests
             Detailed(avatar);
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(errors, Is.Empty);
             var sdk = SdkTextureMegabytes(avatar);
@@ -54,8 +54,10 @@ namespace UVWizard.NDMF.Tests
             // one mobile allows, so it isn't converted.
             var avatar = Avatar(withComponent: true);
             Kept(avatar, Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)), "VRChat/Mobile/Standard Lite");
+            avatar.GetComponent<UVWizardAvatar>().preset = UVWizardAvatar.Preset.Excellent;
 
-            var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
 
             Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudgetLowerRank)));
             Assert.That(Texts(errors), Has.Some.Contains("sized the atlas for Good's 18 MB"));
@@ -68,10 +70,13 @@ namespace UVWizard.NDMF.Tests
             // Only the kept renderer, so no slot merges and no atlas is sized.
             var avatar = Keep(new GameObject("Avatar"));
             avatar.AddComponent<VRCAvatarDescriptor>();
-            avatar.AddComponent<UVWizardAvatar>().addTraceAndOptimize = false;
+            var component = avatar.AddComponent<UVWizardAvatar>();
+            component.addTraceAndOptimize = false;
+            component.preset = UVWizardAvatar.Preset.Excellent;
             Kept(avatar, Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)), "VRChat/Mobile/Standard Lite");
 
-            var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
 
             Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudget)));
             Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudgetLowerRank)));
@@ -84,8 +89,10 @@ namespace UVWizard.NDMF.Tests
             // A kept 25.6 MB texture is past even Medium's 25 MB, so the atlas keeps its finest sizes.
             var avatar = Avatar(withComponent: true);
             Kept(avatar, Keep(new Texture2D(2592, 2592, TextureFormat.RGBA32, mipChain: false)), "VRChat/Mobile/Standard Lite");
+            avatar.GetComponent<UVWizardAvatar>().preset = UVWizardAvatar.Preset.Excellent;
 
-            var errors = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Excellent)));
+            MobileBuild.Override = true;
+            var errors = Build(avatar);
 
             Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.OverEveryBudget)));
             Assert.That(Texts(errors), Has.Some.Contains("the lowest preset's 25 MB"));
@@ -96,24 +103,15 @@ namespace UVWizard.NDMF.Tests
         [Test]
         public void ABakeWithMoreSlotsThanItsPresetAllowsSaysSo()
         {
+            // Without Trace and Optimize nothing merges the meshes, and the SDK counts a slot on each.
             var avatar = Avatar(withComponent: true);
             Kept(avatar, Gradient(16, 9));
 
-            var good = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Good)));
+            MobileBuild.Override = true;
+            var good = Build(avatar);
 
             Assert.That(Reports(good), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)));
             Assert.That(Reports(good), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.OverBudget)));
-        }
-
-        [Test]
-        public void MediumAllowsTheKeptMaterialsSlot()
-        {
-            var avatar = Avatar(withComponent: true);
-            Kept(avatar, Gradient(16, 9));
-
-            var medium = ErrorReport.CaptureErrors(() => BakePass.Bake(avatar, Options(UVWizardAvatar.Preset.Medium)));
-
-            Assert.That(Reports(medium), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.TooManySlots)));
         }
 
         [TestCase(UVWizardAvatar.Preset.Excellent, 10, 1)]
