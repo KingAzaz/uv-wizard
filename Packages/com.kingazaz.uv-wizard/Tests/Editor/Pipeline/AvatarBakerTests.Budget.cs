@@ -87,6 +87,31 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void WithEveryChannelOffAKeptOutSlotIsStillReported()
+        {
+            var renderer = Kept(Gradient(16, 0));
+
+            var result = Bake(Converting(channels: Channels.None), renderer);
+
+            Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(new[] { renderer.sharedMaterial }));
+        }
+
+        // Whether a kept-out material is converted doesn't hang on what the slots to merge have.
+        [Test]
+        public void WithNoChannelToMergeAKeptOutMaterialIsStillConvertedWithItsChannels()
+        {
+            var plain = Plain(Gradient(16, 0));
+            var kept = Kept(Gradient(16, 1));
+            var source = Emitting(kept.sharedMaterial, Gradient(16, 2), Color.white);
+
+            var result = Bake(Converting(channels: Channels.Emission), plain, kept);
+
+            Assert.That(result.NothingToBake, Is.True);
+            Assert.That(kept.sharedMaterial, Is.Not.SameAs(source));
+            Assert.That(kept.sharedMaterial.GetTexture("_EmissionMap"), Is.Not.Null);
+        }
+
+        [Test]
         public void ABakeWithAChannelToBakeHasSomethingToBake()
         {
             var result = Bake(StandardOptions(channels: Channels.Albedo), Plain(Gradient(16, 0)));

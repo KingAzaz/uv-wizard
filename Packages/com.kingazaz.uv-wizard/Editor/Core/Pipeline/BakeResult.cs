@@ -39,24 +39,17 @@ namespace UVWizard.Core.Pipeline
         /// <summary>A bake that merged nothing, and left every renderer as it was but for converted materials.</summary>
         public static BakeResult Unchanged(bool fits, IReadOnlyList<SlotNote> excluded, IReadOnlyList<SlotNote> flagged,
             IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null,
-            IReadOnlyList<SlotNote>? unconverted = null) =>
+            IReadOnlyList<SlotNote>? unconverted = null, bool nothingToBake = false) =>
             new BakeResult(fits, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged,
-                convertedMaterials: convertedMaterials, unconverted: unconverted);
-
-        /// <summary>A bake with no channel to bake, which left every renderer as it was.</summary>
-        public static BakeResult Nothing()
-        {
-            var result = Unchanged(true, Array.Empty<SlotNote>(), Array.Empty<SlotNote>());
-            result.NothingToBake = true;
-            return result;
-        }
+                convertedMaterials: convertedMaterials, unconverted: unconverted) { NothingToBake = nothingToBake };
 
         /// <summary>True when the packing and atlas came from the cache rather than a fresh bake.</summary>
         public bool FromCache { get; }
 
         /// <summary>
         /// True when no channel the bake was given has anything to bake: every channel is off, or there are slots to
-        /// merge and only channels none of them has are on. The renderers then stay as they were, materials and all.
+        /// merge and only channels none of them has are on. Nothing merges then. With every channel off, no material
+        /// is converted either.
         /// </summary>
         public bool NothingToBake { get; private set; }
 

@@ -43,7 +43,7 @@ namespace UVWizard.Core.Budgets
             var perTexel = BytesPerTexel(format);
             long bytes = 0;
             for (var level = 0; level < mipCount; level++)
-                bytes += Rounded(((long)width * height) >> (2 * level), perTexel);
+                bytes += Rounded((width * height) >> (2 * level), perTexel);
             return bytes;
         }
 
