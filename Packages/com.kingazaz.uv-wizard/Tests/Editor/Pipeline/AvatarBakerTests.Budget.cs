@@ -4,6 +4,7 @@ using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Budgets;
+using UVWizard.Core.Pipeline;
 
 namespace UVWizard.Core.Tests.Pipeline
 {
@@ -66,6 +67,104 @@ namespace UVWizard.Core.Tests.Pipeline
 
             Assert.That(result.Excluded.Select(note => note.Renderer), Does.Contain(kept));
             Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Good.Bytes));
+        }
+
+        [Test]
+        public void APresetWithinReachSizesTheAtlasForItself()
+        {
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), Detailed());
+
+            Assert.That(result.SizedFor, Is.SameAs(Budget.Excellent));
+        }
+
+        [Test]
+        public void WhenNothingMergesNoBudgetIsSizedFor()
+        {
+            var kept = Kept(Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), kept);
+
+            Assert.That(result.MergedMaterial, Is.Null);
+            Assert.That(result.SizedFor, Is.Null);
+        }
+
+        [Test]
+        public void WhenTheChartsFitAtNoScaleNoBudgetIsSizedFor()
+        {
+            // 320 separate quads on a 1024 px texture, each its own chart: no scale fits them in a 64 px atlas.
+            var quads = Enumerable.Range(0, 320).Select(i => Quad(0, (i % 20) / 20f, (i / 20) / 16f, (i % 20 + 0.4f) / 20f, (i / 20 + 0.4f) / 16f)).ToArray();
+            var renderer = MeshRenderer(Mesh(quads), Standard(Gradient(1024, 0), Color.white));
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 0, budget: Budget.Good), renderer);
+
+            Assert.That(result.Fits, Is.False);
+            Assert.That(result.SizedFor, Is.Null);
+        }
+
+        [Test]
+        public void ABudgetTighterThanEveryPresetIsKeptWhenWithinReach()
+        {
+            var tight = new Budget(4, 1);
+
+            var result = Bake(StandardOptions(compress: true, budget: tight), Detailed());
+
+            Assert.That(result.SizedFor, Is.SameAs(tight));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(tight.Bytes));
+        }
+
+        [Test]
+        public void WhenTexturesOutsideTheAtlasExceedThePresetTheAtlasIsSizedForTheNextRank()
+        {
+            // The kept material's 16 MB texture leaves no room under Excellent's 10 MB, but 2 MB under Good's 18 MB.
+            var renderer = Detailed();
+            var kept = Kept(Keep(new Texture2D(2048, 2048, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+
+            Assert.That(result.SizedFor, Is.SameAs(Budget.Good));
+            Assert.That(result.TextureBytes, Is.GreaterThan(Budget.Excellent.Bytes));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Good.Bytes));
+            Assert.That(result.Atlas!.width, Is.GreaterThan(AtlasSizing.MinSize), "the atlas keeps the detail Good's 2 MB affords");
+        }
+
+        [Test]
+        public void TheFallbackSkipsARankThatIsAlsoOutOfReach()
+        {
+            // A 20.25 MB kept texture is past Excellent's and Good's budgets, and leaves 4.75 MB under Medium's 25 MB.
+            var renderer = Detailed();
+            var kept = Kept(Keep(new Texture2D(2304, 2304, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+
+            Assert.That(result.SizedFor, Is.SameAs(Budget.Medium));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Medium.Bytes));
+        }
+
+        [Test]
+        public void WhenNoRankIsWithinReachTheAtlasKeepsItsFinestSizes()
+        {
+            // A 25.6 MB kept texture is past even Medium's 25 MB, so no atlas size changes the rank.
+            var renderer = Detailed();
+            var kept = Kept(Keep(new Texture2D(2592, 2592, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(compress: true, budget: Budget.Excellent), renderer, kept);
+
+            Assert.That(result.SizedFor, Is.Null);
+            Assert.That((result.Atlas!.width, result.Atlas.format), Is.EqualTo((2048, TextureFormat.ASTC_6x6)));
+            Assert.That((result.EmissionAtlas!.width, result.EmissionAtlas.format), Is.EqualTo((2048, TextureFormat.ASTC_6x6)));
+            Assert.That((result.NormalAtlas!.width, result.NormalAtlas.format), Is.EqualTo((2048, TextureFormat.ASTC_4x4)));
+        }
+
+        [Test]
+        public void WithNoRankWithinReachChartsThatFitAtFullDetailStillGetASmallerAtlas()
+        {
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(64, 0), Color.white));
+            var kept = Kept(Keep(new Texture2D(2592, 2592, TextureFormat.RGBA32, mipChain: false)));
+
+            var result = Bake(StandardOptions(budget: Budget.Excellent), renderer, kept);
+
+            Assert.That(result.SizedFor, Is.Null);
+            Assert.That(result.Atlas!.width, Is.LessThan(2048));
         }
 
         [Test]

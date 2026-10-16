@@ -20,6 +20,8 @@ namespace UVWizard.NDMF
         public const string NoFit = "uvwizard.no-fit";
         public const string NoToonStandard = "uvwizard.no-toon-standard";
         public const string OverBudget = "uvwizard.over-budget";
+        public const string OverBudgetLowerRank = "uvwizard.over-budget-lower-rank";
+        public const string OverEveryBudget = "uvwizard.over-every-budget";
         public const string TooManySlots = "uvwizard.too-many-slots";
         public const string Unconverted = "uvwizard.unconverted";
 
@@ -39,8 +41,18 @@ namespace UVWizard.NDMF
             (NoToonStandard, "VRChat's Toon Standard shader is missing"),
             (OverBudget, "Over the preset's texture memory"),
             (OverBudget + ":description", "After the bake, the avatar's textures take {0} MB, more than the preset's " +
-                "{1} MB, even with the smallest atlas. Textures that stay outside the atlas, such as excluded materials' " +
-                "own, count too. Choose a lower preset, or reduce those textures."),
+                "{1} MB. Textures that stay outside the atlas, such as excluded materials' own, count too. Choose a " +
+                "lower preset, or reduce those textures."),
+            (OverBudgetLowerRank, "Over the preset's texture memory"),
+            (OverBudgetLowerRank + ":description", "After the bake, the avatar's textures take {0} MB, more than the " +
+                "preset's {1} MB. Textures that stay outside the atlas, such as excluded materials' own, leave no room " +
+                "for an atlas within it, so UV Wizard sized the atlas for {2}'s {3} MB instead. Choose a lower preset, " +
+                "or reduce those textures."),
+            (OverEveryBudget, "Over every preset's texture memory"),
+            (OverEveryBudget + ":description", "After the bake, the avatar's textures take {0} MB, more than the " +
+                "preset's {1} MB. Textures that stay outside the atlas, such as excluded materials' own, take more than " +
+                "even the lowest preset's {2} MB, so no atlas size changes the rank, and UV Wizard kept the atlas at full " +
+                "detail. Reduce those textures."),
             (TooManySlots, "Over the preset's material slots"),
             (TooManySlots + ":description", "After the bake, the avatar will have {0} material slots, but the preset " +
                 "allows {1}. Each excluded material keeps a slot of its own. Choose a lower preset, or remove what keeps " +

@@ -69,7 +69,7 @@ The mobile performance rank a bake aims for: Excellent, Good or Medium. A preset
 _Avoid_: Quality level, mode, profile
 
 **Budget**:
-The most texture memory a preset allows, counted across all channels: 10 MB for Excellent, 18 MB for Good and 25 MB for Medium.
+The most texture memory a preset allows, counted across all channels: 10 MB for Excellent, 18 MB for Good and 25 MB for Medium. When textures outside the atlas already take more than the budget, the atlas is sized for the next rank's budget it can reach, and keeps its finest sizes when it can reach none.
 _Avoid_: VRAM limit, size limit, texture cap
 
 **Excluded material**:

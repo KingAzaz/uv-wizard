@@ -102,10 +102,21 @@ namespace UVWizard.Core.Pipeline
         /// </summary>
         public bool WithinMaterialSlots => Budget == null || MaterialSlots <= Budget.MaterialSlots;
 
-        /// <summary>Records the avatar's texture memory and material slots after the bake, against the budget.</summary>
-        internal BakeResult Measured(IReadOnlyList<Renderer> renderers, Budget? budget)
+        /// <summary>
+        /// The budget the atlas was sized for: <see cref="Budget"/> itself, or, when textures outside the atlas
+        /// already take more than it, the first lower rank's budget they leave room in. Null when no rank's does, so
+        /// the atlas kept its finest sizes, when no atlas was made, or when the bake had no budget.
+        /// </summary>
+        public Budget? SizedFor { get; private set; }
+
+        /// <summary>
+        /// Records the avatar's texture memory and material slots after the bake, against the budget, and the budget
+        /// the atlas was sized for.
+        /// </summary>
+        internal BakeResult Measured(IReadOnlyList<Renderer> renderers, Budget? budget, Budget? sizedFor)
         {
             Budget = budget;
+            SizedFor = sizedFor;
             TextureBytes = TextureMemory.Bytes(renderers);
             MaterialSlots = TextureMemory.Materials(renderers).Count;
             return this;

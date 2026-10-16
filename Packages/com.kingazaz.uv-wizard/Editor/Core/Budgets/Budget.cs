@@ -1,6 +1,7 @@
 #nullable enable
 
 using System;
+using System.Collections.Generic;
 
 namespace UVWizard.Core.Budgets
 {
@@ -13,6 +14,9 @@ namespace UVWizard.Core.Budgets
         public static readonly Budget Excellent = new Budget(10, 1);
         public static readonly Budget Good = new Budget(18, 1);
         public static readonly Budget Medium = new Budget(25, 2);
+
+        /// <summary>Each preset's budget, from the best rank to the lowest.</summary>
+        public static readonly IReadOnlyList<Budget> Ranks = new[] { Excellent, Good, Medium };
 
         /// <param name="megabytes">The texture memory allowed, in the SDK's megabytes (MiB).</param>
         /// <param name="materialSlots">The material slots allowed.</param>
