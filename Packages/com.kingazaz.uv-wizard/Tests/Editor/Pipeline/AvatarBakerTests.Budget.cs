@@ -77,6 +77,17 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ABudgetTighterThanEveryPresetIsKeptWhenWithinReach()
+        {
+            var tight = new Budget(4, 1);
+
+            var result = Bake(StandardOptions(compress: true, budget: tight), Detailed());
+
+            Assert.That(result.SizedFor, Is.SameAs(tight));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(tight.Bytes));
+        }
+
+        [Test]
         public void WhenTexturesOutsideTheAtlasExceedThePresetTheAtlasIsSizedForTheNextRank()
         {
             // The kept material's 16 MB texture leaves no room under Excellent's 10 MB, but 2 MB under Good's 18 MB.
