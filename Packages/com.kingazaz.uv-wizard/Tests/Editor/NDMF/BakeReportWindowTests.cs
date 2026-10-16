@@ -23,6 +23,8 @@ namespace UVWizard.NDMF.Tests
         bool wasOpen;
         BakeReport? userReport;
 
+        static readonly Dictionary<Object, Object> NoOriginals = new Dictionary<Object, Object>();
+
         [SetUp]
         public void SetUp()
         {
@@ -36,7 +38,7 @@ namespace UVWizard.NDMF.Tests
         public void TearDown()
         {
             if (window != null && !wasOpen) window.Close();
-            if (userReport != null) BakeReports.Publish(userReport);
+            if (userReport != null) BakeReports.Publish(userReport, NoOriginals);
             else BakeReports.Clear();
             foreach (var o in created)
                 if (o != null) Object.DestroyImmediate(o);
@@ -46,7 +48,19 @@ namespace UVWizard.NDMF.Tests
         [Test]
         public void AReportWithNoFiguresDraws()
         {
-            BakeReports.Publish(new BakeReport("Avatar", mobilePreview: false, null, null));
+            BakeReports.Publish(new BakeReport("Avatar", mobilePreview: false, null, null), NoOriginals);
+
+            Draw();
+
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        [Test]
+        public void AReportWhoseMeshesNothingMergedDraws()
+        {
+            var figures = new ReportFigures(3, 2, 1, 4, PerformanceRank.Medium, PerformanceRank.Medium);
+            BakeReports.Publish(new BakeReport("Avatar", mobilePreview: false, null, PerformanceRank.Good, figures, figures,
+                meshesMerged: false), NoOriginals);
 
             Draw();
 
@@ -66,7 +80,7 @@ namespace UVWizard.NDMF.Tests
                 packing: new PackingOutcome(Packer.Exact, 1, true));
             var figures = new ReportFigures(4, 2, 1, 12.5f, PerformanceRank.Poor, PerformanceRank.Poor);
             BakeReports.Publish(new BakeReport("Avatar", mobilePreview: true, result, PerformanceRank.Good, figures, figures,
-                new[] { new LeftoverRenderer(hat, LeftoverReason.Toggle) }));
+                new[] { new LeftoverRenderer(hat, LeftoverReason.Toggle) }), NoOriginals);
 
             Object.DestroyImmediate(body.gameObject);
             Object.DestroyImmediate(hat.gameObject);

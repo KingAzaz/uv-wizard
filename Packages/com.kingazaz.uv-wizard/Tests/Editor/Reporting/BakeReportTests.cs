@@ -207,6 +207,37 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void AMaterialRowStillNamesItsMaterialOnceTheMaterialIsGone()
+        {
+            // A material the build made, such as a conversion, is destroyed with the build's clone.
+            var glass = Material("Glass");
+            var report = new BakeReport("Avatar", false,
+                Merged(flagged: new[] { new SlotNote(Renderer("Body"), 0, glass, new Reason("It's transparent.")) }), null);
+
+            Object.DestroyImmediate(glass);
+
+            Assert.That(report.Materials[0].MaterialName, Is.EqualTo("Glass"));
+        }
+
+        [Test]
+        public void WithoutAMergeTheReportSaysSoOnceInsteadOfListingLeftovers()
+        {
+            var leftovers = new[] { new LeftoverRenderer(Renderer("Hat"), LeftoverReason.Other) };
+            var after = new ReportFigures(3, 2, 1, 3, PerformanceRank.Medium, PerformanceRank.Medium);
+
+            var unmerged = new BakeReport("Avatar", false, Merged(), PerformanceRank.Good, after: after, leftovers: leftovers,
+                meshesMerged: false);
+            var merged = new BakeReport("Avatar", false, Merged(), PerformanceRank.Good, after: after, leftovers: leftovers);
+            var met = new BakeReport("Avatar", false, Merged(), PerformanceRank.Medium, after: after, meshesMerged: false);
+
+            Assert.That(unmerged.Leftovers, Is.Empty);
+            Assert.That(unmerged.NoMergeLine, Is.EqualTo(new ReportLine(ReportText.NoMeshMerge)));
+            Assert.That(merged.Leftovers, Is.EqualTo(leftovers));
+            Assert.That(merged.NoMergeLine, Is.Null);
+            Assert.That(met.NoMergeLine, Is.Null, "nothing keeps the avatar below its preset");
+        }
+
+        [Test]
         public void ALineReadsItsTemplateFromTheLookupAndFillsInItsArguments()
         {
             var line = new ReportLine("some.key", "Hat", 3);

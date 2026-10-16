@@ -55,7 +55,12 @@ namespace UVWizard.NDMF
             Materials(report, MaterialOutcome.Excluded, ReportText.ExcludedHeader);
             Materials(report, MaterialOutcome.Flagged, ReportText.FlaggedHeader);
 
-            if (report.Leftovers.Count > 0)
+            if (report.NoMergeLine is { } noMerge)
+            {
+                Header(ReportText.LeftoversHeader);
+                Wrapped(noMerge.Text(Messages.Text));
+            }
+            else if (report.Leftovers.Count > 0)
             {
                 Header(ReportText.LeftoversHeader);
                 foreach (var leftover in report.Leftovers)
@@ -105,7 +110,7 @@ namespace UVWizard.NDMF
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
-                    ObjectButton(row.Material, row.Material != null ? row.Material.name : "");
+                    ObjectButton(row.Material, row.MaterialName);
                     for (var r = 0; r < row.Renderers.Count; r++)
                         ObjectButton(row.Renderers[r], row.RendererNames[r]);
                 }

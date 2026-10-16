@@ -28,6 +28,8 @@ namespace UVWizard.NDMF
             var overridden = MobileBuild.Override;
             var previewing = Previewing;
             var running = Running;
+            // A bake that throws publishes nothing, and the window mustn't show the last avatar's report instead.
+            BakeReports.Clear();
             try
             {
                 Running = true;

@@ -26,13 +26,15 @@ namespace UVWizard.NDMF
             // serialized.
             if (root.TryGetComponent<TraceAndOptimize>(out var own))
             {
-                draft.MmdWorldCompatibility =
-                    new SerializedObject(own).FindProperty("mmdWorldCompatibility")?.boolValue ?? true;
+                var settings = new SerializedObject(own);
+                draft.MergesMeshes = settings.FindProperty("mergeSkinnedMesh")?.boolValue ?? true;
+                draft.MmdWorldCompatibility = settings.FindProperty("mmdWorldCompatibility")?.boolValue ?? true;
                 return;
             }
             if (!avatar.addTraceAndOptimize) return;
 
             root.AddComponent<TraceAndOptimize>();
+            draft.MergesMeshes = true;
             draft.MmdWorldCompatibility = true;
             ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.Information, Messages.AddedTraceAndOptimize);
         }

@@ -32,8 +32,12 @@ namespace UVWizard.NDMF
             Published?.Invoke();
         }
 
-        /// <summary>Forgets the last report.</summary>
-        public static void Clear() => Latest = null;
+        /// <summary>Forgets the last report, and tells an open report window so.</summary>
+        public static void Clear()
+        {
+            Latest = null;
+            Published?.Invoke();
+        }
 
         /// <summary>
         /// The object a listed renderer or material links to: its original on the avatar, when the build cloned or
@@ -64,6 +68,11 @@ namespace UVWizard.NDMF
         /// </summary>
         public bool MmdWorldCompatibility { get; set; }
 
+        /// <summary>
+        /// True when a Trace and Optimize on the avatar, its own or one UV Wizard added, merges its skinned meshes.
+        /// </summary>
+        public bool MergesMeshes { get; set; }
+
         /// <summary>True once the bake has run, so later passes know there's a report to finish.</summary>
         public bool Baked { get; set; }
 
@@ -73,7 +82,8 @@ namespace UVWizard.NDMF
         /// <summary>Publishes the report as it stands, linked to the original avatar.</summary>
         public void Publish(GameObject root)
         {
-            var report = new BakeReport(AvatarName(root), ManualBake.Previewing, Result, Target, Before, After, Leftovers);
+            var report = new BakeReport(AvatarName(root), ManualBake.Previewing, Result, Target, Before, After, Leftovers,
+                MergesMeshes);
             if (!ManualBake.Running) Originals.Find(root, report, originals);
             BakeReports.Publish(report, originals);
         }

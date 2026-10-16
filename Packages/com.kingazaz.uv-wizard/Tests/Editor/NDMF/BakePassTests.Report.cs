@@ -1,5 +1,6 @@
 #nullable enable
 
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
@@ -83,6 +84,38 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void AManualBakeForgetsTheLastReportBeforeItRuns()
+        {
+            // A bake that throws, or doesn't run, publishes nothing, so the window mustn't keep the previous avatar's.
+            BakeReports.Publish(new BakeReport("Previous", false, null, null),
+                new Dictionary<Object, Object>());
+            var avatar = Avatar(withComponent: false);
+
+            var told = 0;
+            void Count() => told++;
+            BakeReports.Published += Count;
+            try
+            {
+                Keep(ManualBake.Run(avatar, BuildTarget.Android));
+            }
+            finally
+            {
+                BakeReports.Published -= Count;
+            }
+
+            Assert.That(BakeReports.Latest, Is.Null);
+            Assert.That(told, Is.EqualTo(1), "an open report window repaints without the old report");
+        }
+
+        [TestCase(UVWizardAvatar.Preset.Excellent, "Excellent")]
+        [TestCase(UVWizardAvatar.Preset.Good, "Good")]
+        [TestCase(UVWizardAvatar.Preset.Medium, "Medium")]
+        public void APresetAimsForTheRankOfTheSameName(UVWizardAvatar.Preset preset, string rank)
+        {
+            Assert.That(ReportDraft.RankOf(preset).ToString(), Is.EqualTo(rank));
+        }
+
+        [Test]
         public void EveryReportLineHasEnglish()
         {
             var keys = typeof(ReportText).GetFields(BindingFlags.Public | BindingFlags.Static)
@@ -120,7 +153,7 @@ namespace UVWizard.NDMF.Tests
                     .And.Not.Contain("submesh").IgnoreCase.And.Not.Contain("UV0").IgnoreCase, key);
         }
 
-        static System.Collections.Generic.IEnumerable<string> ReasonKeys() =>
+        static IEnumerable<string> ReasonKeys() =>
             typeof(ReasonText).GetFields(BindingFlags.Public | BindingFlags.Static)
                 .Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue())
                 .Concat(((Core.Materials.Channel[])System.Enum.GetValues(typeof(Core.Materials.Channel)))

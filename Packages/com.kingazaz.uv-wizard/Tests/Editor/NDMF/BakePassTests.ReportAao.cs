@@ -173,6 +173,110 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void AMeshWhoseRendererAloneAnAnimationTurnsOnAndOffIsKeptApartForItsToggle()
+        {
+            // Avatar Optimizer 1.9.20 merges a renderer whose enabled flag is animated only with others that share
+            // the animation (AutoMergeSkinnedMesh's activeness key). The tail shares it with none, so it stays apart.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var tail = avatar.transform.Find("Tail").GetComponent<Renderer>();
+            ToggleRenderers(avatar, "Tail");
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Renderer, Is.SameAs(tail));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("Toggle"));
+        }
+
+        [Test]
+        public void AnAvatarWithoutTraceAndOptimizeGetsOneNoMergeLineInsteadOfAReasonPerMesh()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            AddUnmergeable(avatar, Unmergeable.StaticMesh);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var report = BakeReports.Latest!;
+            Assert.That(report.RankBlocked, Is.True, "the torso, tail and glasses stay three meshes");
+            Assert.That(report.Leftovers, Is.Empty);
+            Assert.That(report.NoMergeLine, Is.EqualTo(new ReportLine(ReportText.NoMeshMerge)));
+        }
+
+        [Test]
+        public void AStaticMeshWhoseRendererAnAnimationTurnsOnAndOffIsStillAStaticMesh()
+        {
+            // Avatar Optimizer merges only skinned meshes, so the toggle isn't what keeps it apart.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var glasses = AddUnmergeable(avatar, Unmergeable.StaticMesh);
+            Animate(avatar, typeof(MeshRenderer), "m_Enabled", glasses.name);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Renderer, Is.SameAs(glasses));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("StaticMesh"));
+        }
+
+        [Test]
+        public void ALargerBodyAvatarOptimizerKeepsApartIsTheLeftoverNotTheMergedMesh()
+        {
+            // Two materials on one submesh draw it twice, which Trace and Optimize won't merge. The body has more
+            // vertices than the torso and tail it merges.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var hips = avatar.transform.Find("Armature/Hips");
+            var body = Skinned(avatar, "Kemono", hips, Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.2f, 0.6f), Quad(4.1f, 0.2f, 0.5f, 0.3f, 0.6f),
+                Quad(4.2f, 0.3f, 0.5f, 0.4f, 0.6f), Quad(4.3f, 0.1f, 0.6f, 0.2f, 0.7f), Quad(4.4f, 0.2f, 0.6f, 0.3f, 0.7f),
+                Quad(4.5f, 0.3f, 0.6f, 0.4f, 0.7f) }), Standard(Gradient(16, 4)), Standard(Gradient(16, 5)));
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Select(l => l.Renderer), Is.EqualTo(new[] { body }));
+        }
+
+        [Test]
+        public void TheAvatarsOwnTraceAndOptimizeWithMeshMergingOffGetsTheNoMergeLine()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var own = new SerializedObject(avatar.AddComponent<TraceAndOptimize>());
+            own.FindProperty("mergeSkinnedMesh").boolValue = false;
+            own.ApplyModifiedPropertiesWithoutUndo();
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var report = BakeReports.Latest!;
+            Assert.That(report.RankBlocked, Is.True, "the torso and tail stay two meshes");
+            Assert.That(report.Leftovers, Is.Empty);
+            Assert.That(report.NoMergeLine, Is.EqualTo(new ReportLine(ReportText.NoMeshMerge)));
+        }
+
+        [Test]
+        public void AnAvatarWithTraceAndOptimizeGetsNoNoMergeLine()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            AddUnmergeable(avatar, Unmergeable.StaticMesh);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            Assert.That(BakeReports.Latest!.RankBlocked, Is.True);
+            Assert.That(BakeReports.Latest.NoMergeLine, Is.Null);
+        }
+
+        [Test]
         public void AMeshNamedTorsoIsntTakenForTheMmdBody()
         {
             var avatar = MergeableAvatar(addTraceAndOptimize: true);

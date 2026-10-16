@@ -38,7 +38,7 @@ namespace UVWizard.Core.Tests.Reporting
         {
             Skinned("Merged", root.transform, vertices: 100);
 
-            Assert.That(LeftoverRenderers.Find(root, new HashSet<GameObject>(), mmdWorldCompatibility: true), Is.Empty);
+            Assert.That(LeftoverRenderers.Find(root, new HashSet<Object>(), mmdWorldCompatibility: true), Is.Empty);
         }
 
         [Test]
@@ -113,6 +113,41 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void AMeshWhoseRendererAnAnimationTurnsOnAndOffIsKeptForItsToggleButNotTheMeshesBelowIt()
+        {
+            Skinned("Merged", root.transform, vertices: 100);
+            var cape = Skinned("Cape", root.transform, vertices: 10);
+            var clasp = Skinned("Clasp", cape.transform, vertices: 10);
+
+            Assert.That(Reasons(cape), Is.EqualTo(new[]
+            {
+                (cape as Renderer, LeftoverReason.Toggle),
+                (clasp, LeftoverReason.Other),
+            }));
+        }
+
+        [Test]
+        public void AvatarOptimizersMergedMeshIsTheMainOneBesideALargerMeshItKeptApart()
+        {
+            // Avatar Optimizer keeps a body apart for reasons besides bounds and root bone, such as a slot with two
+            // materials; the clothing it merges can then have fewer vertices (#102).
+            var body = Skinned("Kemono", root.transform, vertices: 500);
+            Skinned(LeftoverRenderers.AutoMergedPrefix + "0", root.transform, vertices: 100);
+
+            Assert.That(Reasons(), Is.EqualTo(new[] { (body as Renderer, LeftoverReason.Other) }));
+        }
+
+        [Test]
+        public void AToggledMergedMeshIsntTheMainOne()
+        {
+            // Avatar Optimizer merges meshes that share a toggle into a mesh of their own, under the same prefix.
+            Skinned(LeftoverRenderers.AutoMergedPrefix + "0", root.transform, vertices: 100);
+            var outfit = Skinned(LeftoverRenderers.AutoMergedPrefix + "1", root.transform, vertices: 500);
+
+            Assert.That(Reasons(outfit.gameObject), Is.EqualTo(new[] { (outfit as Renderer, LeftoverReason.Toggle) }));
+        }
+
+        [Test]
         public void AMeshThatIsntSkinnedIsAStaticMesh()
         {
             Skinned("Merged", root.transform, vertices: 100);
@@ -144,7 +179,7 @@ namespace UVWizard.Core.Tests.Reporting
             Skinned("Merged", root.transform, vertices: 100);
             var body = Skinned("Body", root.transform, vertices: 10);
 
-            Assert.That(LeftoverRenderers.Find(root, new HashSet<GameObject>(), mmdWorldCompatibility: false)
+            Assert.That(LeftoverRenderers.Find(root, new HashSet<Object>(), mmdWorldCompatibility: false)
                 .Select(l => (l.Renderer, l.Reason)), Is.EqualTo(new[] { (body as Renderer, LeftoverReason.Other) }));
         }
 
@@ -176,8 +211,8 @@ namespace UVWizard.Core.Tests.Reporting
             Assert.That(Reasons(), Is.Empty);
         }
 
-        (Renderer, LeftoverReason)[] Reasons(params GameObject[] toggled) =>
-            LeftoverRenderers.Find(root, new HashSet<GameObject>(toggled), mmdWorldCompatibility: true).Select(l => (l.Renderer, l.Reason)).ToArray();
+        (Renderer, LeftoverReason)[] Reasons(params Object[] toggled) =>
+            LeftoverRenderers.Find(root, new HashSet<Object>(toggled), mmdWorldCompatibility: true).Select(l => (l.Renderer, l.Reason)).ToArray();
 
         SkinnedMeshRenderer Skinned(string name, Transform parent, int vertices)
         {
