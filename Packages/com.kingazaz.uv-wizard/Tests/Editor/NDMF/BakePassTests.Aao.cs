@@ -146,6 +146,34 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void ASkinnedMeshWithRemoveMeshByMaskAndNoFreeUvChannelIsKeptOut()
+        {
+            // The mask reads the torso's UV0, but UV1 to UV7 are all the mesh's own, so the bake has nowhere to keep
+            // the source UV0 for AAO to find.
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var torso = avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>();
+            var source = torso.sharedMesh;
+            for (var channel = 1; channel < 8; channel++)
+                source.SetUVs(channel, source.vertices.Select(p => new Vector2(p.z, channel)).ToList());
+            var materials = torso.sharedMaterials;
+            var removal = torso.gameObject.AddComponent<RemoveMeshByMask>();
+            removal.Initialize(1);
+            removal.Materials = new[]
+            {
+                new RemoveMeshByMask.MaterialSlot { Enabled = true, Mask = QuadrantMask(), Mode = RemoveMeshByMask.RemoveMode.RemoveWhite },
+                new RemoveMeshByMask.MaterialSlot { Enabled = false },
+            };
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(OwnReports(errors), Is.EqualTo(Enumerable.Repeat((ErrorSeverity.NonFatal, (string?)Messages.Excluded), 2)),
+                "each of the torso's slots is excluded");
+            Assert.That(Texts(errors), Has.All.Contain("can't keep it where that tool would find it"));
+            Assert.That(torso.sharedMaterials.Select(m => m.shader.name), Is.EqualTo(materials.Select(_ => ToonStandardName)));
+        }
+
+        [Test]
         public void RemoveMeshByMaskOnAMergeSkinnedMeshTargetDeletesTheRightTriangles()
         {
             // Merge Skinned Mesh merges the torso and tail into a new renderer whose mask, on its first slot, reads
