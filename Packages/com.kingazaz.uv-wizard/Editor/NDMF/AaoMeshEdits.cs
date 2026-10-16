@@ -8,6 +8,7 @@ using Anatawa12.AvatarOptimizer;
 using Anatawa12.AvatarOptimizer.API;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UVWizard.Core.Meshes;
 using UVWizard.Core.Pipeline;
 
 namespace UVWizard.NDMF
@@ -29,7 +30,7 @@ namespace UVWizard.NDMF
     internal sealed class AaoMeshEdits : ILaterMeshEdits
     {
         // Internal to AAO, unlike Remove Mesh By Mask.
-        static readonly Type? RemoveMeshByUVTile =
+        internal static readonly Type? RemoveMeshByUVTile =
             typeof(RemoveMeshByMask).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile");
 
         // The renderers merged, directly or through other merges, into a Merge Skinned Mesh target that reads UVs.
@@ -70,22 +71,24 @@ namespace UVWizard.NDMF
             finally { Debug.unityLogger.logEnabled = logging; }
         }
 
+        // AAO's provider is null for a mesh whose Read/Write is off, so triangles AAO removes from such a mesh
+        // still take atlas space. The bake is still right, just packed less tightly. #46 covers those meshes.
         public ITriangleRemovals? Removals(Renderer renderer) =>
             renderer is SkinnedMeshRenderer skinned && MeshRemovalProvider.GetForRenderer(skinned) is { } provider
                 ? new ProviderRemovals(provider)
                 : null;
 
-        public (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer)
+        public LaterToolNeeds Needs(Renderer renderer)
         {
-            if (mergedIntoUvReader.Contains(renderer)) return null;
+            if (mergedIntoUvReader.Contains(renderer)) return LaterToolNeeds.CantKeepSourceUv0;
             if (renderer is not SkinnedMeshRenderer skinned)
             {
-                if (renderer.TryGetComponent<RemoveMeshByMask>(out _)) return null;
-                if (RemoveMeshByUVTile != null && renderer.TryGetComponent(RemoveMeshByUVTile, out _)) return null;
-                return (null, false);
+                if (renderer.TryGetComponent<RemoveMeshByMask>(out _)) return LaterToolNeeds.CantKeepSourceUv0;
+                if (RemoveMeshByUVTile != null && renderer.TryGetComponent(RemoveMeshByUVTile, out _)) return LaterToolNeeds.CantKeepSourceUv0;
+                return default;
             }
-            if (!UVUsageCompabilityAPI.IsTexCoordUsed(skinned, 0)) return (null, ReadsUvs(skinned));
-            return FreeChannel(skinned) is { } free ? (free, true) : null;
+            if (!UVUsageCompabilityAPI.IsTexCoordUsed(skinned, 0)) return new LaterToolNeeds(null, ReadsUvs(skinned));
+            return FreeChannel(skinned) is { } free ? new LaterToolNeeds(free, true) : LaterToolNeeds.CantKeepSourceUv0;
         }
 
         public void KeptSourceUv0(Renderer renderer, int channel) =>

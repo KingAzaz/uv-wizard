@@ -203,7 +203,7 @@ namespace UVWizard.Core.Tests.Meshes
             var source = Square(new[] { 0, 1, 2 }, new[] { 1, 3, 2 }, new[] { 2, 1, 3 });
 
             var result = Uv0Rewriter.Rewrite(source, new[] { new[] { A0, A1, A2 }, null, new[] { B2, B1, B3 } },
-                keepSubmeshes: true);
+                new LaterToolNeeds(null, keepSubmeshes: true));
             Keep(result.Mesh);
 
             Assert.That(result.Mesh.subMeshCount, Is.EqualTo(3));
@@ -222,7 +222,7 @@ namespace UVWizard.Core.Tests.Meshes
             source.uv6 = null;
             var atlasUvs = split ? TwoCharts : OneChart;
 
-            var result = Uv0Rewriter.Rewrite(source, new[] { atlasUvs }, keepSourceUv0In: 5);
+            var result = Uv0Rewriter.Rewrite(source, new[] { atlasUvs }, new LaterToolNeeds(5, keepSubmeshes: false));
             Keep(result.Mesh);
 
             Assert.That(result.Mesh.vertexCount, Is.EqualTo(split ? 6 : 4));
@@ -237,8 +237,8 @@ namespace UVWizard.Core.Tests.Meshes
         {
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
 
-            Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, keepSourceUv0In: 5));
-            Assert.Throws<System.ArgumentOutOfRangeException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, keepSourceUv0In: 0));
+            Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, new LaterToolNeeds(5, keepSubmeshes: false)));
+            Assert.Throws<System.ArgumentOutOfRangeException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, new LaterToolNeeds(0, keepSubmeshes: false)));
         }
 
         [Test]

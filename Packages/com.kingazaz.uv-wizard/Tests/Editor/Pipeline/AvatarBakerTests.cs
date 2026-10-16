@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Baking;
 using UVWizard.Core.Budgets;
+using UVWizard.Core.Meshes;
 using UVWizard.Core.Pipeline;
 using Object = UnityEngine.Object;
 
@@ -1029,8 +1030,8 @@ namespace UVWizard.Core.Tests.Pipeline
 
             public ITriangleRemovals? Removals(Renderer renderer) => Deletes != null ? this : null;
             public bool NoChannelFree;
-            public (int? KeepSourceUv0In, bool KeepSubmeshes)? Needs(Renderer renderer) =>
-                NoChannelFree ? null : (SourceUv0Channel, KeepsSubmeshes);
+            public LaterToolNeeds Needs(Renderer renderer) =>
+                NoChannelFree ? LaterToolNeeds.CantKeepSourceUv0 : new LaterToolNeeds(SourceUv0Channel, KeepsSubmeshes);
             public void KeptSourceUv0(Renderer renderer, int channel) => Kept.Add((renderer, channel));
             public bool WillRemove(int submesh, int a, int b, int c) => Deletes!(submesh, a, b, c);
             public void Dispose() => Disposed = true;
