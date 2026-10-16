@@ -69,7 +69,7 @@ namespace UVWizard.Core.Budgets
             var needed = outside + Bytes(smallest);
             if (needed <= budget.Bytes) return budget;
             foreach (var lower in Budget.Ranks)
-                if (lower.Bytes > budget.Bytes && needed <= lower.Bytes) return lower;
+                if (needed <= lower.Bytes) return lower;
             return null;
         }
 
