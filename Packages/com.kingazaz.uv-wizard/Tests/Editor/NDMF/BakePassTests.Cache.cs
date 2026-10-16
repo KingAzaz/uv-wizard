@@ -18,12 +18,17 @@ namespace UVWizard.NDMF.Tests
                 var avatar = Avatar(withComponent: true);
                 return BakePass.Bake(avatar, ToonStandard.Options(Shader.Find(ToonStandardName), avatar.GetComponent<UVWizardAvatar>()));
             }
-            BakeAnother();
+            // Entries left by earlier runs would let a bake that stores nothing pass.
+            if (Directory.Exists(ToonStandard.CacheDirectory))
+                foreach (var entry in Directory.GetFiles(ToonStandard.CacheDirectory, "*.bake")) File.Delete(entry);
+            var first = BakeAnother();
+            var stored = Directory.GetFiles(ToonStandard.CacheDirectory, "*.bake").Length;
 
             var second = BakeAnother();
 
+            Assert.That(first!.FromCache, Is.False);
+            Assert.That(stored, Is.GreaterThan(0), "this run's entries");
             Assert.That(second!.FromCache, Is.True);
-            Assert.That(Directory.GetFiles("Library/UVWizardCache", "*.bake"), Is.Not.Empty);
         }
     }
 }

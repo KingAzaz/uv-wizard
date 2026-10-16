@@ -37,7 +37,7 @@ namespace UVWizard.NDMF
         public static Shader? Shader => AssetDatabase.LoadAssetAtPath<Shader>(AssetDatabase.GUIDToAssetPath(ShaderGuid));
 
         // The project's Library, which Unity keeps out of version control and rebuilds as needed.
-        const string CacheDirectory = "Library/UVWizardCache";
+        internal const string CacheDirectory = "Library/UVWizardCache";
 
         /// <summary>
         /// Atlas channels up to 2048, sized and compressed to ASTC so the avatar fits the component's preset, with
