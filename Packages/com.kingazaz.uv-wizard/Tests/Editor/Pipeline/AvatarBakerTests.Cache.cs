@@ -440,7 +440,8 @@ namespace UVWizard.Core.Tests.Pipeline
             finally
             {
                 Application.logMessageReceived -= Log;
-                File.SetAttributes(readOnly, FileAttributes.Normal);
+                // Only Windows refuses to delete a read-only file. Elsewhere, CI's Linux included, eviction deletes it.
+                if (File.Exists(readOnly)) File.SetAttributes(readOnly, FileAttributes.Normal);
             }
         }
 
