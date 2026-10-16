@@ -96,10 +96,9 @@ namespace UVWizard.NDMF.Tests
         [Test]
         public void AnAssetMaterialLinksToItself()
         {
-            const string folder = "Assets/UVWizardReportLinkTests";
             var (_, hat, doubleSided) = AvatarWithFlaggedHat();
             var clone = UploadClone(hat.transform.root.gameObject);
-            AssetDatabase.CreateFolder("Assets", "UVWizardReportLinkTests");
+            var folder = AssetDatabase.GUIDToAssetPath(AssetDatabase.CreateFolder("Assets", "UVWizardReportLinkTests"));
             try
             {
                 var asset = new Material(doubleSided);
@@ -114,6 +113,19 @@ namespace UVWizard.NDMF.Tests
             {
                 AssetDatabase.DeleteAsset(folder);
             }
+        }
+
+        // A manual bake keeps its clone in the scene, and the creator looks at the baked result.
+        [Test]
+        public void AfterAManualBakeAListedRendererLinksToTheBakedClone()
+        {
+            var (avatar, _, _) = AvatarWithFlaggedHat();
+            BakeReports.Clear();
+
+            var clone = Keep(ManualBake.Run(avatar, BuildTarget.Android));
+
+            var row = BakeReports.Latest!.Materials.Single();
+            Assert.That(BakeReports.Link(row.Renderers.Single()), Is.SameAs(clone.transform.Find("Hat").GetComponent<Renderer>()));
         }
 
         [Test]

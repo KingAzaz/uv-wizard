@@ -17,6 +17,9 @@ namespace UVWizard.NDMF
         /// <summary>True while a manual bake previews the mobile result on a project that doesn't build for mobile.</summary>
         public static bool Previewing { get; private set; }
 
+        /// <summary>True while a manual bake runs. Its clone stays in the scene, so the report links to the clone.</summary>
+        public static bool Running { get; private set; }
+
         /// <summary>Bakes the avatar into a clone and returns it.</summary>
         public static GameObject Run(GameObject avatarRoot) => Run(avatarRoot, EditorUserBuildSettings.activeBuildTarget);
 
@@ -24,8 +27,10 @@ namespace UVWizard.NDMF
         {
             var overridden = MobileBuild.Override;
             var previewing = Previewing;
+            var running = Running;
             try
             {
+                Running = true;
                 Previewing = !(target is BuildTarget.Android or BuildTarget.iOS);
                 MobileBuild.Override = true;
                 return AvatarProcessor.ManualProcessAvatar(avatarRoot,
@@ -35,6 +40,7 @@ namespace UVWizard.NDMF
             {
                 MobileBuild.Override = overridden;
                 Previewing = previewing;
+                Running = running;
             }
         }
     }

@@ -25,19 +25,15 @@ namespace UVWizard.NDMF
 
         /// <param name="report">The report.</param>
         /// <param name="originals">The original avatar's object for each listed one the build cloned or copied.</param>
-        public static void Publish(BakeReport report, IReadOnlyDictionary<UnityEngine.Object, UnityEngine.Object>? originals = null)
+        public static void Publish(BakeReport report, IReadOnlyDictionary<UnityEngine.Object, UnityEngine.Object> originals)
         {
             Latest = report;
-            BakeReports.originals = originals ?? new Dictionary<UnityEngine.Object, UnityEngine.Object>();
+            BakeReports.originals = originals;
             Published?.Invoke();
         }
 
         /// <summary>Forgets the last report.</summary>
-        public static void Clear()
-        {
-            Latest = null;
-            originals = new Dictionary<UnityEngine.Object, UnityEngine.Object>();
-        }
+        public static void Clear() => Latest = null;
 
         /// <summary>
         /// The object a listed renderer or material links to: its original on the avatar, when the build cloned or
@@ -78,7 +74,7 @@ namespace UVWizard.NDMF
         public void Publish(GameObject root)
         {
             var report = new BakeReport(AvatarName(root), ManualBake.Previewing, Result, Target, Before, After, Leftovers);
-            Originals.Find(root, report, originals);
+            if (!ManualBake.Running) Originals.Find(root, report, originals);
             BakeReports.Publish(report, originals);
         }
 
