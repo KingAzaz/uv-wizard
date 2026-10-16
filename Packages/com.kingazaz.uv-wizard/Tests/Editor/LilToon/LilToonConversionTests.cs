@@ -57,7 +57,8 @@ namespace UVWizard.Core.Tests.LilToon
         [Test]
         public void AnAddOnLayerOnARendererWhosePropertiesAnAnimationChangesIsntFlagged()
         {
-            // The flag says a converted material may look different, and the add-on layer isn't converted.
+            // The flag says a converted material may look different, and the add-on layer isn't converted. It's on two
+            // extra slots, so the second finds it already read.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
             var mesh = Track(new Mesh
             {
@@ -69,7 +70,7 @@ namespace UVWizard.Core.Tests.LilToon
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             var main = Material("lilToon");
-            renderer.sharedMaterials = new[] { main, outline };
+            renderer.sharedMaterials = new[] { main, outline, outline };
 
             var result = AvatarBaker.Bake(new Renderer[] { renderer },
                 new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
