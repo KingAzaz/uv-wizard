@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -24,10 +25,14 @@ namespace UVWizard.Core.Budgets
             // A cubemap counts as one face.
             Cubemap cube => Bytes(cube.width, cube.height, cube.mipmapCount, cube.format),
             // Arrays and 3D textures count their base level's texels only.
-            Texture2DArray array => Mathf.RoundToInt(array.width * array.height * array.depth * BytesPerTexel(array.format)),
-            Texture3D volume => Mathf.RoundToInt(volume.width * volume.height * volume.depth * BytesPerTexel(volume.format)),
+            Texture2DArray array => LayeredBytes(array.width, array.height, array.depth, array.format),
+            Texture3D volume => LayeredBytes(volume.width, volume.height, volume.depth, volume.format),
             _ => 0,
         };
+
+        /// <summary>The bytes a texture array or 3D texture takes: every texel of its base level, without mips.</summary>
+        public static long LayeredBytes(int width, int height, int depth, TextureFormat format) =>
+            Rounded((long)width * height * depth, BytesPerTexel(format));
 
         /// <summary>
         /// The bytes a 2D texture takes: over each mip level, its texel count times the format's bytes per texel,
@@ -38,9 +43,13 @@ namespace UVWizard.Core.Budgets
             var perTexel = BytesPerTexel(format);
             long bytes = 0;
             for (var level = 0; level < mipCount; level++)
-                bytes += Mathf.RoundToInt(((width * height) >> (2 * level)) * perTexel);
+                bytes += Rounded(((long)width * height) >> (2 * level), perTexel);
             return bytes;
         }
+
+        // The texels times the bytes per texel, multiplied in single precision as the SDK does, and rounded as
+        // Mathf.RoundToInt does. Counted in long, since a large texture's bytes are past int's range.
+        static long Rounded(long texels, float perTexel) => (long)Math.Round(texels * perTexel);
 
         /// <summary>
         /// The bytes every texture on every material of the renderers takes, each texture counted once. Renderers

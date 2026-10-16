@@ -76,6 +76,20 @@ namespace UVWizard.Core.Tests.Budgets
                 Is.EqualTo(32 * 32 * 4 * 4));
         }
 
+        // 4 GiB, past int's range: counted in int, it would go negative and hide an over-budget avatar. Counted from
+        // the sizes, since CI's GPU can't allocate a texture this large.
+        [Test]
+        public void ATextureArrayPast2GibCountsInFull()
+        {
+            Assert.That(TextureMemory.LayeredBytes(2048, 2048, 256, TextureFormat.RGBA32), Is.EqualTo(4L << 30));
+        }
+
+        [Test]
+        public void A2DTexturePast2GibCountsInFull()
+        {
+            Assert.That(TextureMemory.Bytes(16384, 16384, 1, TextureFormat.RGBAFloat), Is.EqualTo(4L << 30));
+        }
+
         [Test]
         public void ARenderTextureCountsNothing()
         {
