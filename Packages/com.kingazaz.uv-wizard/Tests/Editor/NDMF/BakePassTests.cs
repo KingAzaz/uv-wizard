@@ -838,8 +838,8 @@ namespace UVWizard.NDMF.Tests
         static IEnumerable<(ErrorSeverity, string?)> Reports(List<ErrorContext> errors) =>
             errors.Select(e => (e.TheError.Severity, (e.TheError as SimpleError)?.TitleKey)).ToArray();
 
-        // Leaves out the material-slot warning, for avatars built without Trace and Optimize: nothing merges their
-        // meshes, so the SDK counts a slot on each, more than a one-slot preset such as Good allows.
+        // Leaves out the material-slot warning, for avatars whose meshes nothing merges: the SDK counts a slot on each,
+        // more than a one-slot preset such as Good allows.
         static List<ErrorContext> BesidesSlots(List<ErrorContext> errors) =>
             errors.Where(e => (e.TheError as SimpleError)?.TitleKey != Messages.TooManySlots).ToList();
 
