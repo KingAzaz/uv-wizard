@@ -203,7 +203,7 @@ class FakeEditor:
         self.compile_failed = compile_failed
         self.job = job if job is not None else {"status": "succeeded", "error": None, "result": {
             "summary": {"total": 2, "passed": 2, "failed": 0, "skipped": 0, "durationSeconds": 0.1}}}
-        self.drop_run_tests = int(drop_run_tests)   # how many run_tests replies to lose
+        self.drop_run_tests = drop_run_tests   # how many run_tests replies to lose
         self.busy_since = busy_since   # a run another client started, in unix ms
         self.fast = fast
         self.forget_jobs = forget_jobs   # get_test_job answers "Unknown job_id."
@@ -314,7 +314,7 @@ class EditorTest(unittest.TestCase):
             unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=1, poll=0.05)
 
     def test_a_job_started_before_the_drop_is_followed_not_restarted(self):
-        editor, fake = self.editor(drop_run_tests=True)
+        editor, fake = self.editor(drop_run_tests=1)
         job = unity_tests.run(fake.port, ["A"], None, time.monotonic() + 30, poll=0.05)
         self.assertEqual(job["job_id"], "job-1")
         self.assertEqual(len(fake.sent("run_tests")), 1)

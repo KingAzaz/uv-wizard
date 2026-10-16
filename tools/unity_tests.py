@@ -135,15 +135,17 @@ def start_job(port, params, deadline, adopt_wait=10, poll=1.0, reruns=1):
     tests are running, the job the editor started since this call is ours.
 
     The editor-state snapshot refreshes at most once a second, and the bridge
-    clears the current job id when a job ends. So a fast job can finish before
-    any snapshot names it: the snapshot then shows a run that started and
-    finished since this call, but no job to follow. Nothing is running then,
-    so run_tests is sent again, up to reruns times.
+    clears the current job id when a job ends. So a job can finish before any
+    snapshot names it: a fast one, or any one while the busy editor drops the
+    snapshot requests. The snapshot then shows a run that started and finished
+    since this call, but no job to follow. Nothing is running then, so
+    run_tests is sent again, up to reruns times, and the first run's result is
+    lost: a flaky test can fail in it and pass in the rerun.
     """
     requested = now_ms()
     try:
         reply = bridge.call(port, "run_tests", params, deadline=deadline, resend=False)
-        if not tests_running(reply):
+        if error_code(reply) != "tests_running":   # RunTests.cs's code when tests are running
             return bridge.result_of(reply)["job_id"]
     except bridge.DroppedAfterSending as error:
         log("unity-tests: %s; looking for the job it started" % error)
@@ -159,16 +161,16 @@ def start_job(port, params, deadline, adopt_wait=10, poll=1.0, reruns=1):
         if ours and (tests.get("last_run") or {}).get("finished_unix_ms"):
             if not reruns:
                 raise RuntimeError("the tests ran, but the editor's reply was lost: result unknown")
-            log("unity-tests: the job finished before its id was seen; running it again")
+            log("unity-tests: the job finished before its id was seen; running it again (its result is lost)")
             return start_job(port, params, deadline, adopt_wait, poll, reruns - 1)
         if time.monotonic() > give_up:
             raise RuntimeError("the editor is already running tests that this run didn't start")
         time.sleep(poll)
 
 
-def tests_running(reply):
-    """Whether run_tests was refused because tests are already running (RunTests.cs's error code)."""
-    return (reply.get("result") or {}).get("error") == "tests_running"
+def error_code(reply):
+    """The error a tool answered with, such as "tests_running", or None."""
+    return (reply.get("result") or {}).get("error")
 
 
 def run(port, assemblies, group, deadline, poll=2.0):
@@ -184,7 +186,7 @@ def run(port, assemblies, group, deadline, poll=2.0):
         try:
             reply = bridge.call(
                 port, "get_test_job", {"job_id": job_id, "include_failed_tests": True}, deadline=deadline)
-            if (reply.get("result") or {}).get("error") == "Unknown job_id.":
+            if error_code(reply) == "Unknown job_id.":
                 # GetTestJob.cs: the editor has no such job, so no later poll will find it.
                 raise RuntimeError("Unknown job_id %s: the editor lost the job" % job_id)
             job = bridge.result_of(reply)
