@@ -21,14 +21,19 @@ namespace UVWizard.NDMF.Tests
     public partial class BakePassTests : BakeFixture
     {
         const string ToonStandardName = "VRChat/Mobile/Toon Standard";
+
+        [SetUp]
+        public void SetUp()
+        {
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
+                Assert.Ignore("Baking renders on the GPU, and this editor has no graphics device (-nographics).");
+            MobileBuild.Override = null;
+        }
+
         [TearDown]
         public void TearDown()
         {
             MobileBuild.Override = null;
-            // NDMF saves what a build references into its own temporary assets, which it cleans up itself.
-            foreach (var o in created)
-                if (o != null && !EditorUtility.IsPersistent(o)) Object.DestroyImmediate(o);
-            created.Clear();
         }
 
         [Test]
@@ -794,32 +799,6 @@ namespace UVWizard.NDMF.Tests
             avatar.GetComponentsInChildren<Renderer>().SelectMany(r => r.sharedMaterials).ToArray();
 
         Material Standard(Texture2D texture) => Keep(new Material(Shader.Find("Standard")) { mainTexture = texture });
-
-        Mesh Mesh(params (Vector3[] Positions, Vector2[] Uvs)[][] submeshes)
-        {
-            var positions = new List<Vector3>();
-            var uvs = new List<Vector2>();
-            var triangles = new List<int[]>();
-            foreach (var quads in submeshes)
-            {
-                var indices = new List<int>();
-                foreach (var (quadPositions, quadUvs) in quads)
-                {
-                    var start = positions.Count;
-                    positions.AddRange(quadPositions);
-                    uvs.AddRange(quadUvs);
-                    indices.AddRange(new[] { start, start + 2, start + 1, start + 1, start + 2, start + 3 });
-                }
-                triangles.Add(indices.ToArray());
-            }
-            var mesh = Keep(new Mesh());
-            mesh.SetVertices(positions);
-            mesh.SetUVs(0, uvs);
-            mesh.subMeshCount = triangles.Count;
-            for (var s = 0; s < triangles.Count; s++) mesh.SetTriangles(triangles[s], s);
-            mesh.RecalculateNormals();
-            return mesh;
-        }
 
         // Each drawn triangle's centroid UV and the material it's drawn with, renderer by renderer.
         static IEnumerable<(Vector2 Uv, Material Material)> Centroids(GameObject avatar)

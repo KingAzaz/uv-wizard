@@ -1,28 +1,17 @@
 #nullable enable
 
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Materials;
 using UVWizard.Core.Pipeline;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Pipeline
 {
     // How many source texels per unit of chart UV a slot asks for. Built from readings directly, because Standard, the
     // one shader CI's project can read, samples every map with _MainTex_ST, so its channels never tile apart.
-    public class TextureSizeTests
+    public class TextureSizeTests : BakeFixture
     {
-        readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void DestroyTextures()
-        {
-            foreach (var o in created) Object.DestroyImmediate(o);
-            created.Clear();
-        }
-
         [TestCase(4f, 4f, 128, 128)]
         [TestCase(-4f, 4f, 128, 128)]
         [TestCase(4f, -4f, 128, 128)]
@@ -94,11 +83,6 @@ namespace UVWizard.Core.Tests.Pipeline
         static ChannelSource Source(Texture? texture, Vector2 scale) =>
             new ChannelSource(texture, Color.white, new Vector4(scale.x, scale.y, 0, 0), 0);
 
-        Texture2D Texture(int size)
-        {
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false);
-            created.Add(texture);
-            return texture;
-        }
+        Texture2D Texture(int size) => Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false));
     }
 }

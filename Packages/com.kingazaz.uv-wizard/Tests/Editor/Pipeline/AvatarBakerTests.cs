@@ -17,11 +17,11 @@ namespace UVWizard.Core.Tests.Pipeline
     [Category("GPU")]
     public partial class AvatarBakerTests : BakeFixture
     {
-        [TearDown]
-        public void DestroyObjects()
+        [SetUp]
+        public void RequireGpu()
         {
-            foreach (var o in created) Object.DestroyImmediate(o);
-            created.Clear();
+            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
+                Assert.Ignore("Baking renders on the GPU, and this editor has no graphics device (-nographics).");
         }
 
         [Test]
@@ -1141,33 +1141,6 @@ namespace UVWizard.Core.Tests.Pipeline
                 AssertNormalClose(Decoded(expected[i]), Decoded(actual[i]), $"{what}, pixel ({i % 64}, {i / 64})");
             }
             Assert.That(compared, Is.GreaterThan(1000), $"{what}: pixels drawn in both");
-        }
-
-        // One submesh per array of quads, two triangles each.
-        Mesh Mesh(params (Vector3[] Positions, Vector2[] Uvs)[][] submeshes)
-        {
-            var positions = new List<Vector3>();
-            var uvs = new List<Vector2>();
-            var triangles = new List<int[]>();
-            foreach (var quads in submeshes)
-            {
-                var indices = new List<int>();
-                foreach (var (quadPositions, quadUvs) in quads)
-                {
-                    var start = positions.Count;
-                    positions.AddRange(quadPositions);
-                    uvs.AddRange(quadUvs);
-                    indices.AddRange(new[] { start, start + 2, start + 1, start + 1, start + 2, start + 3 });
-                }
-                triangles.Add(indices.ToArray());
-            }
-            var mesh = Keep(new Mesh { indexFormat = IndexFormat.UInt32 });
-            mesh.SetVertices(positions);
-            mesh.SetUVs(0, uvs);
-            mesh.subMeshCount = triangles.Count;
-            for (var s = 0; s < triangles.Count; s++) mesh.SetTriangles(triangles[s], s);
-            mesh.RecalculateNormals();
-            return mesh;
         }
 
         static Mesh WithTangents(Mesh mesh)

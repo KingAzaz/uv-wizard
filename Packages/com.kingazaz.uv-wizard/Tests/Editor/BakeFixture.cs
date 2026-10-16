@@ -2,18 +2,30 @@
 
 using System;
 using System.Collections.Generic;
+using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests
 {
     /// <summary>
     /// The source textures, meshes and materials that the core bake tests and the NDMF bake tests both build. Each
-    /// fixture destroys what it kept in its own tear-down.
+    /// test's objects are destroyed after it.
     /// </summary>
     public abstract class BakeFixture
     {
         protected readonly List<Object> created = new List<Object>();
+
+        [TearDown]
+        public void DestroyCreated()
+        {
+            // NDMF saves what a build references into its own temporary assets, which it cleans up itself.
+            foreach (var o in created)
+                if (o != null && !EditorUtility.IsPersistent(o)) Object.DestroyImmediate(o);
+            created.Clear();
+        }
 
         protected T Keep<T>(T o) where T : Object
         {
@@ -95,6 +107,33 @@ namespace UVWizard.Core.Tests
         {
             var uvs = new[] { new Vector2(uMin, vMin), new Vector2(uMax, vMin), new Vector2(uMin, vMax), new Vector2(uMax, vMax) };
             return (Array.ConvertAll(uvs, uv => new Vector3(uv.x, uv.y, z)), uvs);
+        }
+
+        // One submesh per array of quads, two triangles each.
+        protected Mesh Mesh(params (Vector3[] Positions, Vector2[] Uvs)[][] submeshes)
+        {
+            var positions = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var triangles = new List<int[]>();
+            foreach (var quads in submeshes)
+            {
+                var indices = new List<int>();
+                foreach (var (quadPositions, quadUvs) in quads)
+                {
+                    var start = positions.Count;
+                    positions.AddRange(quadPositions);
+                    uvs.AddRange(quadUvs);
+                    indices.AddRange(new[] { start, start + 2, start + 1, start + 1, start + 2, start + 3 });
+                }
+                triangles.Add(indices.ToArray());
+            }
+            var mesh = Keep(new Mesh { indexFormat = IndexFormat.UInt32 });
+            mesh.SetVertices(positions);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = triangles.Count;
+            for (var s = 0; s < triangles.Count; s++) mesh.SetTriangles(triangles[s], s);
+            mesh.RecalculateNormals();
+            return mesh;
         }
 
         // One connected island: a cells x cells grid of quads, sharing their corners, from UV first/per to
