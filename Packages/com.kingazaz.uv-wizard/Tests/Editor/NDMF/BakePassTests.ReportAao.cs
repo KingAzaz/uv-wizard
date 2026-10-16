@@ -7,8 +7,10 @@ using Anatawa12.AvatarOptimizer;
 using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEngine;
 using UVWizard.Core.Reporting;
+using VRC.SDK3.Avatars.Components;
 using VRC.SDKBase.Validation.Performance;
 using VRC.SDKBase.Validation.Performance.Stats;
 
@@ -321,22 +323,42 @@ namespace UVWizard.NDMF.Tests
             Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("Toggle"));
         }
 
+        [Test]
+        public void AStateWhoseClipIsMissingDoesntStopTheReport()
+        {
+            // A bought avatar's FX layer often has a state whose animation file was deleted.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var outfit = AddUnmergeable(avatar, Unmergeable.ToggledOutfit);
+            var fx = (AnimatorController)avatar.GetComponent<VRCAvatarDescriptor>().baseAnimationLayers
+                .Single(layer => layer.type == VRCAvatarDescriptor.AnimLayerType.FX).animatorController;
+            var deleted = new AnimationClip { name = "Deleted" };
+            fx.layers[0].stateMachine.AddState("Missing").motion = deleted;
+            UnityEngine.Object.DestroyImmediate(deleted);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Renderer, Is.SameAs(outfit));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("Toggle"));
+        }
+
         public enum BuildKind { PcBuild, NoComponent, Baked }
 
         // Avatar Optimizer replaces the controllers when it duplicates the avatar's assets. Reading them through
-        // NDMF's animator services after it clones each one a second time, and logs it once per controller (#104).
+        // NDMF's animator services after that clones each one a second time, and logs it once per controller (#104).
         [TestCase(BuildKind.PcBuild)]
         [TestCase(BuildKind.NoComponent)]
         [TestCase(BuildKind.Baked)]
         public void TheReportDoesntReopenTheAnimatorsAfterAvatarOptimizer(BuildKind build)
         {
             var avatar = MergeableAvatar(addTraceAndOptimize: true);
-            if (build != BuildKind.Baked)
-            {
-                // The avatar's own Trace and Optimize, since UV Wizard's adds none when it doesn't bake.
+            if (build == BuildKind.NoComponent)
                 UnityEngine.Object.DestroyImmediate(avatar.GetComponent<UVWizardAvatar>());
-                avatar.AddComponent<TraceAndOptimize>();
-            }
+            // The avatar's own Trace and Optimize, since UV Wizard's adds none when it doesn't bake.
+            if (build != BuildKind.Baked) avatar.AddComponent<TraceAndOptimize>();
             AddUnmergeable(avatar, Unmergeable.ToggledOutfit);
 
             var messages = new List<string>();
