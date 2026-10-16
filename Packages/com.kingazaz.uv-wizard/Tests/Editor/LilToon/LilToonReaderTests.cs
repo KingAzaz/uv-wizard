@@ -486,8 +486,7 @@ namespace UVWizard.Core.Tests.LilToon
             Assert.That(SourceShaderReader.Read(lite).Verdict, Is.EqualTo(MaterialVerdict.Merged), "Lite");
         }
 
-        // An imported map's importer says whether it keeps alpha: DXT1, which the importer picks for a map
-        // without alpha, declares an alpha channel anyway.
+        // Avatars' maps are imported: the importer's alpha source and the source file decide whether alpha is kept.
         [TestCase(true, TextureImporterAlphaSource.FromInput, true)]
         [TestCase(true, TextureImporterAlphaSource.None, false)]
         [TestCase(false, TextureImporterAlphaSource.FromInput, false)]

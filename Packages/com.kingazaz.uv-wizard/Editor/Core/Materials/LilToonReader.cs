@@ -2,7 +2,6 @@
 #nullable enable
 
 using System.Collections.Generic;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
@@ -151,16 +150,8 @@ namespace UVWizard.Core.Materials
 
         static bool IsLite(Material material) => material.shader.name.StartsWith(Lite);
 
-        // An imported texture has alpha when its importer keeps some; the compressed format alone can't say,
-        // since DXT1 declares alpha it may not use.
-        static bool HasAlpha(Texture texture)
-        {
-            if (AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(texture)) is TextureImporter importer)
-                return importer.alphaSource == TextureImporterAlphaSource.FromGrayScale ||
-                       importer.alphaSource == TextureImporterAlphaSource.FromInput &&
-                       importer.DoesSourceTextureHaveAlpha();
-            return GraphicsFormatUtility.HasAlphaChannel(texture.graphicsFormat);
-        }
+        // The importer picks a format without alpha when it keeps none.
+        static bool HasAlpha(Texture texture) => GraphicsFormatUtility.HasAlphaChannel(texture.graphicsFormat);
 
         // _MainTexHSVG's neutral value: no hue shift, and saturation, value and gamma of 1.
         static readonly Vector4 NoHsvg = new Vector4(0, 1, 1, 1);
