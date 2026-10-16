@@ -382,9 +382,12 @@ namespace UVWizard.Core.Tests.VRChat
             Assert.That($"{SourceShaderReader.Read(material).Reason}", Does.Not.Contain(ReasonText.HueShiftDropped));
         }
 
-        // A script or animation can set a value off the slider. Only its angle within a turn counts.
+        // A script or animation can set a value off the slider. Only its angle within a turn counts, and a value with
+        // no angle, which the shader's sin and cos can't draw, is flagged.
         [TestCase(-1.5f, true)]
         [TestCase(4 * Mathf.PI, false)]
+        [TestCase(float.NaN, true)]
+        [TestCase(float.PositiveInfinity, true)]
         public void AHueShiftOffTheSliderCountsByItsAngleWithinATurn(float hueShift, bool flagged)
         {
             var material = HueShifted(ToonStandard);

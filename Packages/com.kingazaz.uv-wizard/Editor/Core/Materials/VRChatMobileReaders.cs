@@ -107,10 +107,13 @@ namespace UVWizard.Core.Materials
         }
 
         // Whether a hue shift changes colours. ApplyHue (Helpers.cginc) rotates them about grey by the angle, so a
-        // whole number of turns, such as the slider's 2π maximum, leaves them as they were.
+        // whole number of turns, such as the slider's 2π maximum, leaves them as they were. NaN or infinity has no
+        // angle, and its sin and cos draw garbage.
         static bool Shifts(Material material, string hueShift)
         {
-            var turn = Mathf.Repeat(material.GetFloat(hueShift), 2 * Mathf.PI);
+            var angle = material.GetFloat(hueShift);
+            if (!float.IsFinite(angle)) return true;
+            var turn = Mathf.Repeat(angle, 2 * Mathf.PI);
             return Mathf.Min(turn, 2 * Mathf.PI - turn) > 1e-3f;
         }
 

@@ -39,6 +39,17 @@ namespace UVWizard.Core.Tests.VRChat
         }
 
         [Test]
+        public void OfTwoOutlineSourcesTheOneWithMoreChartAreaRepresents()
+        {
+            var small = Shaded(ToonStandardOutline, Keep(new Texture2D(4, 1)), 0.25f);
+            var large = Shaded(ToonStandardOutline, Keep(new Texture2D(4, 1)), 0.75f);
+
+            var result = Bake(MeshRenderer(Quad(0.1f, 0.1f), small), MeshRenderer(Quad(0.3f, 0.6f), large));
+
+            Assert.That(result.Representative, Is.SameAs(large));
+        }
+
+        [Test]
         public void ASourceWithoutEverySharedSettingCantRepresent()
         {
             // Standard Lite covers more texels, but has no shadow ramp to share.
@@ -65,8 +76,9 @@ namespace UVWizard.Core.Tests.VRChat
 
         BakeResult Bake(params Renderer[] renderers)
         {
-            // Two of the settings the NDMF plugin shares (ToonStandard.SharedProperties).
-            var options = new BakeOptions(Shader.Find(ToonStandard), representativeProperties: new[] { "_Ramp", "_ShadowBoost" });
+            // The settings the NDMF plugin shares (ToonStandard.SharedProperties).
+            var options = new BakeOptions(Shader.Find(ToonStandard), representativeProperties: new[]
+                { "_Ramp", "_Culling", "_ShadowBoost", "_ShadowAlbedo", "_MinBrightness", "_LimitBrightness" });
             var result = AvatarBaker.Bake(renderers, options);
             Keep(result.MergedMaterial!);
             Keep(result.Atlas!);
