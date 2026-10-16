@@ -50,9 +50,10 @@ namespace UVWizard.Core.Pipeline
             foreach (var renderer in renderers)
                 CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
                     laterEdits, needs, options.Channels);
-            // With no channel to bake, an atlas would hold nothing, and conversions would lose their textures, so the
-            // renderers stay as they were (#84).
-            if (Needed(slots, options.Channels) == Channels.None)
+            // With every channel off, or only channels no slot to merge has, an atlas would hold nothing, and
+            // conversions would lose their textures, so the renderers stay as they were (#84). Without slots to
+            // merge, the channels still carry the conversions of the materials kept out.
+            if (options.Channels == Channels.None || slots.Count > 0 && Needed(slots, options.Channels) == Channels.None)
                 return BakeResult.Nothing().Measured(renderers, options.Preset, null);
             var conversions = new Conversions(options, animated);
             if (slots.Count == 0)

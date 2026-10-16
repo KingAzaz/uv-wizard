@@ -55,8 +55,8 @@ namespace UVWizard.Core.Pipeline
         public bool FromCache { get; }
 
         /// <summary>
-        /// True when no channel the bake was given has anything to bake: every channel is off, or only those no slot
-        /// has are on. The renderers then stay as they were, materials and all.
+        /// True when no channel the bake was given has anything to bake: every channel is off, or there are slots to
+        /// merge and only channels none of them has are on. The renderers then stay as they were, materials and all.
         /// </summary>
         public bool NothingToBake { get; private set; }
 

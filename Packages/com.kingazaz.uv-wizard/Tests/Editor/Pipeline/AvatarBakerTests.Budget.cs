@@ -75,6 +75,18 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void WithEveryChannelOffAKeptOutMaterialIsntConverted()
+        {
+            var renderer = Kept(Gradient(16, 0));
+            var material = renderer.sharedMaterial;
+
+            var result = Bake(Converting(channels: Channels.None), renderer);
+
+            Assert.That(result.NothingToBake, Is.True);
+            Assert.That(renderer.sharedMaterial, Is.SameAs(material));
+        }
+
+        [Test]
         public void ABakeWithAChannelToBakeHasSomethingToBake()
         {
             var result = Bake(StandardOptions(channels: Channels.Albedo), Plain(Gradient(16, 0)));
