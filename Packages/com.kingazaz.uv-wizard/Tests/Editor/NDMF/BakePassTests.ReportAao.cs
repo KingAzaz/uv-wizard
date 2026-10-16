@@ -1,13 +1,16 @@
 #nullable enable
 
 #if UVWIZARD_AAO
+using System.Collections.Generic;
 using System.Linq;
 using Anatawa12.AvatarOptimizer;
 using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEngine;
 using UVWizard.Core.Reporting;
+using VRC.SDK3.Avatars.Components;
 using VRC.SDKBase.Validation.Performance;
 using VRC.SDKBase.Validation.Performance.Stats;
 
@@ -293,6 +296,83 @@ namespace UVWizard.NDMF.Tests
             Assert.That(BakeReports.Latest!.Leftovers.Count, Is.EqualTo(1));
             Assert.That(BakeReports.Latest.Leftovers[0].Renderer, Is.SameAs(apart));
             Assert.That(BakeReports.Latest.Leftovers[0].Reason.ToString(), Is.EqualTo("BoundsOrRootBone"));
+        }
+
+        [Test]
+        public void AMeshAChildAnimatorTurnsOnAndOffIsKeptApartForItsToggle()
+        {
+            // The child Animator's curve paths start at its own object, not at the avatar root.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var props = new GameObject("Props");
+            props.transform.SetParent(avatar.transform);
+            var outfit = Skinned(avatar, "Outfit", avatar.transform.Find("Armature/Hips"),
+                Mesh(new[] { Quad(4, 0.1f, 0.5f, 0.4f, 0.9f) }), Standard(Gradient(16, 4)));
+            outfit.transform.SetParent(props.transform);
+            var clip = Keep(new AnimationClip { name = "Outfit" });
+            AnimationUtility.SetEditorCurve(clip, EditorCurveBinding.FloatCurve("Outfit", typeof(GameObject), "m_IsActive"),
+                new AnimationCurve(new Keyframe(0, 1), new Keyframe(1, 0)));
+            WithAnimator(props, clip);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Renderer, Is.SameAs(outfit));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("Toggle"));
+        }
+
+        [Test]
+        public void AStateWhoseClipIsMissingDoesntStopTheReport()
+        {
+            // A bought avatar's FX layer often has a state whose animation file was deleted.
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var outfit = AddUnmergeable(avatar, Unmergeable.ToggledOutfit);
+            var fx = (AnimatorController)avatar.GetComponent<VRCAvatarDescriptor>().baseAnimationLayers
+                .Single(layer => layer.type == VRCAvatarDescriptor.AnimLayerType.FX).animatorController;
+            var deleted = new AnimationClip { name = "Deleted" };
+            fx.layers[0].stateMachine.AddState("Missing").motion = deleted;
+            UnityEngine.Object.DestroyImmediate(deleted);
+            BakeReports.Clear();
+
+            MobileBuild.Override = true;
+            Build(avatar);
+
+            var leftovers = BakeReports.Latest!.Leftovers;
+            Assert.That(leftovers.Count, Is.EqualTo(1));
+            Assert.That(leftovers[0].Renderer, Is.SameAs(outfit));
+            Assert.That(leftovers[0].Reason.ToString(), Is.EqualTo("Toggle"));
+        }
+
+        public enum BuildKind { PcBuild, NoComponent, Baked }
+
+        // Avatar Optimizer replaces the controllers when it duplicates the avatar's assets. Reading them through
+        // NDMF's animator services after that clones each one a second time, and logs it once per controller (#104).
+        [TestCase(BuildKind.PcBuild)]
+        [TestCase(BuildKind.NoComponent)]
+        [TestCase(BuildKind.Baked)]
+        public void TheReportDoesntReopenTheAnimatorsAfterAvatarOptimizer(BuildKind build)
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            if (build == BuildKind.NoComponent)
+                UnityEngine.Object.DestroyImmediate(avatar.GetComponent<UVWizardAvatar>());
+            // The avatar's own Trace and Optimize, since UV Wizard's adds none when it doesn't bake.
+            if (build != BuildKind.Baked) avatar.AddComponent<TraceAndOptimize>();
+            AddUnmergeable(avatar, Unmergeable.ToggledOutfit);
+
+            var messages = new List<string>();
+            void Collect(string message, string _, LogType type) => messages.Add(message);
+            MobileBuild.Override = build != BuildKind.PcBuild;
+            Application.logMessageReceived += Collect;
+            try { Build(avatar); }
+            finally { Application.logMessageReceived -= Collect; }
+
+            // NDMF logs each pass by name once it finishes. Its own CheckMipStreamingPass reactivates the services
+            // later, in PlatformFinish, so only what's logged up to the end of the report's pass counts.
+            var measured = messages.FindIndex(m => m.StartsWith("Processed pass Measure after the build in "));
+            Assert.That(measured, Is.Not.EqualTo(-1), "the report's pass ran");
+            Assert.That(messages.Take(measured), Has.None.Contains("cloning a second time"));
         }
     }
 }

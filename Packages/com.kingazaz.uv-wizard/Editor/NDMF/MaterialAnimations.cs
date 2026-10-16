@@ -67,16 +67,27 @@ namespace UVWizard.NDMF
         /// toggle onto the merged mesh's object (AutoMergeSkinnedMesh, 1.9.20), so alone such a mesh stays apart too.
         /// It merges no static mesh, so a static mesh's enabled flag doesn't count.
         /// </summary>
-        public static HashSet<UnityEngine.Object> Toggled(AnimatorServicesContext animators, GameObject root)
+        /// <remarks>
+        /// Reads the controllers the platform puts on the avatar as they stand, without NDMF's animator services, so
+        /// it suits a pass after the build has committed them. Activating the services there would clone every
+        /// controller a second time once Avatar Optimizer has replaced them (#104).
+        /// </remarks>
+        public static HashSet<UnityEngine.Object> Toggled(IPlatformAnimatorBindings platform, GameObject root)
         {
             var toggled = new HashSet<UnityEngine.Object>();
-            foreach (var (clip, resolve) in Clips(animators, root))
-                foreach (var binding in clip.GetFloatCurveBindings())
-                    if (binding.type == typeof(GameObject) && binding.propertyName == "m_IsActive"
-                        && resolve(binding.path) is { } target)
-                        toggled.Add(target);
-                    else if (binding.propertyName == "m_Enabled" && Target(binding, resolve) is SkinnedMeshRenderer renderer)
-                        toggled.Add(renderer);
+            // As NDMF's animator services take them: the last controller registered under each key.
+            foreach (var (key, controller, _) in platform.GetInnateControllers(root).GroupBy(c => c.Item1).Select(g => g.Last()))
+            {
+                var from = key is Animator animator && animator != null ? animator.transform : root.transform;
+                Func<string, GameObject?> resolve = path => path.Length == 0 ? from.gameObject : from.Find(path)?.gameObject;
+                foreach (var clip in controller.animationClips.Distinct())
+                    foreach (var binding in AnimationUtility.GetCurveBindings(clip))
+                        if (binding.type == typeof(GameObject) && binding.propertyName == "m_IsActive"
+                            && resolve(binding.path) is { } target)
+                            toggled.Add(target);
+                        else if (binding.propertyName == "m_Enabled" && Target(binding, resolve) is SkinnedMeshRenderer renderer)
+                            toggled.Add(renderer);
+            }
             return toggled;
         }
 
