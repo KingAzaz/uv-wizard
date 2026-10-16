@@ -355,10 +355,38 @@ namespace UVWizard.Core.Tests.Pipeline
             }
         }
 
+        // The active quality level's texture settings override each texture's own when the bake samples it.
+        [TestCase("texture quality")]
+        [TestCase("anisotropic filtering")]
+        public void ChangingAQualitySettingBakesAfresh(string setting)
+        {
+            var limit = QualitySettings.globalTextureMipmapLimit;
+            var filtering = QualitySettings.anisotropicFiltering;
+            try
+            {
+                Bake(CachedOptions(), Glowing());
+                Assert.That(Bake(CachedOptions(), Glowing()).FromCache, Is.True, "unchanged");
+
+                if (setting == "texture quality") QualitySettings.globalTextureMipmapLimit = limit + 1;
+                else
+                    QualitySettings.anisotropicFiltering = filtering == AnisotropicFiltering.ForceEnable
+                        ? AnisotropicFiltering.Disable
+                        : AnisotropicFiltering.ForceEnable;
+
+                Assert.That(Bake(CachedOptions(), Glowing()).FromCache, Is.False, "changed");
+            }
+            finally
+            {
+                QualitySettings.globalTextureMipmapLimit = limit;
+                QualitySettings.anisotropicFiltering = filtering;
+            }
+        }
+
         [Test]
         public void ADirtyUnreadableTextureAssetBakesAfresh()
         {
-            // Its texels in memory may differ from its saved file's, such as after Graphics.CopyTexture into it.
+            // Its texels in memory may differ from its saved file's, such as an edit not yet saved. A GPU write such as
+            // Graphics.CopyTexture doesn't mark it dirty, so that one still reads as unchanged.
             const string folder = "Assets/UVWizardCacheTests";
             const string path = folder + "/texture.asset";
             Directory.CreateDirectory(folder);

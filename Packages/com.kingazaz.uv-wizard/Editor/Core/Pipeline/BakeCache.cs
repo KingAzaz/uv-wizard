@@ -236,8 +236,11 @@ namespace UVWizard.Core.Pipeline
             var shader = AssetDatabase.GetAssetDependencyHash(ChannelBaker.ShaderPath);
             hash.Append(ref shader);
             Add(Application.unityVersion);
-            // The bake reads and writes colours in the project's colour space.
+            // The bake reads and writes colours in the project's colour space, and samples with the active quality
+            // level's texture settings, which override a texture's own mip limit and anisotropy.
             Add((int)QualitySettings.activeColorSpace);
+            Add(QualitySettings.globalTextureMipmapLimit);
+            Add((int)QualitySettings.anisotropicFiltering);
         }
 
         public Hash128? Hash => hashable ? hash : (Hash128?)null;
