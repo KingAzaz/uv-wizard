@@ -45,7 +45,7 @@ namespace UVWizard.NDMF.Tests
             var sources = skinned.Select(renderer => renderer.sharedMesh).ToArray();
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(errors, Is.Empty);
             Assert.That(skinned[1].sharedMesh, Is.Not.SameAs(skinned[0].sharedMesh), "each renderer gets its own rewritten mesh");
@@ -80,7 +80,7 @@ namespace UVWizard.NDMF.Tests
             var before = Centroids(avatar).Select(c => glow.GetPixelBilinear(c.Uv.x, c.Uv.y)).ToArray();
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(errors, Is.Empty);
             var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
@@ -120,7 +120,7 @@ namespace UVWizard.NDMF.Tests
             avatar.transform.Find("Hat").GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(errors, Is.Empty);
             var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
@@ -138,7 +138,7 @@ namespace UVWizard.NDMF.Tests
             var avatar = Avatar(withComponent: true);
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(errors, Is.Empty);
             var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
@@ -233,7 +233,7 @@ namespace UVWizard.NDMF.Tests
             avatar.transform.Find("Hat").GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(errors, Is.Empty);
             var merged = avatar.GetComponentInChildren<Renderer>().sharedMaterial;
@@ -402,7 +402,7 @@ namespace UVWizard.NDMF.Tests
                 { ToonStandardMaterial(Gradient(16, 4), culling: 0), ToonStandardMaterial(Gradient(16, 2), culling: 2) };
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(Texts(errors), Is.Empty);
         }
@@ -441,7 +441,7 @@ namespace UVWizard.NDMF.Tests
             hat.sharedMaterials = new[] { ToonStandardMaterial(Gradient(16, 4), culling: 0) };
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(hat.sharedMaterial.GetFloat("_Culling"), Is.EqualTo(2));
             Assert.That(Reports(errors), Is.EqualTo(new[] { (ErrorSeverity.NonFatal, (string?)Messages.Flagged) }));
@@ -460,7 +460,7 @@ namespace UVWizard.NDMF.Tests
             body.sharedMesh.colors = Enumerable.Repeat(Color.red, body.sharedMesh.vertexCount).ToArray();
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(Reports(errors), Has.All.EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Flagged)));
             Assert.That(Texts(errors), Has.Count.EqualTo(4), "two body slots on each of the two skinned renderers");
@@ -538,7 +538,7 @@ namespace UVWizard.NDMF.Tests
             WithFx(avatar, hatOff);
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(errors, Is.Empty);
             Assert.That(Materials(avatar).Select(m => m.shader.name), Has.All.EqualTo(ToonStandardName));
@@ -838,7 +838,8 @@ namespace UVWizard.NDMF.Tests
         static IEnumerable<(ErrorSeverity, string?)> Reports(List<ErrorContext> errors) =>
             errors.Select(e => (e.TheError.Severity, (e.TheError as SimpleError)?.TitleKey)).ToArray();
 
-        // Leaves out the material-slot warning, which every kept material adds on a one-slot preset such as Good.
+        // Leaves out the material-slot warning, for avatars whose meshes nothing merges: the SDK counts a slot on each,
+        // more than a one-slot preset such as Good allows.
         static List<ErrorContext> BesidesSlots(List<ErrorContext> errors) =>
             errors.Where(e => (e.TheError as SimpleError)?.TitleKey != Messages.TooManySlots).ToList();
 

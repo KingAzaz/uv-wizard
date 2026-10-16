@@ -25,7 +25,7 @@ namespace UVWizard.NDMF.Tests
             BakeReports.Clear();
 
             MobileBuild.Override = true;
-            var errors = Build(avatar);
+            var errors = BesidesSlots(Build(avatar));
 
             Assert.That(Reports(errors), Is.EqualTo(new[] { (nadena.dev.ndmf.ErrorSeverity.NonFatal, (string?)Messages.Flagged) }));
             var report = BakeReports.Latest;

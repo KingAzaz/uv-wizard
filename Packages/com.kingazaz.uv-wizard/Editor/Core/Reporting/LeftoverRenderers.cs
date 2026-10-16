@@ -62,8 +62,9 @@ namespace UVWizard.Core.Reporting
             return LeftoverReason.Other;
         }
 
+        // Avatar Optimizer keeps the root's first child named Body, when it's skinned.
         static bool IsMmdBody(Renderer renderer, GameObject root) =>
-            renderer is SkinnedMeshRenderer && renderer.name == MmdBodyName && renderer.transform.parent == root.transform;
+            renderer is SkinnedMeshRenderer && renderer.transform == root.transform.Find(MmdBodyName);
 
         // True when an animation turns the renderer's object, or one above it, on or off.
         static bool IsToggled(Renderer renderer, GameObject root, ISet<GameObject> toggled)

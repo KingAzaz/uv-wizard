@@ -77,6 +77,17 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void OnlyTheFirstBodyUnderTheRootIsTheMmdBody()
+        {
+            // Avatar Optimizer keeps the root's first child named Body, and only when it's skinned (#83 review).
+            Skinned("Merged", root.transform, vertices: 100);
+            new GameObject("Body").transform.SetParent(root.transform);
+            var second = Skinned("Body", root.transform, vertices: 10);
+
+            Assert.That(Reasons(), Is.EqualTo(new[] { (second as Renderer, LeftoverReason.Other) }));
+        }
+
+        [Test]
         public void AToggledMeshOrOneUnderAToggledObjectIsKeptForItsToggle()
         {
             Skinned("Merged", root.transform, vertices: 100);
