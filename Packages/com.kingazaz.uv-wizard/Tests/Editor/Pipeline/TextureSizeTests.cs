@@ -23,15 +23,16 @@ namespace UVWizard.Core.Tests.Pipeline
             created.Clear();
         }
 
-        [TestCase(4f, 4f)]
-        [TestCase(-4f, 4f)]
-        [TestCase(4f, -4f)]
-        public void AnEmissionMapTiledMoreFinelyThanTheAlbedoCountsItsTiling(float u, float v)
+        [TestCase(4f, 4f, 128, 128)]
+        [TestCase(-4f, 4f, 128, 128)]
+        [TestCase(4f, -4f, 128, 128)]
+        [TestCase(4f, 1f, 128, 32)]
+        public void AnEmissionMapTiledMoreFinelyThanTheAlbedoCountsItsTiling(float u, float v, int width, int height)
         {
             // 32 texels repeated 4 times per albedo repeat need 128 texels per UV, mirrored or not.
             var reading = Reading(Source(Texture(16), new Vector2(2, 2)), Source(Texture(32), new Vector2(2 * u, 2 * v)));
 
-            Assert.That(AvatarBaker.TextureSize(reading, Channels.All), Is.EqualTo(new Vector2Int(128, 128)));
+            Assert.That(AvatarBaker.TextureSize(reading, Channels.All), Is.EqualTo(new Vector2Int(width, height)));
         }
 
         [Test]
@@ -68,6 +69,22 @@ namespace UVWizard.Core.Tests.Pipeline
             var reading = Reading(Source(null, Vector2.one), Source(Texture(16), Vector2.zero));
 
             Assert.That(AvatarBaker.TextureSize(reading, Channels.All), Is.EqualTo(new Vector2Int(8, 8)));
+        }
+
+        [Test]
+        public void ATexturedSlotSmallerThanTheFloorKeepsItsOwnSize()
+        {
+            var reading = Reading(Source(Texture(4), Vector2.one), null);
+
+            Assert.That(AvatarBaker.TextureSize(reading, Channels.All), Is.EqualTo(new Vector2Int(4, 4)));
+        }
+
+        [Test]
+        public void ASlotWhoseAlbedoIsTurnedOffKeepsTheUntexturedFloor()
+        {
+            var reading = Reading(Source(Texture(16), Vector2.one), Source(Texture(16), Vector2.zero));
+
+            Assert.That(AvatarBaker.TextureSize(reading, Channels.Emission), Is.EqualTo(new Vector2Int(8, 8)));
         }
 
         static SourceMaterialReading Reading(ChannelSource albedo, ChannelSource? emission, ChannelSource? normal = null) =>

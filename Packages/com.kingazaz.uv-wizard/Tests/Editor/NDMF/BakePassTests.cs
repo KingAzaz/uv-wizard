@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Baking;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Tests;
 using VRC.SDK3.Avatars.Components;
 using Object = UnityEngine.Object;
 
@@ -17,19 +18,9 @@ namespace UVWizard.NDMF.Tests
 {
     // NDMF and the VRChat SDK aren't in CI's project, so these run only in the dev project.
     [Category("GPU")]
-    public partial class BakePassTests
+    public partial class BakePassTests : BakeFixture
     {
         const string ToonStandardName = "VRChat/Mobile/Toon Standard";
-        readonly List<Object> created = new List<Object>();
-
-        [SetUp]
-        public void SetUp()
-        {
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
-                Assert.Ignore("Baking renders on the GPU, and this editor has no graphics device (-nographics).");
-            MobileBuild.Override = null;
-        }
-
         [TearDown]
         public void TearDown()
         {
@@ -120,7 +111,7 @@ namespace UVWizard.NDMF.Tests
         public void ANormalMappedToonStandardSourceTurnsOnTheMergedMaterialsNormalMap()
         {
             var avatar = Avatar(withComponent: true);
-            var toon = NormalMapped(ToonStandardMaterial(Gradient(16, 4), culling: 2), NormalGradient(16), 0.5f);
+            var toon = NormalMapped(ToonStandardMaterial(Gradient(16, 4), culling: 2), NormalGradient(16, 0), 0.5f);
             avatar.transform.Find("Hat").GetComponent<MeshRenderer>().sharedMaterials = new[] { toon };
 
             MobileBuild.Override = true;
@@ -754,86 +745,8 @@ namespace UVWizard.NDMF.Tests
             return material;
         }
 
-        // Turns on Toon Standard's normal map at the given strength.
-        static Material NormalMapped(Material material, Texture2D map, float strength)
-        {
-            material.EnableKeyword("USE_NORMAL_MAPS");
-            material.SetTexture("_BumpMap", map);
-            material.SetFloat("_BumpScale", strength);
-            return material;
-        }
-
-        // A readable linear normal map, in Unity's XYZ layout, tilting smoothly along both axes.
-        Texture2D NormalGradient(int size) => NormalMap(size, (u, v) => new Vector3(0.6f * (u - 0.3f), 0.5f * (v - 0.6f), 1),
-            FilterMode.Bilinear);
-
-        // A point-filtered normal map whose cells, cell texels wide, tilt left and right in turn.
-        Texture2D NormalChecker(int size, int cell) => NormalMap(size, (u, v) =>
-            new Vector3(((int)(u * size) / cell + (int)(v * size) / cell) % 2 == 0 ? 0.5f : -0.5f, 0, 1), FilterMode.Point);
-
-        Texture2D NormalMap(int size, System.Func<float, float, Vector3> normal, FilterMode filter)
-        {
-            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: true)
-                { wrapMode = TextureWrapMode.Repeat, filterMode = filter });
-            var texels = new Color[size * size];
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-            {
-                var n = normal((x + 0.5f) / size, (y + 0.5f) / size).normalized;
-                texels[y * size + x] = new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1);
-            }
-            texture.SetPixels(texels);
-            texture.Apply();
-            return texture;
-        }
-
-        // A point-filtered sRGB black and white checker whose cells are cell texels wide.
-        Texture2D Checker(int size, int cell)
-        {
-            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: false)
-                { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point });
-            var texels = new Color32[size * size];
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-                texels[y * size + x] = (x / cell + y / cell) % 2 == 0 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255);
-            texture.SetPixels32(texels);
-            texture.Apply();
-            return texture;
-        }
-
         // The texture sampled at the UV tiled the given number of times.
         static Color TiledSample(Texture2D texture, Vector2 uv, float tiling) => texture.GetPixelBilinear(uv.x * tiling, uv.y * tiling);
-
-        // A texel in Unity's XYZ layout: x, y and z in red, green and blue.
-        static Vector3 Decoded(Color texel) => new Vector3(texel.r * 2 - 1, texel.g * 2 - 1, texel.b * 2 - 1);
-
-        // One connected island: a cells x cells grid of quads, sharing their corners, from UV first/per to
-        // (first + cells)/per on each axis.
-        Mesh Grid(int first, int cells, int per)
-        {
-            var positions = new List<Vector3>();
-            var uvs = new List<Vector2>();
-            for (var y = 0; y <= cells; y++)
-            for (var x = 0; x <= cells; x++)
-            {
-                var uv = new Vector2(first + x, first + y) / per;
-                uvs.Add(uv);
-                positions.Add(uv);
-            }
-            var triangles = new List<int>();
-            for (var y = 0; y < cells; y++)
-            for (var x = 0; x < cells; x++)
-            {
-                var i = y * (cells + 1) + x;
-                triangles.AddRange(new[] { i, i + cells + 1, i + 1, i + 1, i + cells + 1, i + cells + 2 });
-            }
-            var mesh = Keep(new Mesh());
-            mesh.SetVertices(positions);
-            mesh.SetUVs(0, uvs);
-            mesh.SetTriangles(triangles, 0);
-            mesh.RecalculateNormals();
-            return mesh;
-        }
 
         // Processes the avatar in place, on the ambient platform, which is VRChat's in a VRChat project.
         static List<ErrorContext> Build(GameObject avatar) =>
@@ -880,33 +793,7 @@ namespace UVWizard.NDMF.Tests
         static Material[] Materials(GameObject avatar) =>
             avatar.GetComponentsInChildren<Renderer>().SelectMany(r => r.sharedMaterials).ToArray();
 
-        T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
-        }
-
-        Texture2D Gradient(int size, int seed)
-        {
-            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: false)
-                { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear });
-            var texels = new Color32[size * size];
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-                texels[y * size + x] = new Color32((byte)(40 + 180 * x / size), (byte)(40 + 180 * y / size),
-                    (byte)(60 + 50 * seed), 255);
-            texture.SetPixels32(texels);
-            texture.Apply();
-            return texture;
-        }
-
         Material Standard(Texture2D texture) => Keep(new Material(Shader.Find("Standard")) { mainTexture = texture });
-
-        static (Vector3[] Positions, Vector2[] Uvs) Quad(float z, float uMin, float vMin, float uMax, float vMax)
-        {
-            var uvs = new[] { new Vector2(uMin, vMin), new Vector2(uMax, vMin), new Vector2(uMin, vMax), new Vector2(uMax, vMax) };
-            return (uvs.Select(uv => new Vector3(uv.x, uv.y, z)).ToArray(), uvs);
-        }
 
         Mesh Mesh(params (Vector3[] Positions, Vector2[] Uvs)[][] submeshes)
         {

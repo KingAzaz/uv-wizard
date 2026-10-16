@@ -15,17 +15,8 @@ using Object = UnityEngine.Object;
 namespace UVWizard.Core.Tests.Pipeline
 {
     [Category("GPU")]
-    public partial class AvatarBakerTests
+    public partial class AvatarBakerTests : BakeFixture
     {
-        readonly List<Object> created = new List<Object>();
-
-        [SetUp]
-        public void RequireGpu()
-        {
-            if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
-                Assert.Ignore("Baking renders on the GPU, and this editor has no graphics device (-nographics).");
-        }
-
         [TearDown]
         public void DestroyObjects()
         {
@@ -1045,27 +1036,6 @@ namespace UVWizard.Core.Tests.Pipeline
             public void Dispose() => Disposed = true;
         }
 
-        T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
-        }
-
-        // A readable sRGB texture whose colour changes smoothly across it, differently per seed.
-        Texture2D Gradient(int size, int seed)
-        {
-            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: false)
-                { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear });
-            var texels = new Color32[size * size];
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-                texels[y * size + x] = new Color32((byte)(40 + 180 * x / size), (byte)(40 + 180 * y / size),
-                    (byte)(60 + 50 * seed), 255);
-            texture.SetPixels32(texels);
-            texture.Apply();
-            return texture;
-        }
-
         Material Standard(Texture2D texture, Color tint, Vector4? scaleOffset = null)
         {
             var material = Keep(new Material(Shader.Find("Standard")) { mainTexture = texture, color = tint });
@@ -1084,49 +1054,12 @@ namespace UVWizard.Core.Tests.Pipeline
             return material;
         }
 
-        // Turns on Standard's normal map at the given strength. Standard samples it with _MainTex_ST.
-        static Material NormalMapped(Material material, Texture2D map, float strength)
-        {
-            material.EnableKeyword("_NORMALMAP");
-            material.SetTexture("_BumpMap", map);
-            material.SetFloat("_BumpScale", strength);
-            return material;
-        }
-
-        // A readable linear normal map, in Unity's XYZ layout, whose normal tilts smoothly and differently along each
-        // axis, and differently per seed.
-        Texture2D NormalGradient(int size, int seed) => NormalMap(size, (u, v) =>
-            new Vector3(0.6f * (u - 0.3f) + 0.1f * seed, 0.5f * (v - 0.6f), 1).normalized, FilterMode.Bilinear);
-
         // The XYZ normal map rewritten in place in Unity's mobile DXT5nm-style layout, (y, y, y, x).
         static Texture2D InAgLayout(Texture2D map)
         {
             map.SetPixels(map.GetPixels().Select(t => new Color(t.g, t.g, t.g, t.r)).ToArray());
             map.Apply();
             return map;
-        }
-
-        // A point-filtered normal map whose cells, cell texels wide, tilt left and right in turn.
-        Texture2D NormalChecker(int size, int cell) => NormalMap(size, (u, v) =>
-        {
-            var parity = (int)(u * size) / cell + (int)(v * size) / cell;
-            return new Vector3(parity % 2 == 0 ? 0.5f : -0.5f, 0, 1).normalized;
-        }, FilterMode.Point);
-
-        Texture2D NormalMap(int size, Func<float, float, Vector3> normal, FilterMode filter)
-        {
-            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: true)
-                { wrapMode = TextureWrapMode.Clamp, filterMode = filter });
-            var texels = new Color[size * size];
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-            {
-                var n = normal((x + 0.5f) / size, (y + 0.5f) / size);
-                texels[y * size + x] = new Color(n.x * 0.5f + 0.5f, n.y * 0.5f + 0.5f, n.z * 0.5f + 0.5f, 1);
-            }
-            texture.SetPixels(texels);
-            texture.Apply();
-            return texture;
         }
 
         // A quad filling the view, its UVs covering the given rectangle, with normals and tangents.
@@ -1208,55 +1141,6 @@ namespace UVWizard.Core.Tests.Pipeline
                 AssertNormalClose(Decoded(expected[i]), Decoded(actual[i]), $"{what}, pixel ({i % 64}, {i / 64})");
             }
             Assert.That(compared, Is.GreaterThan(1000), $"{what}: pixels drawn in both");
-        }
-
-        // A quad at depth z covering the given UV rectangle, as four corners: position = UV.
-        static (Vector3[] Positions, Vector2[] Uvs) Quad(float z, float uMin, float vMin, float uMax, float vMax)
-        {
-            var uvs = new[] { new Vector2(uMin, vMin), new Vector2(uMax, vMin), new Vector2(uMin, vMax), new Vector2(uMax, vMax) };
-            return (uvs.Select(uv => new Vector3(uv.x, uv.y, z)).ToArray(), uvs);
-        }
-
-        // One connected island: a cells x cells grid of quads, sharing their corners, from UV first/per to
-        // (first + cells)/per on each axis.
-        Mesh Grid(int first, int cells, int per)
-        {
-            var positions = new List<Vector3>();
-            var uvs = new List<Vector2>();
-            for (var y = 0; y <= cells; y++)
-            for (var x = 0; x <= cells; x++)
-            {
-                var uv = new Vector2(first + x, first + y) / per;
-                uvs.Add(uv);
-                positions.Add(uv);
-            }
-            var triangles = new List<int>();
-            for (var y = 0; y < cells; y++)
-            for (var x = 0; x < cells; x++)
-            {
-                var i = y * (cells + 1) + x;
-                triangles.AddRange(new[] { i, i + cells + 1, i + 1, i + 1, i + cells + 1, i + cells + 2 });
-            }
-            var mesh = Keep(new Mesh());
-            mesh.SetVertices(positions);
-            mesh.SetUVs(0, uvs);
-            mesh.SetTriangles(triangles, 0);
-            mesh.RecalculateNormals();
-            return mesh;
-        }
-
-        // A point-filtered black and white checker whose cells are cell texels wide.
-        Texture2D Checker(int size, int cell)
-        {
-            var texture = Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false, linear: false)
-                { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point });
-            var texels = new Color32[size * size];
-            for (var y = 0; y < size; y++)
-            for (var x = 0; x < size; x++)
-                texels[y * size + x] = (x / cell + y / cell) % 2 == 0 ? new Color32(255, 255, 255, 255) : new Color32(0, 0, 0, 255);
-            texture.SetPixels32(texels);
-            texture.Apply();
-            return texture;
         }
 
         // One submesh per array of quads, two triangles each.
@@ -1348,9 +1232,6 @@ namespace UVWizard.Core.Tests.Pipeline
             var uv = Vector2.Scale(centroid.Uv, material.mainTextureScale) + material.mainTextureOffset;
             return ((Texture2D)material.GetTexture("_BumpMap")).GetPixelBilinear(uv.x, uv.y);
         }
-
-        // A texel in Unity's XYZ layout: x, y and z in red, green and blue.
-        static Vector3 Decoded(Color texel) => new Vector3(texel.r * 2 - 1, texel.g * 2 - 1, texel.b * 2 - 1);
 
         // A texel in Unity's mobile DXT5nm-style layout: x in alpha, y in green, z rebuilt.
         static Vector3 DecodedAg(Color texel)

@@ -3,6 +3,7 @@
     "rootNamespace": "UVWizard.NDMF.Tests",
     "references": [
         "UVWizard.Core.Editor",
+        "UVWizard.Core.Editor.Tests",
         "UVWizard.NDMF.Editor",
         "UVWizard.Runtime",
         "nadena.dev.ndmf",
