@@ -414,13 +414,164 @@ namespace UVWizard.Core.Tests.LilToon
             material.SetFloat("_EmissionUseGrad", 1);
             material.SetFloat("_EmissionBlendMode", 0);
             material.SetVector("_EmissionBlink", new Vector4(1, 0, 3.141593f, 0));
+            material.SetFloat("_UseAudioLink", 1);
+            material.SetFloat("_AudioLink2Emission", 1);
 
             Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
         }
 
-        Material EmittingMaterial()
+        // Lite adds blink x _TriMask.b x colour.rgb x map.rgb: no _EmissionBlend and no alpha
+        // (lil_common_frag.hlsl, the LIL_LITE lilEmission).
+        [TestCase(0.5f)]
+        [TestCase(0f)]
+        public void LiteEmissionIgnoresTheColoursAlpha(float alpha)
+        {
+            var material = EmittingMaterial(Lite);
+            material.SetColor("_EmissionColor", new Color(1f, 1f, 1f, alpha));
+
+            var emission = SourceShaderReader.Read(material).Emission;
+
+            Assert.That(emission, Is.Not.Null);
+            AssertColour(Color.white, emission!.Tint);
+        }
+
+        [Test]
+        public void LiteEmissionMaskedByTheTriMaskIsFlagged()
+        {
+            var material = EmittingMaterial(Lite);
+            material.SetTexture("_TriMask", Texture());
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission"));
+        }
+
+        [Test]
+        public void TheTriMaskIsIgnoredWithoutLiteEmission()
+        {
+            var unset = EmittingMaterial(Lite);
+            var off = Material(Lite);
+            off.SetTexture("_TriMask", Texture());
+
+            Assert.That(SourceShaderReader.Read(unset).Verdict, Is.EqualTo(MaterialVerdict.Merged), "unset");
+            Assert.That(SourceShaderReader.Read(off).Verdict, Is.EqualTo(MaterialVerdict.Merged), "emission off");
+        }
+
+        // Full lilToon multiplies the map into the colour, then scales the blend by the colour's alpha.
+        [Test]
+        public void AnEmissionMapWithAlphaIsFlagged()
+        {
+            var material = EmittingMaterial();
+            material.SetTexture("_EmissionMap", Texture());
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission"));
+        }
+
+        [Test]
+        public void AnEmissionMapWithoutAlphaOrOnLiteIsntFlagged()
+        {
+            var opaque = EmittingMaterial();
+            opaque.SetTexture("_EmissionMap", Track(new Texture2D(4, 4, TextureFormat.RGB24, false)));
+            var lite = EmittingMaterial(Lite);
+            lite.SetTexture("_EmissionMap", Texture());
+
+            Assert.That(SourceShaderReader.Read(opaque).Verdict, Is.EqualTo(MaterialVerdict.Merged), "no alpha");
+            Assert.That(SourceShaderReader.Read(lite).Verdict, Is.EqualTo(MaterialVerdict.Merged), "Lite");
+        }
+
+        [Test]
+        public void AudioLinkDrivenEmissionIsFlagged()
+        {
+            var material = EmittingMaterial();
+            material.SetFloat("_UseAudioLink", 1);
+            material.SetFloat("_AudioLink2Emission", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Emission"));
+        }
+
+        [TestCase(1, 0)]
+        [TestCase(0, 1)]
+        public void AudioLinkIsIgnoredUnlessItDrivesEmission(int useAudioLink, int toEmission)
+        {
+            var material = EmittingMaterial();
+            material.SetFloat("_UseAudioLink", useAudioLink);
+            material.SetFloat("_AudioLink2Emission", toEmission);
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        // The normal is sampled at fd.uvMain, after lilCalcDoubleSideUV, with the main texture's sampler.
+        [Test]
+        public void ShiftingBackfaceUvsIsFlaggedWhenTheNormalMapDoesntRepeatPerTile()
+        {
+            var material = NormalMapped(Texture());
+            material.SetTextureScale("_BumpMap", new Vector2(0.5f, 1));
+            material.SetFloat("_ShiftBackfaceUV", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Normal"));
+        }
+
+        [Test]
+        public void ShiftingBackfaceUvsIsFlaggedWhenTheNormalMapIsClamped()
+        {
+            var map = Texture();
+            map.wrapModeU = TextureWrapMode.Clamp;
+            var material = NormalMapped(map);
+            material.SetFloat("_ShiftBackfaceUV", 1);
+
+            var reading = SourceShaderReader.Read(material);
+
+            Assert.That(reading.Verdict, Is.EqualTo(MaterialVerdict.Flagged));
+            Assert.That(reading.Reason, Does.StartWith("Normal"));
+        }
+
+        [Test]
+        public void ShiftingBackfaceUvsSamplesTheNormalMapWithTheMainTexturesWrapMode()
+        {
+            var map = Texture();
+            map.wrapModeU = TextureWrapMode.Clamp;
+            var material = NormalMapped(map);
+            material.SetTexture("_MainTex", Texture());
+            material.SetFloat("_ShiftBackfaceUV", 1);
+
+            Assert.That(SourceShaderReader.Read(material).Verdict, Is.EqualTo(MaterialVerdict.Merged));
+        }
+
+        [Test]
+        public void ShiftingBackfaceUvsIsIgnoredWhenTheNormalMapRepeatsPerTileOrTheShiftIsOff()
+        {
+            var repeats = NormalMapped(Texture());
+            repeats.SetFloat("_ShiftBackfaceUV", 1);
+            var off = NormalMapped(Texture());
+            off.SetTextureScale("_BumpMap", new Vector2(0.5f, 1));
+
+            Assert.That(SourceShaderReader.Read(repeats).Verdict, Is.EqualTo(MaterialVerdict.Merged), "repeats");
+            Assert.That(SourceShaderReader.Read(off).Verdict, Is.EqualTo(MaterialVerdict.Merged), "shift off");
+        }
+
+        Material NormalMapped(Texture2D map)
         {
             var material = Material(LilToon);
+            material.SetFloat("_UseBumpMap", 1);
+            material.SetTexture("_BumpMap", map);
+            return material;
+        }
+
+        const string Lite = "Hidden/lilToonLite";
+
+        Material EmittingMaterial(string shader = LilToon)
+        {
+            var material = Material(shader);
             material.SetFloat("_UseEmission", 1);
             return material;
         }

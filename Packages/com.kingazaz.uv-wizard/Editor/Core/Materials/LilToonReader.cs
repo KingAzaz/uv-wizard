@@ -2,7 +2,9 @@
 #nullable enable
 
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 
 namespace UVWizard.Core.Materials
 {
@@ -27,6 +29,9 @@ namespace UVWizard.Core.Materials
 
         // _EmissionBlendMode: Normal 0, Add 1, Screen 2, Multiply 3. Toon Standard only adds emission.
         const int AddBlend = 1;
+
+        // lilToon Lite, compiled with LIL_LITE.
+        const string Lite = "Hidden/lilToonLite";
 
         // lilToon's add-on shaders, which draw an extra layer over another material slot's surface.
         const string AddOns = "_lil/[Optional] ";
@@ -101,8 +106,12 @@ namespace UVWizard.Core.Materials
             if ((albedo.Texture != null || normal != null) &&
                 Vector(material, "_MainTex_ScrollRotate", Vector4.zero) != Vector4.zero)
                 yield return "Albedo scrolls or rotates: the UV animation isn't baked.";
-            if (ShiftsBackfaceTexels(material, albedo))
+            if (ShiftsBackfaceTexels(material, albedo.Texture, albedo.ScaleOffset, albedo.Texture))
                 yield return "Albedo shifts backface UVs: backfaces bake the front's texels.";
+            // The normal is sampled with the main texture's sampler, so its wrap mode decides.
+            if (normal != null &&
+                ShiftsBackfaceTexels(material, normal.Texture, normal.ScaleOffset, albedo.Texture ?? normal.Texture))
+                yield return "Normal shifts backface UVs: backfaces bake the front's normals.";
             if (Float(material, "_UseBump2ndMap", 0) > 0.5f && Texture(material, "_Bump2ndMap") != null)
                 yield return "Normal 2nd isn't baked: only the first normal map is.";
             if (emission != null)
@@ -122,27 +131,48 @@ namespace UVWizard.Core.Materials
                     yield return "Emission has a gradation: the gradation isn't baked.";
                 if (Float(material, "_EmissionFluorescence", 0) > 0)
                     yield return "Emission is fluorescent: it's baked as if lit.";
+                if (Float(material, "_UseAudioLink", 0) > 0.5f && Float(material, "_AudioLink2Emission", 0) > 0.5f)
+                    yield return "Emission follows AudioLink: it's baked steady.";
+                if (IsLite(material) && Texture(material, "_TriMask") != null)
+                    yield return "Emission is masked by the TriMask: the mask isn't baked.";
+                if (!IsLite(material) && emission.Texture != null && HasAlpha(emission.Texture))
+                    yield return "Emission map has alpha: lilToon scales the glow by it, the bake doesn't.";
             }
             if (Float(material, "_UseEmission2nd", 0) > 0.5f)
                 yield return "Emission 2nd isn't baked: only the first emission is.";
         }
 
-        // lilToon moves backface UVs one tile along U, which samples other texels unless the main texture
-        // repeats a whole number of times per tile.
-        static bool ShiftsBackfaceTexels(Material material, ChannelSource albedo) =>
-            Float(material, "_ShiftBackfaceUV", 0) > 0.5f && albedo.Texture != null &&
-            (albedo.ScaleOffset.x != Mathf.Round(albedo.ScaleOffset.x) ||
-             albedo.Texture.wrapModeU != TextureWrapMode.Repeat);
+        // lilToon moves backface UVs one tile along U, which samples other texels unless the texture repeats a
+        // whole number of times per tile. The sampler's texture sets the wrap mode.
+        static bool ShiftsBackfaceTexels(Material material, Texture? texture, Vector4 scaleOffset,
+            Texture? sampler) =>
+            Float(material, "_ShiftBackfaceUV", 0) > 0.5f && texture != null &&
+            (scaleOffset.x != Mathf.Round(scaleOffset.x) || sampler!.wrapModeU != TextureWrapMode.Repeat);
+
+        static bool IsLite(Material material) => material.shader.name.StartsWith(Lite);
+
+        // An imported texture has alpha when its importer keeps some; the compressed format alone can't say,
+        // since DXT1 declares alpha it may not use.
+        static bool HasAlpha(Texture texture)
+        {
+            if (AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(texture)) is TextureImporter importer)
+                return importer.alphaSource == TextureImporterAlphaSource.FromGrayScale ||
+                       importer.alphaSource == TextureImporterAlphaSource.FromInput &&
+                       importer.DoesSourceTextureHaveAlpha();
+            return GraphicsFormatUtility.HasAlphaChannel(texture.graphicsFormat);
+        }
 
         // _MainTexHSVG's neutral value: no hue shift, and saturation, value and gamma of 1.
         static readonly Vector4 NoHsvg = new Vector4(0, 1, 1, 1);
 
-        // lilToon adds emission colour x map x blend, with the colour's alpha folded into the blend.
+        // lilToon adds emission colour x map x blend, with the colour's alpha folded into the blend. Lite adds
+        // colour x map, with no blend and no alpha.
         static ChannelSource? Emission(Material material)
         {
             if (Float(material, "_UseEmission", 0) < 0.5f) return null;
             var colour = Colour(material, "_EmissionColor", Color.white);
-            var tint = MaterialProperties.ScaleLinear(colour, Float(material, "_EmissionBlend", 1) * colour.a);
+            var strength = IsLite(material) ? 1 : Float(material, "_EmissionBlend", 1) * colour.a;
+            var tint = MaterialProperties.ScaleLinear(colour, strength);
             if (tint.maxColorComponent <= 0) return null;
             var map = Texture(material, "_EmissionMap");
             // Without a map the shader samples its white default, which is the same from every UV channel.
