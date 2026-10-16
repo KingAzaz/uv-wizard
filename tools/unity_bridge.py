@@ -1,4 +1,4 @@
-"""A minimal client for the MCP for Unity editor bridge (v10.2.0, stdio transport).
+"""A minimal client for the MCP for Unity editor bridge (v10.3.0, stdio transport).
 
 The bridge listens on localhost (port 6400 unless the status file says
 otherwise). After a one-line WELCOME handshake, each message is a frame: an

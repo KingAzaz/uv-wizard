@@ -40,12 +40,13 @@ Both stand down while another session in this repo is running, another run holds
     - It samples a bake about a quarter texel away. Keep a colour test's sample points over a texel from any sharp edge in its source texture, such as a Repeat gradient's seam.
     - An `Assume.That` that holds in the editor can fail there (#138's mesh metrics did). The test then reads Inconclusive, and the test runner fails the job on it. The job summary lists each Inconclusive test with its message.
 - **This checkout is Unity's.** A `git switch` here changes the code under the open editor. Do docs-only or other non-Unity work in a `git worktree` (e.g. `../uv-wizard-docs`).
-- **Unity MCP:** MCP for Unity (CoplayDev) **v10.2.0**. The package is in the dev project's manifest.
-  - Each agent has its own server config: Claude Code in `.mcp.json`, Codex in `.codex/config.toml`. Both are stdio, `mcpforunityserver==10.2.0` via uvx, with telemetry off.
+- **Unity MCP:** MCP for Unity (CoplayDev) **v10.3.0**. The package is in the dev project's manifest.
+  - Each agent has its own server config: Claude Code in `.mcp.json`, Codex in `.codex/config.toml`. Both are stdio, `mcpforunityserver==10.3.0` via uvx, with telemetry off, and pass `--default-instance uv-wizard`.
+  - A second editor, KingAzaz's `World` project, is often open too, and each editor takes its own bridge port (`World` may hold 6400). The server's default instance keeps calls on the dev project. After `set_active_instance`, always name `uv-wizard`. `tools/unity_bridge.py` picks the port from the `uv-wizard` status file in `~/.unity-mcp/`.
   - Both configs hold machine-specific paths, so they're excluded locally via `.git/info/exclude`, not committed.
   - In Unity, **Window → MCP for Unity** uses the **stdio** transport. Edit the agent config files by hand: the window's **"Configure"** buttons overwrite them with unpinned entries.
   - MCP servers load only when a session starts.
-  - After a script recompile, the bridge (port 6400) drops for a few seconds.
+  - After a script recompile, the bridge drops for a few seconds.
   - `refresh_unity` can report the editor ready before the recompile starts, or without compiling at all. After editing scripts, touch a marker file, refresh, and wait until the DLL of the assembly you edited (not its test assembly, which an internals-only change doesn't rebuild) in the dev project's `Library/ScriptAssemblies/` is newer than the marker. Then call `set_active_instance` again and run tests. Otherwise they fail with "No Unity Editor instances found" or run against the old code.
   - A file restored from a copy (a mutation-check backup, `git stash pop`, `cp -p`) can keep a timestamp Unity's refresh skips. `touch` it before `refresh_unity`, or the tests run the old compiled code.
   - If a tool reports "No Unity Editor instances found" while Unity is running, read `mcpforunity://instances` and call `set_active_instance` again.
