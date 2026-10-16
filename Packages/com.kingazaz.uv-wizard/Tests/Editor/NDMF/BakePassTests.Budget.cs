@@ -119,9 +119,9 @@ namespace UVWizard.NDMF.Tests
         [TestCase(UVWizardAvatar.Preset.Medium, 25, 2)]
         public void EachPresetSetsItsBudgetAndSlots(UVWizardAvatar.Preset preset, float megabytes, int slots)
         {
-            var budget = Options(preset).Budget!;
+            var target = Options(preset).Preset!;
 
-            Assert.That((budget.Megabytes, budget.MaterialSlots), Is.EqualTo((megabytes, slots)));
+            Assert.That((target.BudgetMegabytes, target.MaterialSlots), Is.EqualTo((megabytes, slots)));
         }
 
         BakeOptions Options(UVWizardAvatar.Preset preset)

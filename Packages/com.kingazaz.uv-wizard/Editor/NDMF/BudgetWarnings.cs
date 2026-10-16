@@ -18,40 +18,40 @@ namespace UVWizard.NDMF
         /// </summary>
         public static void Report(ReportDraft draft)
         {
-            if (draft.Result is not { Budget: { } budget } result || draft.After is not { } after) return;
+            if (draft.Result is not { Preset: { } preset } result || draft.After is not { } after) return;
 
             var megabytes = $"{after.TextureMegabytes:0.##}";
-            switch (BudgetCheck.Texture(after.TextureMegabytes, budget, result))
+            switch (BudgetCheck.Texture(after.TextureMegabytes, preset, result))
             {
                 case TextureOutcome.Over:
                     ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudget,
-                        megabytes, $"{budget.Megabytes:0.##}");
+                        megabytes, $"{preset.BudgetMegabytes:0.##}");
                     break;
                 case TextureOutcome.OverLowerRank:
                     var sizedFor = result.SizedFor!;
                     ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverBudgetLowerRank,
-                        megabytes, $"{budget.Megabytes:0.##}", RankName(sizedFor), $"{sizedFor.Megabytes:0.##}");
+                        megabytes, $"{preset.BudgetMegabytes:0.##}", RankName(sizedFor), $"{sizedFor.BudgetMegabytes:0.##}");
                     break;
                 case TextureOutcome.OverEveryRank:
                     ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.OverEveryBudget,
-                        megabytes, $"{budget.Megabytes:0.##}", $"{Budget.Ranks[Budget.Ranks.Count - 1].Megabytes:0.##}");
+                        megabytes, $"{preset.BudgetMegabytes:0.##}", $"{Preset.Ranks[Preset.Ranks.Count - 1].BudgetMegabytes:0.##}");
                     break;
             }
 
-            var slots = BudgetCheck.Slots(after.MaterialSlots, budget, draft.Leftovers ?? System.Array.Empty<LeftoverRenderer>());
+            var slots = BudgetCheck.Slots(after.MaterialSlots, preset, draft.Leftovers ?? System.Array.Empty<LeftoverRenderer>());
             if (slots.Outcome == SlotOutcome.Over)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.NonFatal, Messages.TooManySlots,
-                    after.MaterialSlots, budget.MaterialSlots);
+                    after.MaterialSlots, preset.MaterialSlots);
             else if (slots.Outcome == SlotOutcome.OverOnlyForMmdBody)
                 ErrorReport.ReportError(Messages.Localizer, ErrorSeverity.Information, Messages.SlotsKeptForMmd,
-                    after.MaterialSlots, budget.MaterialSlots, slots.MmdBody!.Value.Name);
+                    after.MaterialSlots, preset.MaterialSlots, slots.MmdBody!.Value.Name);
         }
 
         // The preset's rank as creators read it.
-        static string RankName(Budget budget)
+        static string RankName(Preset preset)
         {
-            for (var r = 0; r < Budget.Ranks.Count; r++)
-                if (Budget.Ranks[r] == budget) return Messages.Text(ReportText.Rank(PerformanceRank.Excellent + r));
+            for (var r = 0; r < Preset.Ranks.Count; r++)
+                if (Preset.Ranks[r] == preset) return Messages.Text(ReportText.Rank(PerformanceRank.Excellent + r));
             return Messages.Text(ReportText.NotMeasured);
         }
     }

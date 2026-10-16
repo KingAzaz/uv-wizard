@@ -275,21 +275,21 @@ namespace UVWizard.Core.Tests.Pipeline
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
                 Standard(Gradient(1024, 0), Color.white), repeated);
 
-            var result = Bake(Converting(compress: true, budget: Budget.Excellent), renderer);
+            var result = Bake(Converting(compress: true, preset: Preset.Excellent), renderer);
 
             var converted = (Texture2D)renderer.sharedMaterials[1].mainTexture;
             Assert.That(converted.format, Is.EqualTo(TextureFormat.ASTC_6x6));
             Assert.That(converted.width, Is.EqualTo(2048));
             Assert.That(result.Atlas!.width, Is.EqualTo(1024));
-            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Budget.Excellent.Bytes));
+            Assert.That(result.TextureBytes, Is.LessThanOrEqualTo(Preset.Excellent.BudgetBytes));
         }
 
         // Standard as the merged shader, converting every material whose shader isn't one of the given ones.
-        static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Budget? budget = null,
+        static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Preset? preset = null,
             string[]? mobileShaders = null, Channels channels = Channels.All, string[]? representativeProperties = null,
             NormalEncoding normalEncoding = NormalEncoding.RGorAG) =>
             new BakeOptions(Shader.Find("Standard"), atlasSize, padding: 0, compress, normalMapKeyword: "_NORMALMAP",
-                normalEncoding: normalEncoding, budget: budget, channels: channels, representativeProperties: representativeProperties,
+                normalEncoding: normalEncoding, preset: preset, channels: channels, representativeProperties: representativeProperties,
                 mobileShaders: mobileShaders ?? System.Array.Empty<string>());
     }
 }

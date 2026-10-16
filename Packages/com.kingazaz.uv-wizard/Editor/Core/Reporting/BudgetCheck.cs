@@ -14,26 +14,26 @@ namespace UVWizard.Core.Reporting
     {
         /// <summary>Checks the material slots against the budget.</summary>
         /// <param name="slots">The material slots the SDK counts at the end of the build.</param>
-        /// <param name="budget">The preset's budget.</param>
+        /// <param name="preset">The preset, whose budget it checks against.</param>
         /// <param name="leftovers">The renderers left beside the main skinned mesh, and why.</param>
-        public static SlotCheck Slots(int slots, Budget budget, IReadOnlyList<LeftoverRenderer> leftovers)
+        public static SlotCheck Slots(int slots, Preset preset, IReadOnlyList<LeftoverRenderer> leftovers)
         {
-            if (slots <= budget.MaterialSlots) return new SlotCheck(SlotOutcome.Within, null);
+            if (slots <= preset.MaterialSlots) return new SlotCheck(SlotOutcome.Within, null);
             foreach (var leftover in leftovers)
                 if (leftover.Reason == LeftoverReason.MmdBody
-                    && slots - leftover.Renderer.sharedMaterials.Length <= budget.MaterialSlots)
+                    && slots - leftover.Renderer.sharedMaterials.Length <= preset.MaterialSlots)
                     return new SlotCheck(SlotOutcome.OverOnlyForMmdBody, leftover);
             return new SlotCheck(SlotOutcome.Over, null);
         }
 
         /// <summary>Checks the texture memory against the budget.</summary>
         /// <param name="megabytes">The texture memory the SDK counts at the end of the build, in its megabytes.</param>
-        /// <param name="budget">The preset's budget.</param>
+        /// <param name="preset">The preset, whose budget it checks against.</param>
         /// <param name="result">The bake, which says what the atlas was sized for.</param>
-        public static TextureOutcome Texture(float megabytes, Budget budget, BakeResult result)
+        public static TextureOutcome Texture(float megabytes, Preset preset, BakeResult result)
         {
-            if (megabytes <= budget.Megabytes) return TextureOutcome.Within;
-            if (result.MergedMaterial == null || result.SizedFor == budget) return TextureOutcome.Over;
+            if (megabytes <= preset.BudgetMegabytes) return TextureOutcome.Within;
+            if (result.MergedMaterial == null || result.SizedFor == preset) return TextureOutcome.Over;
             return result.SizedFor != null ? TextureOutcome.OverLowerRank : TextureOutcome.OverEveryRank;
         }
     }

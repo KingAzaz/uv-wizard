@@ -27,7 +27,7 @@ namespace UVWizard.Core.Tests.Reporting
         [Test]
         public void MoreSlotsThanTheBudgetAllowsAreOver()
         {
-            var check = BudgetCheck.Slots(2, Budget.Good, Array.Empty<LeftoverRenderer>());
+            var check = BudgetCheck.Slots(2, Preset.Good, Array.Empty<LeftoverRenderer>());
 
             Assert.That(check.Outcome, Is.EqualTo(SlotOutcome.Over));
             Assert.That(check.MmdBody, Is.Null);
@@ -36,7 +36,7 @@ namespace UVWizard.Core.Tests.Reporting
         [Test]
         public void SlotsWithinTheBudgetAreWithin()
         {
-            Assert.That(BudgetCheck.Slots(2, Budget.Medium, Array.Empty<LeftoverRenderer>()).Outcome, Is.EqualTo(SlotOutcome.Within));
+            Assert.That(BudgetCheck.Slots(2, Preset.Medium, Array.Empty<LeftoverRenderer>()).Outcome, Is.EqualTo(SlotOutcome.Within));
         }
 
         [Test]
@@ -45,7 +45,7 @@ namespace UVWizard.Core.Tests.Reporting
             // The merged mesh and the Body share the merged material, and the SDK counts a slot on each.
             var body = new LeftoverRenderer(Skinned("Body", slots: 1), LeftoverReason.MmdBody);
 
-            var check = BudgetCheck.Slots(2, Budget.Good, new[] { body });
+            var check = BudgetCheck.Slots(2, Preset.Good, new[] { body });
 
             Assert.That(check.Outcome, Is.EqualTo(SlotOutcome.OverOnlyForMmdBody));
             Assert.That(check.MmdBody, Is.EqualTo(body));
@@ -56,7 +56,7 @@ namespace UVWizard.Core.Tests.Reporting
         {
             var body = new LeftoverRenderer(Skinned("Body", slots: 2), LeftoverReason.MmdBody);
 
-            Assert.That(BudgetCheck.Slots(3, Budget.Good, new[] { body }).Outcome, Is.EqualTo(SlotOutcome.OverOnlyForMmdBody));
+            Assert.That(BudgetCheck.Slots(3, Preset.Good, new[] { body }).Outcome, Is.EqualTo(SlotOutcome.OverOnlyForMmdBody));
         }
 
         [Test]
@@ -65,7 +65,7 @@ namespace UVWizard.Core.Tests.Reporting
             // An excluded material's slot is over Good's one besides the Body's.
             var body = new LeftoverRenderer(Skinned("Body", slots: 1), LeftoverReason.MmdBody);
 
-            var check = BudgetCheck.Slots(3, Budget.Good, new[] { body });
+            var check = BudgetCheck.Slots(3, Preset.Good, new[] { body });
 
             Assert.That(check.Outcome, Is.EqualTo(SlotOutcome.Over));
             Assert.That(check.MmdBody, Is.Null);
@@ -80,49 +80,49 @@ namespace UVWizard.Core.Tests.Reporting
         {
             var apart = new LeftoverRenderer(Skinned("Body", slots: 1), (LeftoverReason)Enum.Parse(typeof(LeftoverReason), reason));
 
-            Assert.That(BudgetCheck.Slots(2, Budget.Good, new[] { apart }).Outcome, Is.EqualTo(SlotOutcome.Over));
+            Assert.That(BudgetCheck.Slots(2, Preset.Good, new[] { apart }).Outcome, Is.EqualTo(SlotOutcome.Over));
         }
 
         [Test]
         public void TextureMemoryOverTheBudgetWithNoAtlasIsOver()
         {
-            Assert.That(BudgetCheck.Texture(10.5f, Budget.Excellent, Baked(merged: false, Budget.Excellent, sizedFor: null)),
+            Assert.That(BudgetCheck.Texture(10.5f, Preset.Excellent, Baked(merged: false, Preset.Excellent, sizedFor: null)),
                 Is.EqualTo(TextureOutcome.Over));
         }
 
         [Test]
         public void TextureMemoryOverTheBudgetWithTheAtlasSizedForALowerRankSaysSo()
         {
-            Assert.That(BudgetCheck.Texture(17, Budget.Excellent, Baked(merged: true, Budget.Excellent, sizedFor: Budget.Good)),
+            Assert.That(BudgetCheck.Texture(17, Preset.Excellent, Baked(merged: true, Preset.Excellent, sizedFor: Preset.Good)),
                 Is.EqualTo(TextureOutcome.OverLowerRank));
         }
 
         [Test]
         public void TextureMemoryOverTheBudgetWithTheAtlasAtItsFinestSizesIsOverEveryRank()
         {
-            Assert.That(BudgetCheck.Texture(26, Budget.Excellent, Baked(merged: true, Budget.Excellent, sizedFor: null)),
+            Assert.That(BudgetCheck.Texture(26, Preset.Excellent, Baked(merged: true, Preset.Excellent, sizedFor: null)),
                 Is.EqualTo(TextureOutcome.OverEveryRank));
         }
 
         [Test]
         public void TextureMemoryOverTheBudgetTheAtlasWasSizedForIsOver()
         {
-            Assert.That(BudgetCheck.Texture(10.5f, Budget.Excellent, Baked(merged: true, Budget.Excellent, sizedFor: Budget.Excellent)),
+            Assert.That(BudgetCheck.Texture(10.5f, Preset.Excellent, Baked(merged: true, Preset.Excellent, sizedFor: Preset.Excellent)),
                 Is.EqualTo(TextureOutcome.Over));
         }
 
         [Test]
         public void TextureMemoryAtTheBudgetIsWithin()
         {
-            Assert.That(BudgetCheck.Texture(10, Budget.Excellent, Baked(merged: true, Budget.Excellent, sizedFor: Budget.Excellent)),
+            Assert.That(BudgetCheck.Texture(10, Preset.Excellent, Baked(merged: true, Preset.Excellent, sizedFor: Preset.Excellent)),
                 Is.EqualTo(TextureOutcome.Within));
         }
 
-        // A bake aiming for the budget, which merged slots into one material or not, with its atlas sized for sizedFor.
-        BakeResult Baked(bool merged, Budget budget, Budget? sizedFor) =>
+        // A bake aiming for the preset, which merged slots into one material or not, with its atlas sized for sizedFor.
+        BakeResult Baked(bool merged, Preset preset, Preset? sizedFor) =>
             new BakeResult(true, merged ? Keep(new Material(Shader.Find("Standard"))) : null, null, null,
                     Array.Empty<(Mesh, Mesh)>(), Array.Empty<SlotNote>(), Array.Empty<SlotNote>())
-                .Measured(Array.Empty<Renderer>(), budget, sizedFor);
+                .Measured(Array.Empty<Renderer>(), preset, sizedFor);
 
         // A skinned renderer with the given number of material slots.
         SkinnedMeshRenderer Skinned(string name, int slots)

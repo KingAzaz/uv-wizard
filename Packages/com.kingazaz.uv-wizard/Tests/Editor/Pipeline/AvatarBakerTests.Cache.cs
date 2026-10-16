@@ -134,8 +134,8 @@ namespace UVWizard.Core.Tests.Pipeline
         (BakeOptions, Renderer) Variant(string change, bool changed)
         {
             BakeOptions Options(int padding = 8, bool compress = true, Channels channels = Channels.All,
-                Budget? budget = null, NormalEncoding encoding = NormalEncoding.RGorAG) =>
-                StandardOptions(padding: padding, compress: compress, channels: channels, budget: budget,
+                Preset? preset = null, NormalEncoding encoding = NormalEncoding.RGorAG) =>
+                StandardOptions(padding: padding, compress: compress, channels: channels, preset: preset,
                     normalEncoding: encoding, cacheDirectory: CacheDirectory);
             Renderer WithMaterial(Action<Material> edit)
             {
@@ -153,7 +153,7 @@ namespace UVWizard.Core.Tests.Pipeline
                 "padding" => (Options(padding: changed ? 4 : 8), Glowing()),
                 "compression" => (Options(compress: !changed), Glowing()),
                 "channels" => (Options(channels: changed ? Channels.Albedo | Channels.Normal : Channels.All), Glowing()),
-                "budget" => (Options(budget: changed ? Budget.Excellent : Budget.Good), Glowing()),
+                "budget" => (Options(preset: changed ? Preset.Excellent : Preset.Good), Glowing()),
                 "normal strength" => (Options(), Glowing(normalStrength: changed ? 0.4f : 0.8f)),
                 "normal encoding" => (Options(encoding: changed ? NormalEncoding.AG : NormalEncoding.RGorAG), Glowing()),
                 "scale and offset" => (Options(), WithMaterial(material => material.mainTextureOffset = new Vector2(0.05f, 0))),

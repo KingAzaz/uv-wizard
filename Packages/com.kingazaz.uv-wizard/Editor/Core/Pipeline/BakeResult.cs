@@ -87,22 +87,23 @@ namespace UVWizard.Core.Pipeline
         /// </summary>
         public long TextureBytes { get; private set; }
 
-        /// <summary>The budget the bake aimed for, or null when it had none.</summary>
-        public Budget? Budget { get; private set; }
+        /// <summary>The preset the bake aimed for, or null when it had none.</summary>
+        public Preset? Preset { get; private set; }
 
         /// <summary>
-        /// The budget the atlas was sized for: <see cref="Budget"/> itself, or, when textures outside the atlas
-        /// already take more than it, the first lower rank's budget they leave room in. Null when no rank's does, so
-        /// the atlas kept its finest sizes, when no atlas was made, or when the bake had no budget.
+        /// The preset whose budget the atlas was sized for: <see cref="Preset"/> itself, or, when textures outside
+        /// the atlas already take more than its budget, the first lower rank whose budget they leave room in. Null
+        /// when no rank's does, so the atlas kept its finest sizes, when no atlas was made, or when the bake had no
+        /// preset.
         /// </summary>
-        public Budget? SizedFor { get; private set; }
+        public Preset? SizedFor { get; private set; }
 
         /// <summary>
-        /// Records the avatar's texture memory after the bake, the budget, and the budget the atlas was sized for.
+        /// Records the avatar's texture memory after the bake, the preset, and the preset the atlas was sized for.
         /// </summary>
-        internal BakeResult Measured(IReadOnlyList<Renderer> renderers, Budget? budget, Budget? sizedFor)
+        internal BakeResult Measured(IReadOnlyList<Renderer> renderers, Preset? preset, Preset? sizedFor)
         {
-            Budget = budget;
+            Preset = preset;
             SizedFor = sizedFor;
             TextureBytes = TextureMemory.Bytes(renderers);
             return this;
