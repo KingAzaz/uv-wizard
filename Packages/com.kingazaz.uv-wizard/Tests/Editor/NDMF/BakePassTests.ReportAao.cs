@@ -64,6 +64,21 @@ namespace UVWizard.NDMF.Tests
             Assert.That(report.Leftovers[0].Reason.ToString(), Is.EqualTo(reason));
         }
 
+        // As in AfterABuildOfACloneClickingAListedRendererSelectsTheOriginalAvatarsRenderer (#98).
+        [Test]
+        public void AfterABuildOfACloneALeftoverRendererLinksToTheOriginalAvatars()
+        {
+            var avatar = MergeableAvatar(addTraceAndOptimize: true);
+            var apart = AddUnmergeable(avatar, Unmergeable.StaticMesh);
+            var clone = UploadClone(avatar);
+
+            BuildAndDestroy(clone);
+
+            var leftover = BakeReports.Latest!.Leftovers.Single();
+            Assert.That(leftover.Renderer == null, "the clone's renderer is gone");
+            Assert.That(BakeReports.Link(leftover.Renderer), Is.SameAs(apart));
+        }
+
         [Test]
         public void ABodyKeptApartForMmdWorldsIsReportedAsInformationNotOverTheSlots()
         {

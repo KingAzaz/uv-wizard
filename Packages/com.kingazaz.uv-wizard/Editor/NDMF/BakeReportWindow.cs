@@ -7,7 +7,9 @@ using UVWizard.Core.Reporting;
 
 namespace UVWizard.NDMF
 {
-    /// <summary>Shows the last bake's report. Clicking a listed material or renderer selects it.</summary>
+    /// <summary>
+    /// Shows the last bake's report. Clicking a listed material or renderer selects it, or its original on the avatar.
+    /// </summary>
     internal sealed class BakeReportWindow : EditorWindow
     {
         Vector2 scroll;
@@ -111,12 +113,14 @@ namespace UVWizard.NDMF
             }
         }
 
-        // A renderer on a build's clone is gone once the build ends; its name still shows.
+        // A renderer on an upload's clone is gone once the build ends, so it links to the original avatar's. One with
+        // no original keeps its name, with the link disabled.
         static void ObjectButton(Object? target, string name)
         {
-            using (new EditorGUI.DisabledScope(target == null))
+            var link = BakeReports.Link(target);
+            using (new EditorGUI.DisabledScope(link == null))
                 if (GUILayout.Button(name, EditorStyles.linkLabel, GUILayout.ExpandWidth(false)))
-                    Select(target);
+                    Select(link);
         }
 
         static void Header(string key)
