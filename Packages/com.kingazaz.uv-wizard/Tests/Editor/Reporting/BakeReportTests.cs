@@ -64,6 +64,22 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
+        public void TheSameReasonWithOtherArgumentsIsListedApart()
+        {
+            var body = Renderer("Body");
+            var glass = Material("Glass");
+            var result = Merged(flagged: new[]
+            {
+                new SlotNote(body, 0, glass, new Reason("Swapped by \"{0}\".", "Red")),
+                new SlotNote(body, 1, glass, new Reason("Swapped by \"{0}\".", "Blue")),
+            });
+
+            var report = new BakeReport("Avatar", false, result, PerformanceRank.Good);
+
+            Assert.That(report.Materials[0].Reason.Lines.Select(line => line.Args[0]), Is.EqualTo(new[] { "Red", "Blue" }));
+        }
+
+        [Test]
         public void TheSameMaterialFlaggedForTwoReasonsGivesBoth()
         {
             var body = Renderer("Body");
