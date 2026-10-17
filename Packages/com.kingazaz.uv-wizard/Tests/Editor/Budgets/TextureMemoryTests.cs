@@ -1,10 +1,8 @@
 #nullable enable
 
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Budgets;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Budgets
 {

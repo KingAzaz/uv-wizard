@@ -3,7 +3,6 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Materials
 {

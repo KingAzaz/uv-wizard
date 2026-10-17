@@ -1,10 +1,8 @@
 using System;
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Baking;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Baking
 {

@@ -1,13 +1,11 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Pipeline;
 using UVWizard.Core.Reporting;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Reporting
 {
