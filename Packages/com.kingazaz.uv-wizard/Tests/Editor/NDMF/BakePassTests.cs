@@ -786,6 +786,24 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
+        public void ALayerRemovedFromAnExtraSlotIsReported()
+        {
+            var outlineShader = Shader.Find("_lil/[Optional] lilToonOutlineOnly");
+            if (outlineShader == null) Assert.Ignore("lilToon isn't in this project.");
+            var avatar = Avatar(withComponent: true);
+            var hat = avatar.transform.Find("Hat").GetComponent<Renderer>();
+            var outline = Keep(new Material(outlineShader));
+            hat.sharedMaterials = hat.sharedMaterials.Append(outline).ToArray();
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(hat.sharedMaterials, Has.No.Member(outline));
+            Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.Removed)));
+            Assert.That(Texts(errors), Has.Some.Contain("can't be drawn on mobile and was removed"));
+        }
+
+        [Test]
         public void AMobileBuildGivesParticleTrailAndLineMaterialsTheSdksParticleShaders()
         {
             // Additive sparks, a multiplied trail, and an alpha-blended line, which draws additively now and says so.

@@ -25,6 +25,7 @@ namespace UVWizard.NDMF
         public const string OverBudget = "uvwizard.over-budget";
         public const string OverBudgetLowerRank = "uvwizard.over-budget-lower-rank";
         public const string OverEveryBudget = "uvwizard.over-every-budget";
+        public const string Removed = "uvwizard.removed";
         public const string SlotsKeptForMmd = "uvwizard.slots-kept-for-mmd";
         public const string TooManySlots = "uvwizard.too-many-slots";
         public const string Unconverted = "uvwizard.unconverted";
@@ -65,6 +66,8 @@ namespace UVWizard.NDMF
                 "preset's {1} MB. Textures that stay outside the atlas, such as excluded materials' own, take more than " +
                 "even the lowest preset's {2} MB, so no atlas size changes the rank, and UV Wizard kept the atlas at full " +
                 "detail. Reduce those textures."),
+            (Removed, "Removed for mobile: {0}"),
+            (Removed + ":description", "{2} This layer can't be drawn on mobile and was removed from {1}."),
             (TooManySlots, "Over the preset's material slots"),
             (TooManySlots + ":description", "After the build, the avatar has {0} material slots, but the preset " +
                 "allows {1}. Each excluded material keeps a slot of its own, and each mesh Avatar Optimizer leaves apart " +
@@ -220,6 +223,8 @@ namespace UVWizard.NDMF
             (ReasonText.SwappedOntoParticles, "An animation swaps it onto this particle, trail or line renderer, and " +
                 "UV Wizard converts only the materials those renderers have themselves."),
             (ReasonText.NoSurface, "It has no surface of its own to convert."),
+            (ReasonText.LayerKeptForAnimation, "An animation swaps materials into its slot, or into one after it, so " +
+                "the slot stays, and its Toon Standard material draws the part of the mesh beneath it plain white."),
             (ReasonText.DrawsAdditively, "Mobile's particle shaders blend only additively or by multiplying, and its " +
                 "blend is neither, so it draws additively now."),
             (ReasonText.AnimatedProperties, "An animation changes this renderer's material properties, which its Toon " +

@@ -130,6 +130,7 @@ namespace UVWizard.Core.Reporting
         // Conversions.
         public const string MeshRenderersOnly = "uvwizard.reason.mesh-renderers-only";
         public const string NoSurface = "uvwizard.reason.no-surface";
+        public const string LayerKeptForAnimation = "uvwizard.reason.layer-kept-for-animation";
         public const string DrawsAdditively = "uvwizard.reason.draws-additively";
         public const string SwappedOntoParticles = "uvwizard.reason.swapped-onto-particles";
         public const string AnimatedProperties = "uvwizard.reason.animated-properties";
