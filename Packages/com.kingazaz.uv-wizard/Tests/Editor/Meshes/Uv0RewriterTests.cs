@@ -286,7 +286,8 @@ namespace UVWizard.Core.Tests.Meshes
         {
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
 
-            Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, LaterToolNeeds.CantKeepSourceUv0));
+            var thrown = Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, LaterToolNeeds.CantKeepSourceUv0));
+            Assert.That(thrown.ParamName, Is.EqualTo("needs"));
         }
 
         [Test]
