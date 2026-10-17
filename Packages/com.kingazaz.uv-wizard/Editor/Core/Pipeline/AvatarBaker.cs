@@ -344,14 +344,14 @@ namespace UVWizard.Core.Pipeline
             var mesh = MeshOf(renderer);
             if (mesh == null) return;
             var rendererNeeds = laterEdits?.Needs(renderer) ?? default;
-            if (!rendererNeeds.KeepsRendererOut) needs[renderer] = rendererNeeds;
+            if (rendererNeeds.KeptOutBecause is not { } keptOutBecause) needs[renderer] = rendererNeeds;
             else
             {
                 var sources = renderer.sharedMaterials;
                 for (var s = 0; s < sources.Length; s++)
                 {
                     if (sources[s] != null && !conversions.Removes(renderer, s))
-                        excluded.Add(new SlotNote(renderer, s, sources[s], rendererNeeds.KeptOutBecause!));
+                        excluded.Add(new SlotNote(renderer, s, sources[s], keptOutBecause));
                     ExcludeSwappedIn(renderer, s, sources[s], AnimationsOf(animated, renderer, s), excluded);
                 }
                 return;

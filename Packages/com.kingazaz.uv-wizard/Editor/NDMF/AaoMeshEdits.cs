@@ -25,7 +25,8 @@ namespace UVWizard.NDMF
     /// A Merge Skinned Mesh target's Remove Mesh components read the UVs and slots of every renderer merged into
     /// it, after each source has reverted its own evacuation, so a source of such a target stays out of the bake.
     /// With Skip Enablement Mismatched Renderers on, AAO leaves out each source whose enabled state differs from the
-    /// target's. Such a source stays a renderer of its own, so it's baked as one.
+    /// target's. Such a source stays a renderer of its own, so it's baked as one. Another merge's target always
+    /// counts as merged, since that merge may set its enabled state first.
     /// AAO's interop works on skinned renderers only. Since AAO 1.9.0 its Remove Mesh components run on other
     /// renderers too, so one with Remove Mesh By Mask or By UV Tile stays out of the bake, where they still read
     /// its own UVs and slots. Other renderers pass through.
@@ -42,9 +43,11 @@ namespace UVWizard.NDMF
 
         public AaoMeshEdits(GameObject root)
         {
-            var sourcesOf = new Dictionary<SkinnedMeshRenderer, Renderer[]>();
+            var merges = new Dictionary<SkinnedMeshRenderer, MergeSkinnedMesh>();
             foreach (var merge in root.GetComponentsInChildren<MergeSkinnedMesh>(true))
-                if (merge.TryGetComponent<SkinnedMeshRenderer>(out var target)) sourcesOf[target] = SourcesOf(merge, target, root.transform);
+                if (merge.TryGetComponent<SkinnedMeshRenderer>(out var target)) merges[target] = merge;
+            var sourcesOf = new Dictionary<SkinnedMeshRenderer, Renderer[]>();
+            foreach (var (target, merge) in merges) sourcesOf[target] = SourcesOf(merge, target, root.transform, merges);
             foreach (var target in sourcesOf.Keys)
                 if (ReadsUvs(target)) KeepOut(target, target, sourcesOf);
         }
@@ -67,8 +70,10 @@ namespace UVWizard.NDMF
 
         // The sources AAO merges into the target. AAO warns when its API reads a component no script has
         // initialized, as with one made in the inspector, though reading gives the same sources. The warning is
-        // meant for scripts that add the component.
-        static Renderer[] SourcesOf(MergeSkinnedMesh merge, SkinnedMeshRenderer target, Transform root)
+        // meant for scripts that add the component. Another merge's target is always a source: AAO runs that merge
+        // first, and with Copy Enablement Animation on, it changes its target's enabled state.
+        static Renderer[] SourcesOf(MergeSkinnedMesh merge, SkinnedMeshRenderer target, Transform root,
+            Dictionary<SkinnedMeshRenderer, MergeSkinnedMesh> merges)
         {
             Renderer[] sources;
             bool skipMismatched;
@@ -82,7 +87,8 @@ namespace UVWizard.NDMF
             finally { Debug.unityLogger.logEnabled = logging; }
             if (!skipMismatched) return sources;
             var enabled = Enabled(target, root);
-            return sources.Where(source => Enabled(source, root) == enabled).ToArray();
+            return sources.Where(source => source is SkinnedMeshRenderer inner && merges.ContainsKey(inner)
+                || Enabled(source, root) == enabled).ToArray();
         }
 
         // As AAO's MergeSkinnedMeshProcessor.CollectMeshInfos decides it: the renderer is on, and so is each object

@@ -43,10 +43,9 @@ namespace UVWizard.Core.Meshes
         /// <summary>Whether every merged submesh keeps its own place.</summary>
         public bool KeepSubmeshes { get; }
 
-        /// <summary>Why the renderer stays out of the bake, or null when it's baked.</summary>
+        /// <summary>
+        /// Why the renderer stays out of the bake, as <see cref="KeepsOut"/> gave it, or null when it's baked.
+        /// </summary>
         public Reason? KeptOutBecause { get; }
-
-        /// <summary>True for <see cref="KeepsOut"/> and <see cref="CantKeepSourceUv0"/>: the renderer stays out of the bake.</summary>
-        public bool KeepsRendererOut => KeptOutBecause != null;
     }
 }

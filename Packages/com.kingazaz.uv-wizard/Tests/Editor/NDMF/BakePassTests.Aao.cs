@@ -214,29 +214,47 @@ namespace UVWizard.NDMF.Tests
             // AAO also reports that Remove Mesh By Mask doesn't support a Merge Skinned Mesh target.
             Assert.That(OwnReports(errors), Has.Exactly(3).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)),
                 "each source slot is excluded");
-            Assert.That(Texts(errors), Has.Exactly(3).Contains("merges it into Merged"), "each note names the merge target");
+            Assert.That(Texts(errors), Has.Exactly(3).Contains("merges it into \"Merged\""), "each note names the merge target");
             Assert.That(Texts(errors), Has.None.Contains("needs this mesh's UVs"), "no note gives the generic reason");
             Assert.That(DrawnZ(target), Is.EqualTo(new[] { 0f, 3f, 5f }),
                 "the mask deleted the first slot's quad under its white, and only it");
             AssertKeepsColours(target, textures);
         }
 
-        [TestCase(false, TestName = "ADisabledSourceThatAaoWontMergeIntoATargetThatReadsUvsIsBaked")]
-        [TestCase(true, TestName = "AnInactiveSourceThatAaoWontMergeIntoATargetThatReadsUvsIsBaked")]
-        public void ASourceThatAaoWontMergeIntoATargetThatReadsUvsIsBaked(bool objectOff)
+        [TestCase("renderer", TestName = "ADisabledSourceThatAaoWontMergeIntoATargetThatReadsUvsIsBaked")]
+        [TestCase("object", TestName = "AnInactiveSourceThatAaoWontMergeIntoATargetThatReadsUvsIsBaked")]
+        [TestCase("parent", TestName = "ASourceUnderAnInactiveParentThatAaoWontMergeIntoATargetThatReadsUvsIsBaked")]
+        [TestCase("target", TestName = "AnEnabledSourceThatAaoWontMergeIntoADisabledTargetThatReadsUvsIsBaked")]
+        public void ASourceThatAaoWontMergeIntoATargetThatReadsUvsIsBaked(string off)
         {
-            // With Skip Enablement Mismatched Renderers on, AAO leaves the tail, turned off by its renderer or its
-            // object, out of the enabled target, so the tail stays a renderer of its own, which no Remove Mesh
-            // component reads.
+            // With Skip Enablement Mismatched Renderers on, AAO leaves the tail out of the target when one of them is
+            // on and the other off, so the tail stays a renderer of its own, which no Remove Mesh component reads.
             var avatar = MergeableAvatar(addTraceAndOptimize: false);
             var torso = avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>();
             var tail = avatar.transform.Find("Tail").GetComponent<SkinnedMeshRenderer>();
             var torsoSlots = torso.sharedMaterials.Length;
             var tailMaterials = tail.sharedMaterials;
             var textures = SourceTextures(avatar);
-            if (objectOff) tail.gameObject.SetActive(false);
-            else tail.enabled = false;
             var target = MergeInto(avatar, "Merged", torso, tail);
+            switch (off)
+            {
+                case "renderer":
+                    tail.enabled = false;
+                    break;
+                case "object":
+                    tail.gameObject.SetActive(false);
+                    break;
+                case "parent":
+                    var group = new GameObject("Tail Group");
+                    group.transform.SetParent(avatar.transform, false);
+                    tail.transform.SetParent(group.transform, false);
+                    group.SetActive(false);
+                    break;
+                case "target":
+                    target.enabled = false;
+                    torso.enabled = false;
+                    break;
+            }
             var merge = new SerializedObject(target.GetComponent<MergeSkinnedMesh>());
             merge.FindProperty("skipEnablementMismatchedRenderers").boolValue = true;
             merge.ApplyModifiedPropertiesWithoutUndo();
@@ -256,6 +274,35 @@ namespace UVWizard.NDMF.Tests
             Assert.That(tail != null, "AAO kept the tail apart");
             Assert.That(tail!.sharedMaterials.Intersect(tailMaterials), Is.Empty, "the tail is on the merged material");
             AssertKeepsColours(tail, textures);
+        }
+
+        [Test]
+        public void AnInnerTargetIsKeptOutOfTheBakeWhicheverStateItsOuterTargetSkipsByEnablement()
+        {
+            // With Copy Enablement Animation on, AAO sets the inner target's enabled state when it merges into it,
+            // which happens before the outer merge compares that state with its own. So the inner target counts as
+            // merged into the outer one, which reads the UVs, though it's off when the build starts.
+            var avatar = MergeableAvatar(addTraceAndOptimize: false);
+            var torso = avatar.transform.Find("Torso").GetComponent<SkinnedMeshRenderer>();
+            var inner = MergeInto(avatar, "Inner", torso);
+            inner.enabled = false;
+            var outer = MergeInto(avatar, "Outer", inner, avatar.transform.Find("Tail").GetComponent<SkinnedMeshRenderer>());
+            var merge = new SerializedObject(outer.GetComponent<MergeSkinnedMesh>());
+            merge.FindProperty("skipEnablementMismatchedRenderers").boolValue = true;
+            merge.ApplyModifiedPropertiesWithoutUndo();
+            var removal = outer.gameObject.AddComponent<RemoveMeshByMask>();
+            removal.Initialize(1);
+            removal.Materials = new[]
+            {
+                new RemoveMeshByMask.MaterialSlot { Enabled = true, Mask = QuadrantMask(), Mode = RemoveMeshByMask.RemoveMode.RemoveWhite },
+                new RemoveMeshByMask.MaterialSlot { Enabled = false },
+                new RemoveMeshByMask.MaterialSlot { Enabled = false },
+            };
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(Texts(errors), Has.Exactly(3).Contains("merges it into \"Outer\""), "the torso's slots and the tail's are kept out");
         }
 
         [Test]
@@ -300,7 +347,7 @@ namespace UVWizard.NDMF.Tests
             var errors = BesidesSlots(Build(avatar));
 
             Assert.That(OwnReports(errors), Has.Exactly(3).EqualTo((ErrorSeverity.NonFatal, (string?)Messages.Excluded)));
-            Assert.That(Texts(errors), Has.Exactly(3).Contains("merges it into Outer"), "each note names the target that reads the UVs");
+            Assert.That(Texts(errors), Has.Exactly(3).Contains("merges it into \"Outer\""), "each note names the target that reads the UVs");
             Assert.That(DrawnZ(outer), Is.EqualTo(new[] { 0f, 3f, 5f }),
                 "the mask deleted the first slot's quad under its white, and only it");
         }
