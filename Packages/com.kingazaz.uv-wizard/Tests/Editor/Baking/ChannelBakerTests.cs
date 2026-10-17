@@ -354,6 +354,42 @@ namespace UVWizard.Core.Tests.Baking
         }
 
         [Test]
+        public void AnAgTexelPastHorizontalAtAVanishingStrengthBakesFlat()
+        {
+            // A stored (1, 1) rebuilds z as sqrt(1 - saturate(2)) = 0 before scaling (UnpackScaleNormalRGorAG's
+            // UNITY_ASTC_NORMALMAP_ENCODING branch). Scaled by 1e-30, x² + y² underflows to 0, so the vector has length
+            // 0 and normalizing it gives NaN.
+            var source = NormalMap(n => Ag(new Vector3(1, 1, 0)));
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(source, 1e-30f, NormalEncoding.AG, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            AssertDecodes(new Vector3(0, 0, 1), Texel(atlas, 2, 2), "atlas (2, 2)");
+        }
+
+        // Worked by hand from UnityStandardUtils.cginc's UnpackScaleNormalRGorAG, not from UnpackScaleNormal.
+        // SourceNormal(3, 3) = normalize(0.45, 0.375, 1) = (0.3883, 0.3236, 0.8629), stored as bytes 177 and 169,
+        // which unpack to x = 0.3882, y = 0.3255.
+        // AG, the ASTC branch: z = sqrt(1 - saturate(0.1507 + 0.1059)) = 0.8622, then xy *= 2 gives (0.7765, 0.6510).
+        // normalize(0.7765, 0.6510, 0.8622) = (0.5836, 0.4893, 0.6480).
+        // RG or AG, the desktop branch: xy *= 2 gives (0.7765, 0.6510), then z = sqrt(1 - saturate(1.0267)) = 0.
+        // normalize(0.7765, 0.6510, 0) = (0.7663, 0.6425, 0).
+        [TestCase("AG", 0.5836f, 0.4893f, 0.6480f)]
+        [TestCase("RGorAG", 0.7663f, 0.6425f, 0f)]
+        public void AtStrengthTwoATexelDecodesToTheVectorWorkedFromTheCginc(string encodingName, float x, float y, float z)
+        {
+            var encoding = (NormalEncoding)Enum.Parse(typeof(NormalEncoding), encodingName);
+            var source = NormalMap(encoding == NormalEncoding.AG ? Ag : Xyz);
+            var plan = NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(source, 2, encoding, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            AssertDecodes(new Vector3(x, y, z), Texel(atlas, 3, 3), "atlas (3, 3)");
+        }
+
+        [Test]
         public void ASourceWithoutANormalMapBakesFlat()
         {
             // White isn't a normal map: it decodes to a normal lying flat along x and y. Strength 0 flattens it.

@@ -378,10 +378,13 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.MergedMaterial.IsKeywordEnabled("_NORMALMAP"), Is.False);
         }
 
-        [Test]
-        public void ANormalMapAtZeroStrengthLeavesTheNormalChannelOff()
+        // A strength that isn't a number bakes flat, as 0 does: scaled by it, every texel would be NaN.
+        [TestCase(0f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void ANormalMapAtZeroOrNonFiniteStrengthLeavesTheNormalChannelOff(float strength)
         {
-            var flat = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 0);
+            var flat = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), strength);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), flat);
 
             var result = Bake(renderer);
