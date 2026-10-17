@@ -1054,16 +1054,30 @@ namespace UVWizard.Core.Tests.Pipeline
             var failingMaterials = new[] { Standard(Gradient(32, 1), Color.white) };
             var first = MeshRenderer(fine, fineMaterials);
             var second = MeshRenderer(failing, failingMaterials);
+            var tool = new LaterTool { SourceUv0Channel = 3 };
+            var before = LiveBakeOutputs();
 
             var thrown = Assert.Throws<ArgumentException>(() =>
-                Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { SourceUv0Channel = 3 }, first, second));
+                Bake(new BakeOptions(Shader.Find("Standard")), tool, first, second));
             Assert.That(thrown.Message, Does.StartWith("The mesh already uses UV3."));
 
             Assert.That(Filter(first).sharedMesh, Is.SameAs(fine));
             Assert.That(first.sharedMaterials, Is.EqualTo(fineMaterials));
             Assert.That(Filter(second).sharedMesh, Is.SameAs(failing));
             Assert.That(second.sharedMaterials, Is.EqualTo(failingMaterials));
+            Assert.That(LiveBakeOutputs().Except(before).Select(o => $"{o.GetType().Name} \"{o.name}\""), Is.Empty,
+                "the merged material, the atlases and the first renderer's rewritten mesh are freed");
+            Assert.That(tool.Kept, Is.Empty);
+
+            // The first renderer rewrites on its own, so the bake above failed on the second, after rewriting the first.
+            Bake(new BakeOptions(Shader.Find("Standard")), tool, first);
+            Assert.That(Filter(first).sharedMesh, Is.Not.SameAs(fine));
         }
+
+        // Every mesh, material and Texture2D alive, which is where a bake's outputs would leak. Render textures are left
+        // out: Unity pools released temporary ones for a few frames.
+        static HashSet<Object> LiveBakeOutputs() => new HashSet<Object>(Resources.FindObjectsOfTypeAll<Mesh>()
+            .Concat<Object>(Resources.FindObjectsOfTypeAll<Material>()).Concat(Resources.FindObjectsOfTypeAll<Texture2D>()));
 
         [Test]
         public void ARendererWhoseSourceUv0ALaterToolCantFindIsExcluded()

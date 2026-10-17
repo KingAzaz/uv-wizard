@@ -181,7 +181,20 @@ namespace UVWizard.Core.Pipeline
 
             UseAtlases(merged, options, atlas, emissionAtlas, emissionStrength, normalAtlas);
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
-            var (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
+            List<(Mesh Source, Mesh Rewritten)> replaced;
+            List<MovedSlots> moved;
+            try
+            {
+                (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
+            }
+            catch
+            {
+                // The renderers are as they were, so nothing uses what this bake made. A stored atlas stays in the
+                // cache's file for the next bake to load.
+                Object.DestroyImmediate(merged);
+                foreach (var made in atlases.Values) Object.DestroyImmediate(made);
+                throw;
+            }
             conversions.Apply(renderers, merged);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
                 emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, packing, conversions.Made,
@@ -785,8 +798,40 @@ namespace UVWizard.Core.Pipeline
             RewriteRenderers(List<Slot> slots, Material merged, ILaterMeshEdits? laterEdits,
                 Dictionary<Renderer, LaterToolNeeds> needs)
         {
-            // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was.
+            // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was, and frees
+            // the meshes already rewritten.
             var changes = new List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)>();
+            try
+            {
+                RewriteMeshes(slots, merged, needs, changes);
+            }
+            catch
+            {
+                foreach (var change in changes) Object.DestroyImmediate(change.Rewritten);
+                throw;
+            }
+
+            var replaced = new List<(Mesh Source, Mesh Rewritten)>();
+            var moved = new List<MovedSlots>();
+            foreach (var (movedSlots, source, rewritten, materials, _) in changes)
+            {
+                var renderer = movedSlots.Renderer;
+                // A skinned renderer keeps its blend-shape weights: the rewritten mesh has the same blend shapes.
+                if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten;
+                else renderer.GetComponent<MeshFilter>().sharedMesh = rewritten;
+                renderer.sharedMaterials = materials;
+                replaced.Add((source, rewritten));
+                moved.Add(movedSlots);
+            }
+            foreach (var change in changes)
+                if (change.KeptIn is { } channel) laterEdits!.KeptSourceUv0(change.Moved.Renderer, channel);
+            return (replaced, moved);
+        }
+
+        // Rewrites each renderer's mesh, adding its change as it's made.
+        static void RewriteMeshes(List<Slot> slots, Material merged, Dictionary<Renderer, LaterToolNeeds> needs,
+            List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)> changes)
+        {
             for (var first = 0; first < slots.Count;)
             {
                 var renderer = slots[first].Renderer;
@@ -813,22 +858,6 @@ namespace UVWizard.Core.Pipeline
 
                 changes.Add((new MovedSlots(renderer, slotOf), mesh, rewritten.Mesh, replacement, keptIn));
             }
-
-            var replaced = new List<(Mesh Source, Mesh Rewritten)>();
-            var moved = new List<MovedSlots>();
-            foreach (var (movedSlots, source, rewritten, materials, _) in changes)
-            {
-                var renderer = movedSlots.Renderer;
-                // A skinned renderer keeps its blend-shape weights: the rewritten mesh has the same blend shapes.
-                if (renderer is SkinnedMeshRenderer skinned) skinned.sharedMesh = rewritten;
-                else renderer.GetComponent<MeshFilter>().sharedMesh = rewritten;
-                renderer.sharedMaterials = materials;
-                replaced.Add((source, rewritten));
-                moved.Add(movedSlots);
-            }
-            foreach (var change in changes)
-                if (change.KeptIn is { } channel) laterEdits!.KeptSourceUv0(change.Moved.Renderer, channel);
-            return (replaced, moved);
         }
 
         // An atlas UV for every corner of the slot's submesh. A corner of a triangle a later tool deletes takes its
