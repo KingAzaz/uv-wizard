@@ -62,6 +62,20 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void ARewriteThatFailsFreesTheAtlasesItLoadedFromTheCacheAndKeepsTheEntry()
+        {
+            var options = StandardOptions(cacheDirectory: CacheDirectory);
+            var first = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+            var second = RendererWhoseRewriteFails();
+
+            // The first failing bake stores its atlas before the rewrite throws, and the second loads it.
+            AssertFailedBakeLeavesNothing(options, first, second);
+            AssertFailedBakeLeavesNothing(options, first, second);
+
+            Assert.That(Directory.GetFiles(CacheDirectory, "*.bake"), Has.Length.EqualTo(1));
+        }
+
+        [Test]
         public void AnUncompressedBakeComesBackTheSame()
         {
             var options = StandardOptions(compress: false, cacheDirectory: CacheDirectory);

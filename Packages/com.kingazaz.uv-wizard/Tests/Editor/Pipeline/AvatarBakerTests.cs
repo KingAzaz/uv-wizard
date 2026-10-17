@@ -1044,34 +1044,79 @@ namespace UVWizard.Core.Tests.Pipeline
         [Test]
         public void ARewriteThatFailsLeavesEveryRendererAsItWas()
         {
-            // The first renderer rewrites fine. The second already uses UV3, where the later tool wants the source
-            // UV0 kept, so its rewrite throws after the first's has been made: renderers are rewritten in the order
-            // they're passed.
+            // The first renderer rewrites fine, and the second's rewrite throws after the first's has been made:
+            // renderers are rewritten in the order they're passed.
             var fine = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) });
-            var failing = Mesh(new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
-            failing.SetUVs(3, new Vector2[failing.vertexCount]);
             var fineMaterials = new[] { Standard(Gradient(16, 0), Color.white) };
-            var failingMaterials = new[] { Standard(Gradient(32, 1), Color.white) };
             var first = MeshRenderer(fine, fineMaterials);
-            var second = MeshRenderer(failing, failingMaterials);
-            var tool = new LaterTool { SourceUv0Channel = 3 };
-            var before = LiveBakeOutputs();
+            var second = RendererWhoseRewriteFails();
+            var failing = Filter(second).sharedMesh;
+            var failingMaterials = second.sharedMaterials;
 
-            var thrown = Assert.Throws<ArgumentException>(() =>
-                Bake(new BakeOptions(Shader.Find("Standard")), tool, first, second));
-            Assert.That(thrown.Message, Does.StartWith("The mesh already uses UV3."));
+            var tool = AssertFailedBakeLeavesNothing(new BakeOptions(Shader.Find("Standard")), first, second);
 
             Assert.That(Filter(first).sharedMesh, Is.SameAs(fine));
             Assert.That(first.sharedMaterials, Is.EqualTo(fineMaterials));
             Assert.That(Filter(second).sharedMesh, Is.SameAs(failing));
             Assert.That(second.sharedMaterials, Is.EqualTo(failingMaterials));
-            Assert.That(LiveBakeOutputs().Except(before).Select(o => $"{o.GetType().Name} \"{o.name}\""), Is.Empty,
-                "the merged material, the atlases and the first renderer's rewritten mesh are freed");
-            Assert.That(tool.Kept, Is.Empty);
 
             // The first renderer rewrites on its own, so the bake above failed on the second, after rewriting the first.
             Bake(new BakeOptions(Shader.Find("Standard")), tool, first);
             Assert.That(Filter(first).sharedMesh, Is.Not.SameAs(fine));
+        }
+
+        [Test]
+        public void ALaterToolThatThrowsOnTheKeptUv0LeavesTheBakeWhole()
+        {
+            // The renderers have their rewritten meshes and the merged material by the time the tool is told, so
+            // nothing they draw goes.
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+
+            Assert.Throws<InvalidOperationException>(() => Bake(new BakeOptions(Shader.Find("Standard")),
+                new LaterTool { SourceUv0Channel = 3, ThrowsWhenTold = true }, renderer));
+
+            created.Add(renderer.sharedMaterial);
+            created.Add(Filter(renderer).sharedMesh);
+            created.Add(renderer.sharedMaterial.mainTexture);
+            Assert.That(renderer.sharedMaterial.name, Is.EqualTo(AvatarBaker.MergedMaterialName));
+            Assert.That(renderer.sharedMaterial.mainTexture, Is.Not.Null, "the atlas");
+            Assert.That(Filter(renderer).sharedMesh != null);
+        }
+
+        [Test]
+        public void ARewriteThatFailsFreesTheMaterialsConvertedForTheBudget()
+        {
+            // The repeating quad stays out of the atlas, so its material is converted before any rewrite, to count
+            // its texture against the budget.
+            var first = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
+                Standard(Gradient(16, 0), Color.white), Standard(Gradient(16, 2), Color.white));
+
+            AssertFailedBakeLeavesNothing(Converting(preset: Preset.Excellent), first, RendererWhoseRewriteFails());
+        }
+
+        // A renderer that already uses UV3, where the later tool of AssertFailedBakeLeavesNothing keeps the source UV0,
+        // so its rewrite throws.
+        MeshRenderer RendererWhoseRewriteFails()
+        {
+            var mesh = Mesh(new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            mesh.SetUVs(3, new Vector2[mesh.vertexCount]);
+            return MeshRenderer(mesh, Standard(Gradient(32, 1), Color.white));
+        }
+
+        // Bakes with a later tool that keeps the source UV0 in UV3, which a renderer from RendererWhoseRewriteFails
+        // makes throw, and asserts that nothing the bake made survives and that the tool heard of no kept UV0.
+        LaterTool AssertFailedBakeLeavesNothing(BakeOptions options, params Renderer[] renderers)
+        {
+            var tool = new LaterTool { SourceUv0Channel = 3 };
+            var before = LiveBakeOutputs();
+
+            var thrown = Assert.Throws<ArgumentException>(() => Bake(options, tool, renderers));
+
+            Assert.That(thrown.Message, Does.StartWith("The mesh already uses UV3."));
+            Assert.That(LiveBakeOutputs().Except(before).Select(o => $"{o.GetType().Name} \"{o.name}\""), Is.Empty,
+                "the merged material, the atlases, the converted materials and the rewritten meshes are freed");
+            Assert.That(tool.Kept, Is.Empty);
+            return tool;
         }
 
         // Every mesh, material and Texture2D alive, which is where a bake's outputs would leak. Render textures are left
@@ -1186,7 +1231,12 @@ namespace UVWizard.Core.Tests.Pipeline
             public bool NoChannelFree;
             public LaterToolNeeds Needs(Renderer renderer) =>
                 NoChannelFree ? LaterToolNeeds.CantKeepSourceUv0 : new LaterToolNeeds(SourceUv0Channel, KeepsSubmeshes);
-            public void KeptSourceUv0(Renderer renderer, int channel) => Kept.Add((renderer, channel));
+            public bool ThrowsWhenTold;
+            public void KeptSourceUv0(Renderer renderer, int channel)
+            {
+                if (ThrowsWhenTold) throw new InvalidOperationException("The tool can't take the kept UV0.");
+                Kept.Add((renderer, channel));
+            }
             public bool WillRemove(int submesh, int a, int b, int c) => Deletes!(submesh, a, b, c);
             public void Dispose() => Disposed = true;
         }

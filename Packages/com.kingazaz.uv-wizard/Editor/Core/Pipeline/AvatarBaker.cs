@@ -181,20 +181,22 @@ namespace UVWizard.Core.Pipeline
 
             UseAtlases(merged, options, atlas, emissionAtlas, emissionStrength, normalAtlas);
             FlagWhatTheMergedMaterialChanges(slots, merged, options, flagged);
-            List<(Mesh Source, Mesh Rewritten)> replaced;
-            List<MovedSlots> moved;
+            // Every mesh is rewritten before any renderer changes, so a rewrite that throws leaves the avatar as it was.
+            List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)> rewrites;
             try
             {
-                (replaced, moved) = RewriteRenderers(slots, merged, laterEdits, needs);
+                rewrites = RewriteMeshes(slots, merged, needs);
             }
             catch
             {
-                // The renderers are as they were, so nothing uses what this bake made. A stored atlas stays in the
-                // cache's file for the next bake to load.
+                // Nothing uses what this bake made, so it goes. A stored atlas stays in the cache's file for the next
+                // bake to load.
                 Object.DestroyImmediate(merged);
                 foreach (var made in atlases.Values) Object.DestroyImmediate(made);
+                conversions.DestroyMade();
                 throw;
             }
+            var (replaced, moved) = ApplyRewrites(rewrites, laterEdits);
             conversions.Apply(renderers, merged);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
                 emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, packing, conversions.Made,
@@ -792,25 +794,12 @@ namespace UVWizard.Core.Pipeline
             }
         }
 
-        // Gives each renderer with merged slots a rewritten mesh and the merged material on those slots, and says
-        // where each of its slots went.
-        static (List<(Mesh Source, Mesh Rewritten)> Replaced, List<MovedSlots> Moved)
-            RewriteRenderers(List<Slot> slots, Material merged, ILaterMeshEdits? laterEdits,
-                Dictionary<Renderer, LaterToolNeeds> needs)
+        // Gives each renderer with merged slots its rewritten mesh and the merged material on those slots, tells the
+        // later tool where each kept its source UV0, and says where each of its slots went.
+        static (List<(Mesh Source, Mesh Rewritten)> Replaced, List<MovedSlots> Moved) ApplyRewrites(
+            List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)> changes,
+            ILaterMeshEdits? laterEdits)
         {
-            // Every mesh is rewritten before any renderer changes, so a failure leaves the avatar as it was, and frees
-            // the meshes already rewritten.
-            var changes = new List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)>();
-            try
-            {
-                RewriteMeshes(slots, merged, needs, changes);
-            }
-            catch
-            {
-                foreach (var change in changes) Object.DestroyImmediate(change.Rewritten);
-                throw;
-            }
-
             var replaced = new List<(Mesh Source, Mesh Rewritten)>();
             var moved = new List<MovedSlots>();
             foreach (var (movedSlots, source, rewritten, materials, _) in changes)
@@ -828,8 +817,25 @@ namespace UVWizard.Core.Pipeline
             return (replaced, moved);
         }
 
-        // Rewrites each renderer's mesh, adding its change as it's made.
-        static void RewriteMeshes(List<Slot> slots, Material merged, Dictionary<Renderer, LaterToolNeeds> needs,
+        // Rewrites the mesh of each renderer with merged slots, and works out its new materials, changing no renderer.
+        // A rewrite that throws frees the meshes already rewritten.
+        static List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)> RewriteMeshes(
+            List<Slot> slots, Material merged, Dictionary<Renderer, LaterToolNeeds> needs)
+        {
+            var changes = new List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)>();
+            try
+            {
+                AddRewrites(slots, merged, needs, changes);
+            }
+            catch
+            {
+                foreach (var change in changes) Object.DestroyImmediate(change.Rewritten);
+                throw;
+            }
+            return changes;
+        }
+
+        static void AddRewrites(List<Slot> slots, Material merged, Dictionary<Renderer, LaterToolNeeds> needs,
             List<(MovedSlots Moved, Mesh Source, Mesh Rewritten, Material[] Materials, int? KeptIn)> changes)
         {
             for (var first = 0; first < slots.Count;)
