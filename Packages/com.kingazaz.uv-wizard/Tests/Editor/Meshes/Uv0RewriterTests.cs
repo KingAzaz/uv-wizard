@@ -113,8 +113,9 @@ namespace UVWizard.Core.Tests.Meshes
         }
 
         // Unity stores a frame's delta only when it, or another delta of the same vertex, is at least 1e-5 long: the
-        // same cut Vector3 == makes, so no shorter delta can reach Uv0Rewriter.Moves on its own (#130). The
-        // smallest delta Unity keeps, each component under 1e-5, must still reach every copy.
+        // same cut Vector3 == makes, so no shorter delta can reach Uv0Rewriter.Moves on its own (#130), and the
+        // old approximate test passes this one too: AnyNonzeroComponentMoves pins the exact one. The smallest delta
+        // Unity keeps, each component under 1e-5, must still reach every copy.
         [TestCase(0)]
         [TestCase(1)]
         [TestCase(2)]
