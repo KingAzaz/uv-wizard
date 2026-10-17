@@ -810,6 +810,137 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void TheMergedMaterialsMainTextureIsTheOneTheOptionsName()
+        {
+            // Standard's detail mask stands in for the main texture.
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
+            var options = new BakeOptions(Shader.Find("Standard"), mainTextureProperty: "_DetailMask");
+
+            var result = Bake(options, renderer);
+
+            Assert.That(result.Atlas, Is.Not.Null);
+            Assert.That(result.MergedMaterial!.GetTexture("_DetailMask"), Is.SameAs(result.Atlas));
+        }
+
+        [Test]
+        public void TheMergedMaterialsEmissionMapIsTheOneTheOptionsName()
+        {
+            // Standard's occlusion map stands in for the emission map.
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
+            var options = new BakeOptions(Shader.Find("Standard"), emissionMapProperty: "_OcclusionMap");
+
+            var result = Bake(options, renderer);
+
+            Assert.That(result.EmissionAtlas, Is.Not.Null);
+            Assert.That(result.MergedMaterial!.GetTexture("_OcclusionMap"), Is.SameAs(result.EmissionAtlas));
+        }
+
+        [Test]
+        public void TheMergedMaterialsEmissionColourIsTheOneTheOptionsName()
+        {
+            // Standard's colour stands in for the emission colour, and its emission colour for the tint, so the tint
+            // doesn't overwrite the stand-in. Standard has no emission strength, so the strength goes on the colour.
+            var bright = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(1.5f, 0.75f, 0.3f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
+            var options = new BakeOptions(Shader.Find("Standard"), tintProperty: "_EmissionColor", emissionColourProperty: "_Color");
+
+            var result = Bake(options, renderer);
+
+            var colour = result.MergedMaterial!.GetColor("_Color").linear;
+            for (var channel = 0; channel < 3; channel++)
+                Assert.That(colour[channel], Is.EqualTo(1.5f).Within(1e-3f), $"channel {channel}");
+        }
+
+        [Test]
+        public void TheMergedMaterialsEmissionStrengthIsTheOneTheOptionsName()
+        {
+            // Standard's smoothness stands in for the strength, so the emission colour is white and the strength goes there.
+            var bright = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(1.5f, 0.75f, 0.3f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
+            var options = new BakeOptions(Shader.Find("Standard"), emissionStrengthProperty: "_Glossiness");
+
+            var result = Bake(options, renderer);
+
+            Assert.That(result.MergedMaterial!.GetFloat("_Glossiness"), Is.EqualTo(1.5f).Within(1e-3f));
+            Assert.That(result.MergedMaterial.GetColor("_EmissionColor"), Is.EqualTo(Color.white));
+        }
+
+        [Test]
+        public void BesideAStrengthTheMergedMaterialsEmissionColourIsTheOneTheOptionsName()
+        {
+            // Standard's colour stands in for the emission colour, its smoothness for the strength and its emission
+            // colour for the tint. The representative's grey colour is copied over first, so only the emission
+            // colour's white can replace it.
+            var bright = Emitting(Standard(Gradient(16, 0), Color.grey), null, new Color(1.5f, 0.75f, 0.3f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
+            var options = new BakeOptions(Shader.Find("Standard"), representativeProperties: new[] { "_Color" },
+                tintProperty: "_EmissionColor", emissionColourProperty: "_Color", emissionStrengthProperty: "_Glossiness");
+
+            var result = Bake(options, renderer);
+
+            Assume.That(result.Representative, Is.SameAs(bright));
+            Assert.That(result.MergedMaterial!.GetColor("_Color"), Is.EqualTo(Color.white));
+        }
+
+        [Test]
+        public void TheMergedMaterialsEmissionUvIsTheOneTheOptionsName()
+        {
+            // Standard's smoothness, 0.5 by default, stands in for the emission UV channel, which the atlas puts on UV0.
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
+            var options = new BakeOptions(Shader.Find("Standard"), emissionUvProperty: "_Glossiness");
+
+            var result = Bake(options, renderer);
+
+            Assume.That(result.EmissionAtlas, Is.Not.Null);
+            Assert.That(result.MergedMaterial!.GetFloat("_Glossiness"), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void TheMergedMaterialsNormalMapIsTheOneTheOptionsName()
+        {
+            // Standard's detail normal map stands in for the normal map.
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
+            var options = new BakeOptions(Shader.Find("Standard"), normalMapProperty: "_DetailNormalMap");
+
+            var result = Bake(options, renderer);
+
+            Assert.That(result.NormalAtlas, Is.Not.Null);
+            Assert.That(result.MergedMaterial!.GetTexture("_DetailNormalMap"), Is.SameAs(result.NormalAtlas));
+        }
+
+        [Test]
+        public void TheMergedMaterialsNormalScaleIsTheOneTheOptionsName()
+        {
+            // Standard's parallax height, 0.02 by default, stands in for the normal-map strength.
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
+            var options = new BakeOptions(Shader.Find("Standard"), normalScaleProperty: "_Parallax");
+
+            var result = Bake(options, renderer);
+
+            Assume.That(result.NormalAtlas, Is.Not.Null);
+            Assert.That(result.MergedMaterial!.GetFloat("_Parallax"), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void AMergedShaderWithoutBumpScaleStillTakesTheNormalScaleTheOptionsName()
+        {
+            // Unlit/Transparent Cutout has no _BumpScale: its cutoff, 0.5 by default, stands in for the strength.
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
+            var options = new BakeOptions(Shader.Find("Unlit/Transparent Cutout"), normalScaleProperty: "_Cutoff");
+
+            var result = Bake(options, renderer);
+
+            Assume.That(result.NormalAtlas, Is.Not.Null);
+            Assume.That(result.MergedMaterial!.HasFloat("_BumpScale"), Is.False);
+            Assert.That(result.MergedMaterial.GetFloat("_Cutoff"), Is.EqualTo(1));
+        }
+
+        [Test]
         public void ChartsThatFitAtNoScaleLeaveEveryRendererUnchanged()
         {
             // 320 separate quads in a 64 px atlas of 256 cells: no scale fits them. On a 1024 px texture each

@@ -747,30 +747,30 @@ namespace UVWizard.Core.Pipeline
         static void UseAtlases(Material material, BakeOptions options, Texture2D? atlas, Texture2D? emissionAtlas,
             float emissionStrength, Texture2D? normalAtlas)
         {
-            material.mainTexture = atlas;
+            material.SetTexture(options.MainTextureProperty, atlas);
             // The emission colour defaults to black, so without these the atlas wouldn't glow. A shader with no
             // emission strength gets it on its emission colour instead, which is linearized before use, and has its
             // _EMISSION keyword turned on: Standard compiles its emission out without it.
             if (emissionAtlas != null)
             {
-                material.SetTexture("_EmissionMap", emissionAtlas);
-                if (material.HasFloat("_EmissionStrength"))
+                material.SetTexture(options.EmissionMapProperty, emissionAtlas);
+                if (material.HasFloat(options.EmissionStrengthProperty))
                 {
-                    material.SetColor("_EmissionColor", Color.white);
-                    material.SetFloat("_EmissionStrength", emissionStrength);
+                    material.SetColor(options.EmissionColourProperty, Color.white);
+                    material.SetFloat(options.EmissionStrengthProperty, emissionStrength);
                 }
                 else
                 {
-                    material.SetColor("_EmissionColor", new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
+                    material.SetColor(options.EmissionColourProperty, new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
                     material.EnableKeyword("_EMISSION");
                 }
-                if (material.HasProperty("_EmissionUV")) material.SetFloat("_EmissionUV", 0);
+                if (material.HasProperty(options.EmissionUvProperty)) material.SetFloat(options.EmissionUvProperty, 0);
             }
             // The atlas already holds each source's strength.
             if (normalAtlas != null)
             {
-                material.SetTexture("_BumpMap", normalAtlas);
-                if (material.HasFloat("_BumpScale")) material.SetFloat("_BumpScale", 1);
+                material.SetTexture(options.NormalMapProperty, normalAtlas);
+                if (material.HasFloat(options.NormalScaleProperty)) material.SetFloat(options.NormalScaleProperty, 1);
                 material.EnableKeyword(options.NormalMapKeyword);
             }
         }

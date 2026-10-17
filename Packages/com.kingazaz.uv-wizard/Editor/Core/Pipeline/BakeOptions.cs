@@ -40,6 +40,15 @@ namespace UVWizard.Core.Pipeline
         /// <param name="cullingProperty">The culling property merged slots are checked against, when both have it.</param>
         /// <param name="tintProperty">The merged shader's tint colour, set to white since the atlas carries every tint.</param>
         /// <param name="vertexColourProperty">The merged shader's toggle that multiplies in vertex colour.</param>
+        /// <param name="mainTextureProperty">The merged shader's main texture, which takes the Albedo channel.</param>
+        /// <param name="emissionMapProperty">The merged shader's emission map, which takes the Emission channel.</param>
+        /// <param name="emissionColourProperty">The merged shader's emission colour, which the emission map is multiplied by.</param>
+        /// <param name="emissionStrengthProperty">
+        /// The merged shader's emission strength. A shader without it carries the strength on its emission colour.
+        /// </param>
+        /// <param name="emissionUvProperty">The merged shader's choice of UV channel for its emission map.</param>
+        /// <param name="normalMapProperty">The merged shader's normal map, which takes the Normal channel.</param>
+        /// <param name="normalScaleProperty">The merged shader's normal-map strength, set to 1 since the atlas holds each source's.</param>
         /// <param name="representativeProperties">
         /// Properties copied from the representative source: the merged-shader source with the most chart area, or,
         /// when no such source draws, the source with the most chart area that has every one of these properties.
@@ -53,7 +62,10 @@ namespace UVWizard.Core.Pipeline
         public BakeOptions(Shader mergedShader, int atlasSize = 2048, int padding = 8, bool compress = false,
             string rampProperty = "_Ramp", Texture? defaultRamp = null, IReadOnlyList<string>? representativeProperties = null,
             string cullingProperty = "_Culling", string tintProperty = "_Color", string vertexColourProperty = "_VertexColor",
-            string normalMapKeyword = "USE_NORMAL_MAPS",
+            string mainTextureProperty = "_MainTex", string emissionMapProperty = "_EmissionMap",
+            string emissionColourProperty = "_EmissionColor", string emissionStrengthProperty = "_EmissionStrength",
+            string emissionUvProperty = "_EmissionUV", string normalMapProperty = "_BumpMap",
+            string normalScaleProperty = "_BumpScale", string normalMapKeyword = "USE_NORMAL_MAPS",
             NormalEncoding? normalEncoding = null, Preset? preset = null, Channels channels = Channels.All,
             string? cacheDirectory = null, int cacheEntries = 16, IReadOnlyCollection<string>? mobileShaders = null)
         {
@@ -72,6 +84,13 @@ namespace UVWizard.Core.Pipeline
             CullingProperty = cullingProperty;
             TintProperty = tintProperty;
             VertexColourProperty = vertexColourProperty;
+            MainTextureProperty = mainTextureProperty;
+            EmissionMapProperty = emissionMapProperty;
+            EmissionColourProperty = emissionColourProperty;
+            EmissionStrengthProperty = emissionStrengthProperty;
+            EmissionUvProperty = emissionUvProperty;
+            NormalMapProperty = normalMapProperty;
+            NormalScaleProperty = normalScaleProperty;
             NormalMapKeyword = normalMapKeyword;
             NormalEncoding = normalEncoding ?? NormalMaps.PlatformEncoding;
         }
@@ -88,6 +107,13 @@ namespace UVWizard.Core.Pipeline
         public string CullingProperty { get; }
         public string TintProperty { get; }
         public string VertexColourProperty { get; }
+        public string MainTextureProperty { get; }
+        public string EmissionMapProperty { get; }
+        public string EmissionColourProperty { get; }
+        public string EmissionStrengthProperty { get; }
+        public string EmissionUvProperty { get; }
+        public string NormalMapProperty { get; }
+        public string NormalScaleProperty { get; }
         public string NormalMapKeyword { get; }
         public NormalEncoding NormalEncoding { get; }
         public string? CacheDirectory { get; }
