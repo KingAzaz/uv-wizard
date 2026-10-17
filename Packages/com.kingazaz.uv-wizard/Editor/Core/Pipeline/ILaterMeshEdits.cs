@@ -20,9 +20,9 @@ namespace UVWizard.Core.Pipeline
         ITriangleRemovals? Removals(Renderer renderer);
 
         /// <summary>
-        /// How the renderer's rewritten mesh must look for the tool, or <see cref="LaterToolNeeds.CantKeepSourceUv0"/>
-        /// when the tool reads the source UV0 but couldn't find it after the bake, so the renderer stays as it is.
-        /// Asked while the renderer still has its source mesh.
+        /// How the renderer's rewritten mesh must look for the tool, or <see cref="LaterToolNeeds.KeepsOut"/> with why
+        /// the tool needs the renderer as it is, such as <see cref="LaterToolNeeds.CantKeepSourceUv0"/> when the tool
+        /// reads the source UV0 but couldn't find it after the bake. Asked while the renderer still has its source mesh.
         /// </summary>
         LaterToolNeeds Needs(Renderer renderer);
 
