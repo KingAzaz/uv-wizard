@@ -81,7 +81,7 @@ The Toon Standard material that takes an excluded material's place, and that of 
 _Avoid_: Replacement material, mobile copy
 
 **Unconverted material**:
-A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: it's on a renderer other than a mesh renderer, such as a particle system, or it has no surface of its own, such as a lilToon add-on layer. The SDK refuses such an upload.
+A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: an animation swaps it onto a particle, trail or line renderer, or it has no surface of its own, such as a lilToon add-on layer. The SDK refuses such an upload. A particle, trail or line renderer's own materials aren't unconverted: they get VRChat's mobile particle shaders, chosen by their blend.
 _Avoid_: Failed material, unsupported material
 
 **Flagged material**:

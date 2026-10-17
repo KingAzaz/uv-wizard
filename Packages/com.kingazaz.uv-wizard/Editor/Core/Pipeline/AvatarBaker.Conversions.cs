@@ -3,6 +3,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UVWizard.Core.Baking;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Materials;
@@ -13,8 +14,8 @@ namespace UVWizard.Core.Pipeline
     internal static partial class AvatarBaker
     {
         /// <summary>
-        /// True for a renderer whose materials a bake converts for mobile: a mesh renderer that uploads. Other
-        /// renderers, such as particles, keep theirs, and the bake reports any that mobile doesn't allow.
+        /// True for a renderer whose materials a bake converts to the merged shader for mobile: a mesh renderer that
+        /// uploads. A particle, trail or line renderer's get mobile particle shaders instead, when the options name them.
         /// </summary>
         internal static bool ConvertsMaterialsOf(Renderer renderer) =>
             renderer is MeshRenderer or SkinnedMeshRenderer && !UploadedRenderers.IsEditorOnly(renderer.transform);
@@ -36,6 +37,8 @@ namespace UVWizard.Core.Pipeline
             readonly IReadOnlyList<AnimatedSlot> animated;
             // Each source seen, and what takes its place: its converted material, or itself when it can't be converted.
             readonly Dictionary<Material, Material> converted = new Dictionary<Material, Material>();
+            // Each source seen on a particle, trail or line renderer, and its particle material.
+            readonly Dictionary<Material, Material> particles = new Dictionary<Material, Material>();
             readonly List<SlotNote> flagged = new List<SlotNote>();
             // Each renderer and source whose animated properties have been checked.
             readonly HashSet<(Renderer, Material)> checkedAnimated = new HashSet<(Renderer, Material)>();
@@ -54,19 +57,29 @@ namespace UVWizard.Core.Pipeline
             /// <summary>Each source material converted so far, and its converted material.</summary>
             public List<(Material Source, Material Converted)> Made { get; } = new List<(Material, Material)>();
 
+            /// <summary>Each source material given a mobile particle shader so far, and its particle material.</summary>
+            public List<(Material Source, Material Converted)> Particles { get; } = new List<(Material, Material)>();
+
             /// <summary>Slots left with a shader mobile doesn't allow, because their material can't be converted.</summary>
             public List<SlotNote> Unconverted { get; } = new List<SlotNote>();
 
             /// <summary>
-            /// The material that takes the source's place in the renderer's slot: its converted material, or the
-            /// source itself when mobile allows its shader, conversion is off, the renderer doesn't upload, or the
+            /// The material that takes the source's place in the renderer's slot: its converted material, its particle
+            /// material on a particle, trail or line renderer, or the source itself when mobile allows its shader, conversion is off, the renderer doesn't upload, or the
             /// source can't be converted.
             /// </summary>
-            public Material Of(Material source, Renderer renderer, int slot)
+            /// <param name="swappedIn">
+            /// True for a material an animation swaps into the slot. Swaps keep their source on a particle, trail or line
+            /// renderer, since only a mesh renderer's swaps are pointed at their conversions.
+            /// </param>
+            public Material Of(Material source, Renderer renderer, int slot, bool swappedIn = false)
             {
                 if (options.MobileShaders == null || options.MobileShaders.Contains(source.shader.name)
                     || UploadedRenderers.IsEditorOnly(renderer.transform))
                     return source;
+                if (renderer is ParticleSystemRenderer or TrailRenderer or LineRenderer && !swappedIn
+                    && options.ParticleShaders is { } shaders)
+                    return Particle(source, renderer, slot, shaders);
                 if (!ConvertsMaterialsOf(renderer))
                 {
                     Leave(source, renderer, slot, new Reason(ReasonText.MeshRenderersOnly));
@@ -91,6 +104,37 @@ namespace UVWizard.Core.Pipeline
                 if (made != source && checkedAnimated.Add((renderer, source))
                     && animated.Any(a => a.Renderer == renderer && a.EverySlot))
                     flagged.Add(new SlotNote(renderer, slot, source, new Reason(ReasonText.AnimatedProperties)));
+                return made;
+            }
+
+            // The source's particle material, made the first time a particle, trail or line renderer has it: a mobile
+            // particle shader chosen by the source's blend (#148), drawing its main texture, times its tint, with its
+            // tiling and offset. The blend comes from the _SrcBlend and _DstBlend floats that Particles/Standard, lilToon
+            // and Poiyomi keep it in; a shader without them, such as Unity's legacy particle shaders, which hard-code
+            // theirs, draws additively now.
+            Material Particle(Material source, Renderer renderer, int slot, ParticleShaders shaders)
+            {
+                if (particles.TryGetValue(source, out var made)) return made;
+                var blend = source.HasFloat("_SrcBlend") && source.HasFloat("_DstBlend")
+                    ? ((BlendMode)source.GetFloat("_SrcBlend"), (BlendMode)source.GetFloat("_DstBlend"))
+                    : ((BlendMode, BlendMode)?)null;
+                var multiplies = blend is (BlendMode.Zero, BlendMode.SrcColor) or (BlendMode.DstColor, BlendMode.Zero);
+                if (!multiplies && blend is not ((BlendMode.SrcAlpha, BlendMode.One) or (BlendMode.One, BlendMode.One)))
+                    flagged.Add(new SlotNote(renderer, slot, source, new Reason(ReasonText.DrawsAdditively)));
+
+                made = new Material(multiplies ? shaders.Multiply : shaders.Additive) { name = $"{source.name} (UV Wizard)" };
+                // These shaders have no tint, so a tint that isn't white is baked into a texture of their own.
+                var albedo = SourceShaderReader.Read(source).Albedo;
+                var texture = albedo?.Texture;
+                var tint = albedo?.Tint ?? Color.white;
+                if (tint != Color.white) texture = Texture(source, Channels.Albedo, texture, tint, keepsAlpha: true);
+                if (texture != null)
+                {
+                    made.mainTexture = texture;
+                    if (albedo!.Texture != null) ScaleOffset(made, "_MainTex", albedo.ScaleOffset);
+                }
+                particles.Add(source, made);
+                Particles.Add((source, made));
                 return made;
             }
 
@@ -139,17 +183,22 @@ namespace UVWizard.Core.Pipeline
                 foreach (var slot in animated)
                     if (slot.Slot is { } index)
                         foreach (var swapped in slot.SwappedIn)
-                            if (swapped != null) Of(swapped, slot.Renderer, index);
+                            if (swapped != null) Of(swapped, slot.Renderer, index, swappedIn: true);
             }
 
-            /// <summary>Destroys every material converted so far, and the textures baked for it, for a bake that failed.</summary>
+            /// <summary>
+            /// Destroys every material converted so far, particle materials included, and the textures baked for them,
+            /// for a bake that failed.
+            /// </summary>
             public void DestroyMade()
             {
                 foreach (var texture in textures) Object.DestroyImmediate(texture);
-                foreach (var (_, made) in Made) Object.DestroyImmediate(made);
+                foreach (var (_, made) in Made.Concat(Particles)) Object.DestroyImmediate(made);
                 textures.Clear();
                 Made.Clear();
+                Particles.Clear();
                 converted.Clear();
+                particles.Clear();
             }
 
             /// <summary>The flagged notes, followed by the conversions' own.</summary>
@@ -229,7 +278,9 @@ namespace UVWizard.Core.Pipeline
 
             // The texture, times the tint, baked whole into a texture of its own at its width and height, each up to
             // the atlas size, in the channel's finest format. A channel without a texture bakes its tint into a small one.
-            Texture2D Texture(Material source, Channels channel, Texture? texture, Color tint, ChannelSource? normal = null)
+            // Opaque, unless it keeps alpha: then each texel keeps its own, times the tint's.
+            Texture2D Texture(Material source, Channels channel, Texture? texture, Color tint, ChannelSource? normal = null,
+                bool keepsAlpha = false)
             {
                 var size = texture != null
                     ? new Vector2Int(Mathf.Min(texture.width, options.AtlasSize), Mathf.Min(texture.height, options.AtlasSize))
@@ -238,7 +289,7 @@ namespace UVWizard.Core.Pipeline
                 var whole = new BakeSource(texture != null ? texture : Texture2D.whiteTexture, tint, Identity, Whole, Whole,
                     WholeTriangles, normal?.Strength ?? 1, encoding);
                 var baked = ChannelBaker.Bake(new BakePlan(size.x, size.y, new[] { whole },
-                    normal != null ? options.NormalEncoding : (NormalEncoding?)null));
+                    normal != null ? options.NormalEncoding : (NormalEncoding?)null, keepsAlpha));
                 if (texture != null)
                 {
                     baked.wrapModeU = texture.wrapModeU;

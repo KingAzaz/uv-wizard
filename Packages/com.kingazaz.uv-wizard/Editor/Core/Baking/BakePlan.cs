@@ -30,8 +30,16 @@ namespace UVWizard.Core.Baking
         /// Null bakes colour: each source's texture times its tint. Otherwise the plan bakes tangent-space normals
         /// into a linear texture written in this encoding.
         /// </param>
-        public BakePlan(int width, int height, IReadOnlyList<BakeSource> sources, NormalEncoding? normalEncoding = null)
+        /// <param name="keepsAlpha">
+        /// True keeps each colour texel's alpha, times the tint's, and leaves the gutters unfilled, so only a plan whose
+        /// sources cover every texel should ask for it.
+        /// </param>
+        public BakePlan(int width, int height, IReadOnlyList<BakeSource> sources, NormalEncoding? normalEncoding = null,
+            bool keepsAlpha = false)
         {
+            if (keepsAlpha && normalEncoding != null)
+                throw new ArgumentException("only a colour plan can keep alpha", nameof(keepsAlpha));
+            KeepsAlpha = keepsAlpha;
             if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), width, "must be positive");
             if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height), height, "must be positive");
             Width = width;
@@ -50,6 +58,9 @@ namespace UVWizard.Core.Baking
 
         /// <summary>Null for a colour channel; for the Normal channel, how the atlas encodes its normals.</summary>
         public NormalEncoding? NormalEncoding { get; }
+
+        /// <summary>True when the colour texels keep their alpha, times the tint's, rather than turning opaque.</summary>
+        public bool KeepsAlpha { get; }
     }
 
     /// <summary>Triangles that sample one source texture with one tint, and where each lands in the atlas.</summary>

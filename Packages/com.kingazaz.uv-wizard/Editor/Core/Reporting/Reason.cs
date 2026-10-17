@@ -130,6 +130,7 @@ namespace UVWizard.Core.Reporting
         // Conversions.
         public const string MeshRenderersOnly = "uvwizard.reason.mesh-renderers-only";
         public const string NoSurface = "uvwizard.reason.no-surface";
+        public const string DrawsAdditively = "uvwizard.reason.draws-additively";
         public const string AnimatedProperties = "uvwizard.reason.animated-properties";
         public const string ConvertedAlbedoOffMainUvs = "uvwizard.reason.converted-albedo-off-main-uvs";
         public const string ConvertedEmissionOffUvs = "uvwizard.reason.converted-emission-off-uvs";

@@ -35,6 +35,10 @@ namespace UVWizard.Core.Pipeline
         /// an animation swaps into an excluded slot, gets its own material with the merged shader instead (ADR 0004).
         /// Null leaves every material as it is.
         /// </param>
+        /// <param name="particleShaders">
+        /// The shaders a particle, trail or line material with a shader mobile doesn't allow is converted to. Null
+        /// leaves such materials as they are, and the bake reports them.
+        /// </param>
         /// <param name="rampProperty">The merged shader's shadow-ramp texture property.</param>
         /// <param name="defaultRamp">The ramp to use when no source has the merged shader to copy one from.</param>
         /// <param name="cullingProperty">The culling property merged slots are checked against, when both have it.</param>
@@ -67,8 +71,10 @@ namespace UVWizard.Core.Pipeline
             string emissionUvProperty = "_EmissionUV", string normalMapProperty = "_BumpMap",
             string normalScaleProperty = "_BumpScale", string normalMapKeyword = "USE_NORMAL_MAPS",
             NormalEncoding? normalEncoding = null, Preset? preset = null, Channels channels = Channels.All,
-            string? cacheDirectory = null, int cacheEntries = 16, IReadOnlyCollection<string>? mobileShaders = null)
+            string? cacheDirectory = null, int cacheEntries = 16, IReadOnlyCollection<string>? mobileShaders = null,
+            ParticleShaders? particleShaders = null)
         {
+            ParticleShaders = particleShaders;
             MobileShaders = mobileShaders != null ? new HashSet<string>(mobileShaders) : null;
             CacheDirectory = cacheDirectory;
             CacheEntries = cacheEntries;
@@ -119,5 +125,25 @@ namespace UVWizard.Core.Pipeline
         public string? CacheDirectory { get; }
         public int CacheEntries { get; }
         public HashSet<string>? MobileShaders { get; }
+        public ParticleShaders? ParticleShaders { get; }
+    }
+
+    /// <summary>
+    /// VRChat's mobile particle shaders, which a mobile bake gives particle, trail and line materials (#148). Both
+    /// draw only their main texture times the particle's colour.
+    /// </summary>
+    internal sealed class ParticleShaders
+    {
+        public ParticleShaders(Shader additive, Shader multiply)
+        {
+            Additive = additive;
+            Multiply = multiply;
+        }
+
+        /// <summary>Draws additively, as <c>Blend SrcAlpha One</c>. Every blend but multiply's gets it.</summary>
+        public Shader Additive { get; }
+
+        /// <summary>Draws multiplied, as <c>Blend Zero SrcColor</c>.</summary>
+        public Shader Multiply { get; }
     }
 }

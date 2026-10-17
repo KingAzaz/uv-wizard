@@ -13,6 +13,11 @@ namespace UVWizard.NDMF
         // The shader asset's GUID in the VRChat SDK (triage research §4).
         const string ShaderGuid = "e765db0afa7ecfc44ade2e4e2491f65a";
 
+        // VRChat/Mobile/Particles/Additive and Multiply's GUIDs in SDK 3.10.5: VRChat-Mobile-Particle-Add.shader and
+        // VRChat-Mobile-Particle-Multiply.shader, under com.vrchat.base/Runtime/VRCSDK/Sample Assets/Shaders/Mobile.
+        const string AdditiveParticleGuid = "9200bec112b65ec4fbbbd33fa89c20f4";
+        const string MultiplyParticleGuid = "d5b89f0c74ccf5049ba803c14a090378";
+
         // The SDK's shadow-ramp presets live under Resources; this one is used when no source is Toon Standard.
         public const string DefaultRamp = "VRChat/ShadowRampRealisticSoft";
 
@@ -34,7 +39,18 @@ namespace UVWizard.NDMF
         };
 
         /// <summary>The shader, or null when the VRChat SDK in the project doesn't have it.</summary>
-        public static Shader? Shader => AssetDatabase.LoadAssetAtPath<Shader>(AssetDatabase.GUIDToAssetPath(ShaderGuid));
+        public static Shader? Shader => Load(ShaderGuid);
+
+        /// <summary>
+        /// The SDK's mobile particle shaders, which particle, trail and line materials get, or null when the SDK in
+        /// the project doesn't have both. The Alpha Blended one ships too, but SDK 3.10.5's whitelist leaves it out.
+        /// </summary>
+        public static ParticleShaders? ParticleShaders =>
+            Load(AdditiveParticleGuid) is { } additive && Load(MultiplyParticleGuid) is { } multiply
+                ? new ParticleShaders(additive, multiply)
+                : null;
+
+        static Shader? Load(string guid) => AssetDatabase.LoadAssetAtPath<Shader>(AssetDatabase.GUIDToAssetPath(guid));
 
         // The project's Library, which Unity keeps out of version control and rebuilds as needed.
         internal const string CacheDirectory = "Library/UVWizardCache";
@@ -42,12 +58,12 @@ namespace UVWizard.NDMF
         /// <summary>
         /// Atlas channels up to 2048, sized and compressed to ASTC so the avatar fits the component's preset, with
         /// the channels it turns on. Bakes are cached in the project's Library. Materials left out of the atlas get
-        /// Toon Standard materials of their own.
+        /// Toon Standard materials of their own, and particle, trail and line materials get mobile particle shaders.
         /// </summary>
         public static BakeOptions Options(Shader shader, UVWizardAvatar avatar) => new BakeOptions(shader, atlasSize: 2048,
             padding: 8, compress: true, rampProperty: "_Ramp", defaultRamp: Resources.Load<Texture2D>(DefaultRamp),
             representativeProperties: SharedProperties, preset: PresetOf(avatar.preset), channels: ChannelsOf(avatar),
-            cacheDirectory: CacheDirectory, mobileShaders: MobileShaders);
+            cacheDirectory: CacheDirectory, mobileShaders: MobileShaders, particleShaders: ParticleShaders);
 
         static Preset PresetOf(UVWizardAvatar.Preset preset) => preset switch
         {
