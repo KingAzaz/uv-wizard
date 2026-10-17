@@ -318,6 +318,28 @@ namespace UVWizard.Core.Tests.Baking
         }
 
         [Test]
+        public void AnXyzTexelOfLengthZeroBakesFlat()
+        {
+            // A float texel of 0.5 everywhere unpacks to (0, 0, 0), which no 8-bit texel can. Normalizing it gives NaN.
+            var source = new Texture2D(4, 4, TextureFormat.RGBAFloat, mipChain: false, linear: true)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+            };
+            var pixels = new Color[16];
+            for (var i = 0; i < pixels.Length; i++) pixels[i] = new Color(0.5f, 0.5f, 0.5f, 1);
+            source.SetPixels(pixels);
+            source.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            created.Add(source);
+            var plan = NormalPlan(16, NormalEncoding.XYZ,
+                NormalQuad(source, 1, NormalEncoding.XYZ, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            AssertDecodes(new Vector3(0, 0, 1), Texel(atlas, 2, 2), "atlas (2, 2)");
+        }
+
+        [Test]
         public void AnXyzAtlasIsWrittenAsXyz()
         {
             // At strength 2 the bend differs from the RG-or-AG decode's, so the atlas holds the XYZ decode in RGB.
