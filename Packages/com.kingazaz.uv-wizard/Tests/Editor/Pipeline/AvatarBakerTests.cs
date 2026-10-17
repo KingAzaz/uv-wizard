@@ -378,10 +378,11 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.MergedMaterial.IsKeywordEnabled("_NORMALMAP"), Is.False);
         }
 
-        // A strength that isn't a number bakes flat, as 0 does: scaled by it, every texel would be NaN.
+        // A strength that isn't finite bakes flat, as 0 does: scaled by it, every texel would be NaN.
         [TestCase(0f)]
         [TestCase(float.NaN)]
         [TestCase(float.PositiveInfinity)]
+        [TestCase(float.NegativeInfinity)]
         public void ANormalMapAtZeroOrNonFiniteStrengthLeavesTheNormalChannelOff(float strength)
         {
             var flat = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), strength);
