@@ -277,7 +277,16 @@ namespace UVWizard.Core.Tests.Meshes
             var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
 
             Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, new LaterToolNeeds(5, keepSubmeshes: false)));
-            Assert.Throws<System.ArgumentOutOfRangeException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, new LaterToolNeeds(0, keepSubmeshes: false)));
+            var outOfRange = Assert.Throws<System.ArgumentOutOfRangeException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, new LaterToolNeeds(0, keepSubmeshes: false)));
+            Assert.That(outOfRange.Message, Does.Contain(nameof(LaterToolNeeds.KeepSourceUv0In)));
+        }
+
+        [Test]
+        public void ARendererTheBakeKeepsOutCantBeRewritten()
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+
+            Assert.Throws<System.ArgumentException>(() => Uv0Rewriter.Rewrite(source, new[] { OneChart }, LaterToolNeeds.CantKeepSourceUv0));
         }
 
         [Test]
