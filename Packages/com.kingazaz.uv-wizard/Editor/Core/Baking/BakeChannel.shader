@@ -76,6 +76,7 @@ Shader "Hidden/UVWizard/BakeChannel"
             float4 frag(v2f i) : SV_Target
             {
                 float4 packed = tex2D(_MainTex, i.uv);
+                bool rgOrAg = _SourceEncoding < 0.5;
                 bool ag = _SourceEncoding > 0.5 && _SourceEncoding < 1.5;
                 bool xyz = _SourceEncoding > 1.5;
                 float x = ag ? packed.a : xyz ? packed.r : packed.r * packed.a;
@@ -87,7 +88,7 @@ Shader "Hidden/UVWizard/BakeChannel"
                 float2 xy = float2(x, packed.g) * 2 - 1;
                 float z = xyz ? packed.b * 2 - 1 : sqrt(1 - saturate(dot(xy, xy)));
                 xy *= _Strength;
-                if (_SourceEncoding < 0.5)
+                if (rgOrAg)
                     z = sqrt(1 - saturate(dot(xy, xy)));
                 float3 n = float3(xy, z);
                 n = dot(n, n) > 0 ? normalize(n) : float3(0, 0, 1);

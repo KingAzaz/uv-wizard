@@ -342,7 +342,7 @@ namespace UVWizard.Core.Tests.Baking
         [Test]
         public void AnXyzAtlasIsWrittenAsXyz()
         {
-            // At strength 2 the bend differs from the RG-or-AG decode's, so the atlas holds the XYZ decode in RGB.
+            // An XYZ atlas holds the XYZ decode in plain RGB, not swizzled into the AG layout.
             var plan = NormalPlan(16, NormalEncoding.XYZ,
                 NormalQuad(NormalMap(Xyz), 2, NormalEncoding.XYZ, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
 
