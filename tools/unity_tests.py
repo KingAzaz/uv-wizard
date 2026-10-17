@@ -23,7 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import unity_bridge as bridge  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TESTS_DIR = os.path.join(REPO, "Packages", "com.kingazaz.uv-wizard", "Tests")
+PACKAGE_DIR = os.path.join(REPO, "Packages", "com.kingazaz.uv-wizard")
+TESTS_DIR = os.path.join(PACKAGE_DIR, "Tests")
 
 # MCP for Unity's TestJobManager auto-fails a job that hasn't started within
 # 15 s by default ("failed to initialize"), yet Unity still runs it, so the next
@@ -100,15 +101,32 @@ def compilation_failed(port, deadline):
     return bridge.result_of(reply).get("result") is True
 
 
-def refresh(port, deadline, compile_wait=180, poll=1.0):
+def newest_source_ms():
+    """When a script or assembly definition in the package last changed, in unix ms."""
+    newest = 0
+    for pattern in ("*.cs", "*.asmdef", "*.asmref"):
+        for path in glob.glob(os.path.join(PACKAGE_DIR, "**", pattern), recursive=True):
+            newest = max(newest, int(os.path.getmtime(path) * 1000))
+    return newest
+
+
+def refresh(port, deadline, compile_wait=180, poll=1.0, settle=15, source_ms=None):
     """Refresh, request a compile, and wait until the editor is idle again on the new code.
 
-    A requested compile always ends in a compile or a domain reload, even with
+    A requested compile usually ends in a compile or a domain reload, even with
     nothing changed, but only seconds after the refresh returns (about 8 s on
-    the dev machine). So the wait ends only once one is seen: an idle editor
-    alone may still be on the old code.
+    the dev machine). So the wait ends once one is seen: an idle editor alone
+    may still be on the old code.
+
+    A focused editor compiles each edit by itself, and the requested compile
+    then may never come (#229). So the wait also ends once the editor has
+    stayed idle for settle seconds after a compile that finished later than
+    the newest source file.
     """
     started = now_ms()
+    if source_ms is None:
+        source_ms = newest_source_ms()
+    current_since = None
     try:
         bridge.result_of(bridge.call(
             port, "refresh_unity", {"mode": "force", "scope": "all", "compile": "request", "wait_for_ready": False},
@@ -121,8 +139,15 @@ def refresh(port, deadline, compile_wait=180, poll=1.0):
             state = editor_state(port, give_up)
         except bridge.BridgeError:
             state = None
-        if state is not None and is_idle(state) and compile_finished_since(state, started):
+        idle = state is not None and is_idle(state)
+        if idle and compile_finished_since(state, started):
             break
+        if idle and compile_finished_since(state, source_ms):
+            current_since = current_since or time.monotonic()
+            if time.monotonic() - current_since >= settle:
+                break
+        else:
+            current_since = None
         if time.monotonic() > give_up:
             if compilation_failed(port, deadline):
                 raise Failed("scripts failed to compile; the editor still runs the old code (see its console)")
@@ -133,7 +158,7 @@ def refresh(port, deadline, compile_wait=180, poll=1.0):
     log("unity-tests: refreshed and compiled")
 
 
-def start_job(port, params, deadline, adopt_wait=10, poll=1.0, reruns=1):
+def start_job(port, params, deadline, adopt_wait=10, poll=1.0, reruns=1, drop_wait=90):
     """Start a test run and return its job id.
 
     run_tests isn't safe to send twice, so it is never resent blind. If the
@@ -147,6 +172,11 @@ def start_job(port, params, deadline, adopt_wait=10, poll=1.0, reruns=1):
     since this call, but no job to follow. Nothing is running then, so
     run_tests is sent again, up to reruns times, and the first run's result is
     lost: a flaky test can fail in it and pass in the rerun.
+
+    After an editor restart a job can take most of a minute to start, and the
+    busy editor drops the snapshot requests meanwhile. So after a dropped
+    request the wait lasts drop_wait seconds, and it ends saying tests are
+    running only if a snapshot showed a job this run didn't start (#229).
     """
     requested = now_ms()
     try:
@@ -155,22 +185,28 @@ def start_job(port, params, deadline, adopt_wait=10, poll=1.0, reruns=1):
             return bridge.result_of(reply)["job_id"]
     except bridge.DroppedAfterSending as error:
         log("unity-tests: %s; looking for the job it started" % error)
+        adopt_wait = max(adopt_wait, drop_wait)
     give_up = min(deadline, time.monotonic() + adopt_wait)
+    saw_theirs = False
     while True:
         try:
-            tests = editor_state(port, deadline).get("tests") or {}
+            tests = editor_state(port, give_up).get("tests") or {}
         except bridge.BridgeError:
             tests = {}
         ours = (tests.get("started_unix_ms") or 0) >= requested
         if ours and tests.get("current_job_id"):
             return tests["current_job_id"]
+        if not ours and tests.get("current_job_id"):
+            saw_theirs = True
         if ours and (tests.get("last_run") or {}).get("finished_unix_ms"):
             if not reruns:
                 raise RuntimeError("the tests ran, but the editor's reply was lost: result unknown")
             log("unity-tests: the job finished before its id was seen; running it again (its result is lost)")
             return start_job(port, params, deadline, adopt_wait, poll, reruns - 1)
         if time.monotonic() > give_up:
-            raise RuntimeError("the editor is already running tests that this run didn't start")
+            if saw_theirs:
+                raise RuntimeError("the editor is already running tests that this run didn't start")
+            raise RuntimeError("no test job seen within %d s of the request" % adopt_wait)
         time.sleep(poll)
 
 
