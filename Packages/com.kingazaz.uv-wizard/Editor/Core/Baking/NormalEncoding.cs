@@ -10,11 +10,17 @@ namespace UVWizard.Core.Baking
     {
         /// <summary>
         /// x in red, or in alpha where red is 1, and y in green, the way Unity's <c>UnpackNormalmapRGorAG</c> reads
-        /// it: Unity's XYZ (z in blue, alpha 1), BC5 and desktop DXT5nm all decode this way.
+        /// it on desktop: Unity's XYZ (z in blue, alpha 1), BC5 and DXT5nm all decode this way there.
         /// </summary>
         RGorAG,
 
         /// <summary>x in alpha and y in green: Unity's DXT5nm-style encoding for mobile, stored as (y, y, y, x).</summary>
         AG,
+
+        /// <summary>
+        /// x, y and z in red, green and blue, the way Unity's mobile XYZ decoder (<c>UNITY_NO_DXT5nm</c>) reads it: it
+        /// keeps the stored z and never reads alpha.
+        /// </summary>
+        XYZ,
     }
 }

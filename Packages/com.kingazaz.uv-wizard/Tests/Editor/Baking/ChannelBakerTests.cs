@@ -260,19 +260,22 @@ namespace UVWizard.Core.Tests.Baking
             }
         }
 
-        // NormalEncoding is internal, so the cases name it by whether the source is in the AG layout.
-        [TestCase(false, 2f)]
-        [TestCase(false, 0.5f)]
-        [TestCase(true, 2f)]
-        [TestCase(true, 0.5f)]
-        [TestCase(false, 4f)]
-        [TestCase(true, 4f)]
-        public void StrengthBendsTheNormalTheWayUnpackScaleNormalDoes(bool ag, float strength)
+        // NormalEncoding is internal, so the cases name it.
+        [TestCase("RGorAG", 2f)]
+        [TestCase("RGorAG", 0.5f)]
+        [TestCase("AG", 2f)]
+        [TestCase("AG", 0.5f)]
+        [TestCase("RGorAG", 4f)]
+        [TestCase("AG", 4f)]
+        [TestCase("XYZ", 0.5f)]
+        [TestCase("XYZ", 2f)]
+        [TestCase("XYZ", 4f)]
+        public void StrengthBendsTheNormalTheWayUnpackScaleNormalDoes(string encodingName, float strength)
         {
             // In RG or AG, from strength 2 the corner texels tilt past horizontal, so their z clamps to 0. At 4 their
-            // x and y run well past 1 in either encoding and have to be normalized back.
-            var encoding = ag ? NormalEncoding.AG : NormalEncoding.RGorAG;
-            var source = NormalMap(ag ? Ag : Xyz);
+            // x and y run well past 1 in every encoding and have to be normalized back. XYZ keeps the stored z.
+            var encoding = (NormalEncoding)Enum.Parse(typeof(NormalEncoding), encodingName);
+            var source = NormalMap(encoding == NormalEncoding.AG ? Ag : Xyz);
             var plan = NormalPlan(16, NormalEncoding.RGorAG,
                 NormalQuad(source, strength, encoding, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
 
@@ -281,6 +284,37 @@ namespace UVWizard.Core.Tests.Baking
             for (var j = 0; j < 4; j++)
             for (var i = 0; i < 4; i++)
                 AssertDecodes(UnpackScaleNormal(SourceNormal(i, j), strength, encoding), Texel(atlas, i, j), $"atlas ({i}, {j})");
+        }
+
+        [Test]
+        public void AnXyzSourceReadsXFromRedWhateverItsAlpha()
+        {
+            // The mobile XYZ decoder never reads alpha (#131), so a normal map with alpha below 1 mustn't tilt there.
+            var opaque = NormalMap(Xyz);
+            var translucent = NormalMap(n => { var c = Xyz(n); c.a = 64; return c; });
+
+            var expected = Bake(NormalPlan(16, NormalEncoding.XYZ,
+                NormalQuad(opaque, 2, NormalEncoding.XYZ, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f))));
+            var atlas = Bake(NormalPlan(16, NormalEncoding.XYZ,
+                NormalQuad(translucent, 2, NormalEncoding.XYZ, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f))));
+
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++)
+                Assert.That(Texel(atlas, i, j), Is.EqualTo(Texel(expected, i, j)), $"atlas ({i}, {j})");
+        }
+
+        [Test]
+        public void AnXyzAtlasIsWrittenAsXyz()
+        {
+            // At strength 2 the bend differs from the RG-or-AG decode's, so the atlas holds the XYZ decode in RGB.
+            var plan = NormalPlan(16, NormalEncoding.XYZ,
+                NormalQuad(NormalMap(Xyz), 2, NormalEncoding.XYZ, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++)
+                AssertDecodes(UnpackScaleNormal(SourceNormal(i, j), 2, NormalEncoding.XYZ), Texel(atlas, i, j), $"atlas ({i}, {j})");
         }
 
         [Test]
@@ -493,11 +527,12 @@ namespace UVWizard.Core.Tests.Baking
 
         // The direction Unity's UnpackScaleNormalRGorAG (UnityStandardUtils.cginc) gives a normal stored in 8 bits.
         // Its desktop branch, for RG or AG, scales x and y and then rebuilds z from them, so past horizontal z is 0.
-        // Its mobile ASTC branch, for AG, rebuilds z from the stored x and y and then scales them.
+        // Its mobile ASTC branch, for AG, rebuilds z from the stored x and y and then scales them. Its UNITY_NO_DXT5nm
+        // branch, for XYZ, keeps the stored z and scales x and y.
         static Vector3 UnpackScaleNormal(Vector3 stored, float strength, NormalEncoding encoding)
         {
             var xy = new Vector2(Unpacked(Packed(stored.x)), Unpacked(Packed(stored.y)));
-            var z = Mathf.Sqrt(1 - Mathf.Clamp01(xy.sqrMagnitude));
+            var z = encoding == NormalEncoding.XYZ ? Unpacked(Packed(stored.z)) : Mathf.Sqrt(1 - Mathf.Clamp01(xy.sqrMagnitude));
             xy *= strength;
             if (encoding == NormalEncoding.RGorAG)
                 z = Mathf.Sqrt(1 - Mathf.Clamp01(xy.sqrMagnitude));

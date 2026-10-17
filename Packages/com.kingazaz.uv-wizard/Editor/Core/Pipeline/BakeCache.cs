@@ -20,8 +20,9 @@ namespace UVWizard.Core.Pipeline
     internal sealed class BakeCache
     {
         // Bumped whenever an entry's layout changes, or the bake's output for the same inputs does. 3: normal strength
-        // is applied the way UnpackScaleNormal applies it (#63).
-        const int Format = 3;
+        // is applied the way UnpackScaleNormal applies it (#63). 4: mobile XYZ normal maps decode the way Unity's
+        // mobile XYZ decoder does (#143).
+        const int Format = 4;
         const string Extension = ".bake";
         const string Partial = ".partial";
 
