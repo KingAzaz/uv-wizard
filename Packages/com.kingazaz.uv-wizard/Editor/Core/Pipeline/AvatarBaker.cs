@@ -361,6 +361,8 @@ namespace UVWizard.Core.Pipeline
             // Every slot, extra and empty ones too, so the materials animations swap into them are all listed.
             for (var s = 0; s < materials.Length; s++)
             {
+                // A layer the bake removes is reported as removed, not excluded.
+                if (conversions.Removes(renderer, s)) continue;
                 var material = materials[s];
                 var animations = AnimationsOf(animated, renderer, s);
                 if (animations.Count > 0)

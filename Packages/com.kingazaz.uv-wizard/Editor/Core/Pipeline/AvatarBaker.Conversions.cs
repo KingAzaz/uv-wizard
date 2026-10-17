@@ -45,8 +45,11 @@ namespace UVWizard.Core.Pipeline
             readonly List<Texture2D> textures = new List<Texture2D>();
             // Each renderer's slots whose layers the bake removes, by their index before the bake.
             readonly HashSet<(Renderer Renderer, int Slot)> removing = new HashSet<(Renderer, int)>();
-            // Layers kept on extra slots for the animations that swap them, which get the merged material's settings.
-            readonly HashSet<Material> keptLayers = new HashSet<Material>();
+            // Layers kept on extra slots for the animations that swap them, by renderer, which get the merged material's
+            // settings. The same layer elsewhere, on a submesh of its own, is left and reported as before.
+            readonly HashSet<(Renderer, Material)> keptLayers = new HashSet<(Renderer, Material)>();
+            // Each kept layer, and the material that takes its place.
+            readonly Dictionary<Material, Material> keptMade = new Dictionary<Material, Material>();
 
             /// <param name="renderers">The renderers the bake changes, whose layers on extra slots it plans to remove.</param>
             public Conversions(BakeOptions options, IReadOnlyList<AnimatedSlot>? animated, IReadOnlyList<Renderer> renderers)
@@ -98,7 +101,7 @@ namespace UVWizard.Core.Pipeline
                         {
                             foreach (var layer in AnimationsOf(animated, renderer, s).SelectMany(a => a.SwappedIn)
                                          .Append(materials[s]))
-                                if (layer != null && IsLayer(layer, out _)) keptLayers.Add(layer);
+                                if (layer != null && IsLayer(layer, out _)) keptLayers.Add((renderer, layer));
                             continue;
                         }
                         if (materials[s] is not { } material || !IsLayer(material, out var reason)) continue;
@@ -132,21 +135,28 @@ namespace UVWizard.Core.Pipeline
                     Leave(source, renderer, slot, new Reason(ReasonText.MeshRenderersOnly));
                     return source;
                 }
-                if (!converted.TryGetValue(source, out var made))
+                Material made;
+                // A layer kept on an extra slot for an animation is converted, since no other shader passes there.
+                if (keptLayers.Contains((renderer, source)))
+                {
+                    if (!keptMade.TryGetValue(source, out made))
+                    {
+                        keptMade.Add(source, made = KeptLayer(source, SourceShaderReader.Read(source), renderer, slot));
+                        Made.Add((source, made));
+                    }
+                }
+                else if (!converted.TryGetValue(source, out made))
                 {
                     var reading = SourceShaderReader.Read(source);
-                    // An add-on layer has no surface of its own: converted, it would paint over the one beneath. One
-                    // kept on an extra slot for an animation is converted all the same, since no other shader passes.
-                    if (reading.Albedo == null && !keptLayers.Contains(source))
+                    // An add-on layer has no surface of its own: converted, it would paint over the one beneath.
+                    if (reading.Albedo == null)
                     {
                         converted.Add(source, source);
                         var noSurface = new Reason(ReasonText.NoSurface);
                         Leave(source, renderer, slot, reading.Reason?.Then(noSurface) ?? noSurface);
                         return source;
                     }
-                    converted.Add(source, made = reading.Albedo == null
-                        ? KeptLayer(source, reading, renderer, slot)
-                        : Convert(source, reading, renderer, slot));
+                    converted.Add(source, made = Convert(source, reading, renderer, slot));
                     Made.Add((source, made));
                 }
                 // The conversion is flagged on each renderer whose properties an animation changes, once, whichever
@@ -217,6 +227,7 @@ namespace UVWizard.Core.Pipeline
                 textures.Clear();
                 Made.Clear();
                 converted.Clear();
+                keptMade.Clear();
             }
 
             /// <summary>The flagged notes, followed by the conversions' own.</summary>
