@@ -1225,6 +1225,22 @@ namespace UVWizard.Core.Tests.Pipeline
             AssertFailedBakeLeavesNothing(Converting(preset: Preset.Excellent), first, RendererWhoseRewriteFails());
         }
 
+        [Test]
+        public void ARewriteThatFailsFreesTheParticleMaterialsMadeForTheBudget()
+        {
+            // The tinted line's particle material, and the texture its tint is baked into, are made to count against
+            // the budget before any rewrite.
+            var line = Keep(new GameObject("line")).AddComponent<LineRenderer>();
+            var tinted = Keep(new Material(Shader.Find("Particles/Standard Unlit")) { mainTexture = Gradient(16, 3), color = Color.red });
+            line.sharedMaterials = new[] { tinted };
+            var options = new BakeOptions(Shader.Find("Standard"), padding: 0, preset: Preset.Excellent,
+                mobileShaders: Array.Empty<string>(),
+                particleShaders: new ParticleShaders(Shader.Find("Legacy Shaders/Particles/Additive"),
+                    Shader.Find("Legacy Shaders/Particles/Multiply")));
+
+            AssertFailedBakeLeavesNothing(options, line, RendererWhoseRewriteFails());
+        }
+
         // A renderer that already uses UV3, where the later tool of AssertFailedBakeLeavesNothing keeps the source UV0,
         // so its rewrite throws.
         MeshRenderer RendererWhoseRewriteFails()
