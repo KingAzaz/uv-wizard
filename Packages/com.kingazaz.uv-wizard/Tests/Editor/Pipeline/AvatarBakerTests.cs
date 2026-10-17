@@ -1288,7 +1288,23 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(Filter(renderer).sharedMesh, Is.SameAs(mesh));
             Assert.That(renderer.sharedMaterials, Is.EqualTo(materials));
             Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(materials));
+            Assert.That(result.Excluded.Select(note => note.Reason), Has.All.EqualTo(new Reason(ReasonText.LaterToolNeedsUvs)));
             Assert.That(tool.Disposed, Is.False, "its triangles aren't asked about");
+        }
+
+        [Test]
+        public void ARendererALaterToolKeepsOutForItsOwnReasonIsExcludedWithThatReason()
+        {
+            var mesh = Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0.2f, 0.3f, 0.9f, 0.8f) });
+            var materials = new[] { Standard(Gradient(16, 0), Color.white), Standard(Gradient(32, 1), Color.white) };
+            var renderer = MeshRenderer(mesh, materials);
+            var why = new Reason("Merged into \"Outfit\".");
+
+            var result = Bake(new BakeOptions(Shader.Find("Standard")), new LaterTool { KeptOutBecause = why }, renderer);
+
+            Assert.That(Filter(renderer).sharedMesh, Is.SameAs(mesh));
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(materials));
+            Assert.That(result.Excluded.Select(note => (note.Material, note.Reason)), Is.EqualTo(materials.Select(m => (m, why))));
         }
 
         [Test]
@@ -1380,8 +1396,10 @@ namespace UVWizard.Core.Tests.Pipeline
 
             public ITriangleRemovals? Removals(Renderer renderer) => Deletes != null ? this : null;
             public bool NoChannelFree;
+            public Reason? KeptOutBecause;
             public LaterToolNeeds Needs(Renderer renderer) =>
-                NoChannelFree ? LaterToolNeeds.CantKeepSourceUv0 : new LaterToolNeeds(SourceUv0Channel, KeepsSubmeshes);
+                KeptOutBecause != null ? LaterToolNeeds.KeepsOut(KeptOutBecause)
+                : NoChannelFree ? LaterToolNeeds.CantKeepSourceUv0 : new LaterToolNeeds(SourceUv0Channel, KeepsSubmeshes);
             public bool ThrowsWhenTold;
             public void KeptSourceUv0(Renderer renderer, int channel)
             {

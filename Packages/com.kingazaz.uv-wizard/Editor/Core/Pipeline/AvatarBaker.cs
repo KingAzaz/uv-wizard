@@ -351,7 +351,7 @@ namespace UVWizard.Core.Pipeline
                 for (var s = 0; s < sources.Length; s++)
                 {
                     if (sources[s] != null && !conversions.Removes(renderer, s))
-                        excluded.Add(new SlotNote(renderer, s, sources[s], new Reason(ReasonText.LaterToolNeedsUvs)));
+                        excluded.Add(new SlotNote(renderer, s, sources[s], rendererNeeds.KeptOutBecause!));
                     ExcludeSwappedIn(renderer, s, sources[s], AnimationsOf(animated, renderer, s), excluded);
                 }
                 return;

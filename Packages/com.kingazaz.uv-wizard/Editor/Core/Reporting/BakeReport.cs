@@ -81,8 +81,7 @@ namespace UVWizard.Core.Reporting
                 notes.GroupBy(note => note.Material).Select(group =>
                 {
                     var onRenderers = group.GroupBy(note => note.Renderer).Select(byRenderer => byRenderer.First()).ToList();
-                    return new MaterialRow(outcome, group.Key, onRenderers.Select(note => note.Renderer).ToList(),
-                        onRenderers.Select(note => note.RendererName).ToList(),
+                    return new MaterialRow(outcome, group.Key, onRenderers,
                         Reason.Of(group.Select(note => note.Reason).Distinct())!);
                 });
             return Grouped(result.Excluded, MaterialOutcome.Excluded)
@@ -157,14 +156,14 @@ namespace UVWizard.Core.Reporting
     /// <summary>One excluded or flagged material, every renderer it's on, and why.</summary>
     internal sealed class MaterialRow
     {
-        public MaterialRow(MaterialOutcome outcome, Material material, IReadOnlyList<Renderer> renderers,
-            IReadOnlyList<string> rendererNames, Reason reason)
+        /// <param name="onRenderers">A note for each renderer, which gives its renderer and that renderer's name.</param>
+        public MaterialRow(MaterialOutcome outcome, Material material, IReadOnlyList<SlotNote> onRenderers, Reason reason)
         {
             Outcome = outcome;
             Material = material;
             MaterialName = material.name;
-            Renderers = renderers;
-            RendererNames = rendererNames;
+            Renderers = onRenderers.Select(note => note.Renderer).ToList();
+            RendererNames = onRenderers.Select(note => note.RendererName).ToList();
             Reason = reason;
         }
 
@@ -177,7 +176,7 @@ namespace UVWizard.Core.Reporting
         /// <summary>The renderers, which are gone once the build's clone is.</summary>
         public IReadOnlyList<Renderer> Renderers { get; }
 
-        /// <summary>The renderers' names, kept for when the renderers are gone.</summary>
+        /// <summary>The renderers' names, in the same order, kept for when the renderers are gone.</summary>
         public IReadOnlyList<string> RendererNames { get; }
         public Reason Reason { get; }
     }

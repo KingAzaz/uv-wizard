@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Meshes;
 using UVWizard.Core.Pipeline;
+using UVWizard.Core.Reporting;
 
 namespace UVWizard.NDMF
 {
@@ -23,6 +24,8 @@ namespace UVWizard.NDMF
     /// <remarks>
     /// A Merge Skinned Mesh target's Remove Mesh components read the UVs and slots of every renderer merged into
     /// it, after each source has reverted its own evacuation, so a source of such a target stays out of the bake.
+    /// With Skip Enablement Mismatched Renderers on, AAO leaves out each source whose enabled state differs from the
+    /// target's. Such a source stays a renderer of its own, so it's baked as one.
     /// AAO's interop works on skinned renderers only. Since AAO 1.9.0 its Remove Mesh components run on other
     /// renderers too, so one with Remove Mesh By Mask or By UV Tile stays out of the bake, where they still read
     /// its own UVs and slots. Other renderers pass through.
@@ -33,25 +36,26 @@ namespace UVWizard.NDMF
         internal static readonly Type? RemoveMeshByUVTile =
             typeof(RemoveMeshByMask).Assembly.GetType("Anatawa12.AvatarOptimizer.RemoveMeshByUVTile");
 
-        // The renderers merged, directly or through other merges, into a Merge Skinned Mesh target that reads UVs.
-        readonly HashSet<Renderer> mergedIntoUvReader = new();
+        // Each renderer merged, directly or through other merges, into a Merge Skinned Mesh target that reads UVs,
+        // and that target.
+        readonly Dictionary<Renderer, SkinnedMeshRenderer> mergedIntoUvReader = new();
 
         public AaoMeshEdits(GameObject root)
         {
             var sourcesOf = new Dictionary<SkinnedMeshRenderer, Renderer[]>();
             foreach (var merge in root.GetComponentsInChildren<MergeSkinnedMesh>(true))
-                if (merge.TryGetComponent<SkinnedMeshRenderer>(out var target)) sourcesOf[target] = SourcesOf(merge);
+                if (merge.TryGetComponent<SkinnedMeshRenderer>(out var target)) sourcesOf[target] = SourcesOf(merge, target, root.transform);
             foreach (var target in sourcesOf.Keys)
-                if (ReadsUvs(target)) KeepOut(target, sourcesOf);
+                if (ReadsUvs(target)) KeepOut(target, target, sourcesOf);
         }
 
         // Every renderer merged into the target. A merge's slots follow its sources', so a target that reads UVs
         // by slot, such as with Remove Mesh By UV Tile on UV1, needs its sources' own slots and materials too.
-        void KeepOut(SkinnedMeshRenderer target, Dictionary<SkinnedMeshRenderer, Renderer[]> sourcesOf)
+        void KeepOut(SkinnedMeshRenderer target, SkinnedMeshRenderer reader, Dictionary<SkinnedMeshRenderer, Renderer[]> sourcesOf)
         {
             foreach (var source in sourcesOf[target])
-                if (mergedIntoUvReader.Add(source) && source is SkinnedMeshRenderer inner && sourcesOf.ContainsKey(inner))
-                    KeepOut(inner, sourcesOf);
+                if (mergedIntoUvReader.TryAdd(source, reader) && source is SkinnedMeshRenderer inner && sourcesOf.ContainsKey(inner))
+                    KeepOut(inner, reader, sourcesOf);
         }
 
         static bool ReadsUvs(SkinnedMeshRenderer renderer)
@@ -61,14 +65,34 @@ namespace UVWizard.NDMF
             return reads;
         }
 
-        // AAO warns when its API reads a component no script has initialized, as with one made in the inspector,
-        // though reading gives the same sources. The warning is meant for scripts that add the component.
-        static Renderer[] SourcesOf(MergeSkinnedMesh merge)
+        // The sources AAO merges into the target. AAO warns when its API reads a component no script has
+        // initialized, as with one made in the inspector, though reading gives the same sources. The warning is
+        // meant for scripts that add the component.
+        static Renderer[] SourcesOf(MergeSkinnedMesh merge, SkinnedMeshRenderer target, Transform root)
         {
+            Renderer[] sources;
+            bool skipMismatched;
             var logging = Debug.unityLogger.logEnabled;
             Debug.unityLogger.logEnabled = false;
-            try { return merge.SourceSkinnedMeshRenderers.Concat<Renderer>(merge.SourceStaticMeshRenderers).ToArray(); }
+            try
+            {
+                sources = merge.SourceSkinnedMeshRenderers.Concat<Renderer>(merge.SourceStaticMeshRenderers).ToArray();
+                skipMismatched = merge.SkipEnablementMismatchedRenderers;
+            }
             finally { Debug.unityLogger.logEnabled = logging; }
+            if (!skipMismatched) return sources;
+            var enabled = Enabled(target, root);
+            return sources.Where(source => Enabled(source, root) == enabled).ToArray();
+        }
+
+        // As AAO's MergeSkinnedMeshProcessor.CollectMeshInfos decides it: the renderer is on, and so is each object
+        // from its own up to, but not including, the avatar root.
+        static bool Enabled(Renderer renderer, Transform root)
+        {
+            if (!renderer.enabled) return false;
+            for (var transform = renderer.transform; transform != null && transform != root; transform = transform.parent)
+                if (!transform.gameObject.activeSelf) return false;
+            return true;
         }
 
         // AAO's provider is null for a mesh whose Read/Write is off, so triangles AAO removes from such a mesh
@@ -80,7 +104,8 @@ namespace UVWizard.NDMF
 
         public LaterToolNeeds Needs(Renderer renderer)
         {
-            if (mergedIntoUvReader.Contains(renderer)) return LaterToolNeeds.CantKeepSourceUv0;
+            if (mergedIntoUvReader.TryGetValue(renderer, out var reader))
+                return LaterToolNeeds.KeepsOut(new Reason(ReasonText.MergedIntoUvReader, reader.name));
             if (renderer is not SkinnedMeshRenderer skinned)
             {
                 if (renderer.TryGetComponent<RemoveMeshByMask>(out _)) return LaterToolNeeds.CantKeepSourceUv0;

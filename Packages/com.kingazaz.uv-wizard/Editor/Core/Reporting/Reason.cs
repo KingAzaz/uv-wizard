@@ -112,6 +112,7 @@ namespace UVWizard.Core.Reporting
 
         // The bake's own.
         public const string LaterToolNeedsUvs = "uvwizard.reason.later-tool-needs-uvs";
+        public const string MergedIntoUvReader = "uvwizard.reason.merged-into-uv-reader";
         public const string ExtraSlots = "uvwizard.reason.extra-slots";
         public const string LinesOrPoints = "uvwizard.reason.lines-or-points";
         public const string NoUvs = "uvwizard.reason.no-uvs";

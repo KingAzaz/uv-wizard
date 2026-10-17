@@ -199,6 +199,8 @@ namespace UVWizard.NDMF
             (ReasonText.LilToonEmission2nd, "Emission 2nd isn't baked: only the first emission is."),
             (ReasonText.LaterToolNeedsUvs, "A tool that runs after the bake needs this mesh's UVs where they are, so " +
                 "the bake leaves them alone."),
+            (ReasonText.MergedIntoUvReader, "Avatar Optimizer merges it into {0}, which reads the merged mesh's UVs, " +
+                "so the bake leaves this mesh's UVs alone."),
             (ReasonText.ExtraSlots, "Extra material slots draw this part of the mesh again, so its UVs must stay as " +
                 "they are."),
             (ReasonText.LinesOrPoints, "It's drawn as lines or points, which the atlas can't hold."),
