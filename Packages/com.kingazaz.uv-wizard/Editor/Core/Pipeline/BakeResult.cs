@@ -18,9 +18,10 @@ namespace UVWizard.Core.Pipeline
             Texture2D? normalAtlas = null, IReadOnlyList<MovedSlots>? movedSlots = null,
             bool fromCache = false, PackingOutcome? packing = null,
             IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null,
-            IReadOnlyList<SlotNote>? unconverted = null,
+            IReadOnlyList<SlotNote>? unconverted = null, IReadOnlyList<SlotNote>? removed = null,
             IReadOnlyList<(Material Source, Material Converted)>? particleMaterials = null)
         {
+            Removed = removed ?? Array.Empty<SlotNote>();
             ParticleMaterials = particleMaterials ?? Array.Empty<(Material, Material)>();
             Packing = packing;
             Unconverted = unconverted ?? Array.Empty<SlotNote>();
@@ -43,9 +44,11 @@ namespace UVWizard.Core.Pipeline
         public static BakeResult Unchanged(bool fits, IReadOnlyList<SlotNote> excluded, IReadOnlyList<SlotNote> flagged,
             IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null,
             IReadOnlyList<SlotNote>? unconverted = null, bool nothingToBake = false, bool ranOutOfTime = false,
+            IReadOnlyList<SlotNote>? removed = null,
             IReadOnlyList<(Material Source, Material Converted)>? particleMaterials = null) =>
             new BakeResult(fits, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged,
-                convertedMaterials: convertedMaterials, unconverted: unconverted, particleMaterials: particleMaterials)
+                convertedMaterials: convertedMaterials, unconverted: unconverted, removed: removed,
+                particleMaterials: particleMaterials)
             {
                 NothingToBake = nothingToBake,
                 RanOutOfTime = ranOutOfTime,
@@ -149,6 +152,12 @@ namespace UVWizard.Core.Pipeline
         /// own. The SDK refuses such an upload.
         /// </summary>
         public IReadOnlyList<SlotNote> Unconverted { get; }
+
+        /// <summary>
+        /// Layers with no surface of their own, such as lilToon add-ons, removed from extra slots on a mobile bake,
+        /// one per renderer and material, each with its slot's index before the bake. Mobile can't draw them.
+        /// </summary>
+        public IReadOnlyList<SlotNote> Removed { get; }
 
         /// <summary>How the charts were packed, or null when nothing was merged.</summary>
         public PackingOutcome? Packing { get; }
