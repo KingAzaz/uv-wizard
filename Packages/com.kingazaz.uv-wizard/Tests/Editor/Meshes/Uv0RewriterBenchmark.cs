@@ -34,10 +34,10 @@ namespace UVWizard.Core.Tests.Meshes
                 foreach (var mesh in MeshesOf(avatar).Distinct())
                 {
                     var moved = Moved(mesh);
-                    Time(avatar.name, mesh, "no split", (triangle, corners) => false);
-                    Time(avatar.name, mesh, "split where nothing moves",
+                    TimeWithSyntheticAtlas(avatar.name, mesh, "no split", (triangle, corners) => false);
+                    TimeWithSyntheticAtlas(avatar.name, mesh, "split where nothing moves",
                         (triangle, corners) => corners.All(v => !moved[v]));
-                    Time(avatar.name, mesh, "every other triangle split", (triangle, corners) => triangle % 2 == 1);
+                    TimeWithSyntheticAtlas(avatar.name, mesh, "every other triangle split", (triangle, corners) => triangle % 2 == 1);
                 }
                 InABake(avatar);
             }
@@ -58,7 +58,7 @@ namespace UVWizard.Core.Tests.Meshes
                 .Select(MeshOf)
                 .Where(mesh => mesh != null && mesh.uv.Length > 0)!;
 
-        static void Time(string avatar, Mesh mesh, string variant, Func<int, int[], bool> shifted)
+        static void TimeWithSyntheticAtlas(string avatar, Mesh mesh, string variant, Func<int, int[], bool> shifted)
         {
             var uv0 = mesh.uv;
             var atlasUvs = new Vector2[]?[mesh.subMeshCount];
@@ -114,7 +114,7 @@ namespace UVWizard.Core.Tests.Meshes
             {
                 mesh.GetBlendShapeFrameVertices(shape, frame, dv, dn, dt);
                 for (var v = 0; v < moved.Length; v++)
-                    moved[v] |= dv[v] != Vector3.zero || dn[v] != Vector3.zero || dt[v] != Vector3.zero;
+                    moved[v] |= Uv0Rewriter.Moves(dv[v], dn[v], dt[v]);
             }
             return moved;
         }

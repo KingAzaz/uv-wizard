@@ -77,13 +77,10 @@ namespace UVWizard.Core.Meshes
                 for (var k = 0; k < indices[s].Length; k++)
                     corners[s][k] = copies.Want(indices[s][k], atlasUvs[s]?[k]);
             }
-            var (sourceOf, uv0Of, firstExtra) = copies.Assign();
+            var (sourceOf, uv0Of) = copies.Assign();
             for (var s = 0; s < data.subMeshCount; s++)
             for (var k = 0; k < corners[s].Length; k++)
-            {
-                var vertex = indices[s][k];
-                corners[s][k] = corners[s][k] == 0 ? vertex : firstExtra[vertex] + corners[s][k] - 1;
-            }
+                corners[s][k] = copies.IndexOf(indices[s][k], corners[s][k]);
 
             Mesh mesh;
             RewritePath path;
@@ -263,10 +260,19 @@ namespace UVWizard.Core.Meshes
             {
                 source.GetBlendShapeFrameVertices(shape, frame, dv, dn, dt);
                 foreach (var v in split)
-                    if (dv[v] != Vector3.zero || dn[v] != Vector3.zero || dt[v] != Vector3.zero) return true;
+                    if (Moves(dv[v], dn[v], dt[v])) return true;
             }
             return false;
         }
+
+        /// <summary>
+        /// True when a blend-shape frame's deltas for a vertex move it at all. Exact rather than Vector3 !=, which
+        /// calls a delta under 1e-5 long zero, so an appended copy can never lose a delta. Unity drops such a delta
+        /// when it stores the frame unless another of the vertex's deltas is longer, so today the two agree.
+        /// </summary>
+        internal static bool Moves(Vector3 dv, Vector3 dn, Vector3 dt) => NonZero(dv) || NonZero(dn) || NonZero(dt);
+
+        static bool NonZero(Vector3 v) => v.x != 0 || v.y != 0 || v.z != 0;
 
         static void CopyBlendShapes(Mesh source, Mesh mesh, int[] sourceOf)
         {
@@ -359,6 +365,8 @@ namespace UVWizard.Core.Meshes
         sealed class VertexCopies
         {
             readonly List<Vector2?>?[] wanted;
+            // Where each source vertex's extra copies start, once Assign has run.
+            int[]? firstExtra;
 
             public VertexCopies(int vertexCount) => wanted = new List<Vector2?>?[vertexCount];
 
@@ -378,11 +386,11 @@ namespace UVWizard.Core.Meshes
             /// <summary>
             /// Lays the copies out: each source vertex's first copy where the vertex was, then the
             /// extra copies, in source vertex order. Returns each copy's source vertex and UV0 (null:
-            /// its own), and where each source vertex's extra copies start.
+            /// its own).
             /// </summary>
-            public (int[] SourceOf, Vector2?[] Uv0Of, int[] FirstExtra) Assign()
+            public (int[] SourceOf, Vector2?[] Uv0Of) Assign()
             {
-                var firstExtra = new int[wanted.Length];
+                firstExtra = new int[wanted.Length];
                 var count = wanted.Length;
                 for (var v = 0; v < wanted.Length; v++)
                 {
@@ -398,12 +406,15 @@ namespace UVWizard.Core.Meshes
                     uv0Of[v] = copies?[0];
                     for (var c = 1; c < (copies?.Count ?? 1); c++)
                     {
-                        sourceOf[firstExtra[v] + c - 1] = v;
-                        uv0Of[firstExtra[v] + c - 1] = copies![c];
+                        sourceOf[IndexOf(v, c)] = v;
+                        uv0Of[IndexOf(v, c)] = copies![c];
                     }
                 }
-                return (sourceOf, uv0Of, firstExtra);
+                return (sourceOf, uv0Of);
             }
+
+            /// <summary>Where a copy of the source vertex sits once <see cref="Assign"/> has laid them out.</summary>
+            public int IndexOf(int vertex, int copy) => copy == 0 ? vertex : firstExtra![vertex] + copy - 1;
         }
     }
 
