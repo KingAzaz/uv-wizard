@@ -11,9 +11,8 @@ namespace UVWizard.Core.Tests.Reporting
 {
     // Why Avatar Optimizer left a renderer beside the avatar's main skinned mesh (ADR 0001, #65), read off the
     // avatar as the build leaves it.
-    public class LeftoverRenderersTests
+    public class LeftoverRenderersTests : ObjectFixture
     {
-        readonly List<Object> created = new List<Object>();
         GameObject root = null!;
         Transform hips = null!;
 
@@ -23,14 +22,6 @@ namespace UVWizard.Core.Tests.Reporting
             root = Keep(new GameObject("Avatar"));
             hips = new GameObject("Hips").transform;
             hips.SetParent(root.transform);
-        }
-
-        [TearDown]
-        public void TearDown()
-        {
-            foreach (var o in created)
-                if (o != null) Object.DestroyImmediate(o);
-            created.Clear();
         }
 
         [Test]
@@ -222,12 +213,6 @@ namespace UVWizard.Core.Tests.Reporting
             renderer.rootBone = hips;
             renderer.localBounds = new Bounds(Vector3.zero, Vector3.one * 2);
             return renderer;
-        }
-
-        T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
         }
     }
 }

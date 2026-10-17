@@ -8,7 +8,7 @@ using UVWizard.Core.Meshes;
 
 namespace UVWizard.Core.Tests.Meshes
 {
-    public class Uv0RewriterTests
+    public class Uv0RewriterTests : ObjectFixture
     {
         // Atlas UVs for the corners of the two triangles 0-1-2 and 2-1-3, in two charts far apart.
         static readonly Vector2 A0 = new Vector2(0.1f, 0.1f), A1 = new Vector2(0.3f, 0.1f), A2 = new Vector2(0.1f, 0.3f);
@@ -17,15 +17,6 @@ namespace UVWizard.Core.Tests.Meshes
         // The square's two triangles in two charts, so vertices 1 and 2 split, or in one chart, so nothing does.
         static readonly Vector2[] TwoCharts = { A0, A1, A2, B2, B1, B3 };
         static readonly Vector2[] OneChart = { A0, A1, A2, A2, A1, new Vector2(0.3f, 0.3f) };
-
-        readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void DestroyMeshes()
-        {
-            foreach (var o in created) Object.DestroyImmediate(o);
-            created.Clear();
-        }
 
         [Test]
         public void AVertexSharedByTwoChartsSplitsIntoCopiesThatDifferOnlyInUv0()
@@ -510,12 +501,6 @@ namespace UVWizard.Core.Tests.Meshes
             var result = Uv0Rewriter.Rewrite(source, atlasUvs);
             Keep(result.Mesh);
             return result;
-        }
-
-        T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
         }
 
         // A unit square of four vertices, 0 to 3 in reading order from the bottom left, with

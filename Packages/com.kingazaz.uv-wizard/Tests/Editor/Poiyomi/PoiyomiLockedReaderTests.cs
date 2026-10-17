@@ -95,7 +95,7 @@ namespace UVWizard.Core.Tests.Poiyomi
         public void AnOlderLockReadsTheRenamedPropertyAndTreatsStrippedModulesAsOff(string shaderName,
             string optimizerProperty, string? suffixTag)
         {
-            var material = Track(new Material(OlderLock(shaderName, optimizerProperty,
+            var material = Keep(new Material(OlderLock(shaderName, optimizerProperty,
                 @"_Color_Furyon (""Color"", Color) = (1, 1, 1, 1)")));
             material.SetOverrideTag("_ColorAnimated", "2");
             // Only the older tag: a lock recorded thry_locked_rename_suffix only from ThryEditor 2.x on.
@@ -114,7 +114,7 @@ namespace UVWizard.Core.Tests.Poiyomi
         [Test]
         public void ARenamedPropertyWithNoRecordedSuffixAndSeveralCandidatesIsFlagged()
         {
-            var material = Track(new Material(OlderLock("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "",
+            var material = Keep(new Material(OlderLock("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "",
                 @"_Color_Body (""Color"", Color) = (1, 1, 1, 1)
         _Color_Face (""Color"", Color) = (1, 1, 1, 1)")));
             material.SetOverrideTag("_ColorAnimated", "2");
@@ -129,7 +129,7 @@ namespace UVWizard.Core.Tests.Poiyomi
         [Test]
         public void ARecordedSuffixTheShaderDoesntDeclareReadsThePropertyUnderItsOwnName()
         {
-            var material = Track(new Material(OlderLock("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "",
+            var material = Keep(new Material(OlderLock("Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef", "",
                 @"_Color (""Color"", Color) = (1, 1, 1, 1)")));
             material.SetOverrideTag("_ColorAnimated", "2");
             material.SetOverrideTag("thry_locked_rename_suffix", "Hand");
@@ -144,7 +144,7 @@ namespace UVWizard.Core.Tests.Poiyomi
 
         // A hand-written stand-in for a shader an older ThryEditor locked.
         Shader OlderLock(string shaderName, string optimizerProperty, string colourProperties) =>
-            Track(ShaderUtil.CreateShaderAsset($@"Shader ""{shaderName}""
+            Keep(ShaderUtil.CreateShaderAsset($@"Shader ""{shaderName}""
 {{
     Properties
     {{

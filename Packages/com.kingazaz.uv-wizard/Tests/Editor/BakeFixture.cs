@@ -2,8 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using NUnit.Framework;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
@@ -14,25 +12,8 @@ namespace UVWizard.Core.Tests
     /// The source textures, meshes and materials that the core bake tests and the NDMF bake tests both build. Each
     /// test's objects are destroyed after it.
     /// </summary>
-    public abstract class BakeFixture
+    public abstract class BakeFixture : ObjectFixture
     {
-        protected readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void DestroyCreated()
-        {
-            // NDMF saves what a build references into its own temporary assets, which it cleans up itself.
-            foreach (var o in created)
-                if (o != null && !EditorUtility.IsPersistent(o)) Object.DestroyImmediate(o);
-            created.Clear();
-        }
-
-        protected T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
-        }
-
         // A readable sRGB texture whose colour changes smoothly across it, differently per seed.
         protected Texture2D Gradient(int size, int seed) => Gradient(size, size, seed);
 
@@ -65,10 +46,16 @@ namespace UVWizard.Core.Tests
         }
 
         // Turns on the material's normal map at the given strength, with the keyword its shader reads: Standard
-        // samples the map with _MainTex_ST, Toon Standard with the map's own scale and offset.
+        // samples the map with _MainTex_ST, Toon Standard with the map's own scale and offset. Any other shader throws,
+        // rather than get a keyword it doesn't read.
         protected static Material NormalMapped(Material material, Texture2D map, float strength)
         {
-            material.EnableKeyword(material.shader.name == "Standard" ? "_NORMALMAP" : "USE_NORMAL_MAPS");
+            material.EnableKeyword(material.shader.name switch
+            {
+                "Standard" => "_NORMALMAP",
+                "VRChat/Mobile/Toon Standard" => "USE_NORMAL_MAPS",
+                var name => throw new ArgumentException($"NormalMapped doesn't know the keyword {name} reads", nameof(material)),
+            });
             material.SetTexture("_BumpMap", map);
             material.SetFloat("_BumpScale", strength);
             return material;

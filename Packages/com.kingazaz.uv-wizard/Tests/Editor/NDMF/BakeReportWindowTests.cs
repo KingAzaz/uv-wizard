@@ -10,15 +10,15 @@ using UnityEngine.TestTools;
 using UVWizard.Core.Packing;
 using UVWizard.Core.Pipeline;
 using UVWizard.Core.Reporting;
+using UVWizard.Core.Tests;
 using Object = UnityEngine.Object;
 
 namespace UVWizard.NDMF.Tests
 {
     // The report window (#99): repainting a published report, with every section filled in, raises no exception or
     // layout error, including after the build's objects are gone. What each section shows isn't checked.
-    public class BakeReportWindowTests
+    public class BakeReportWindowTests : ObjectFixture
     {
-        readonly List<Object> created = new List<Object>();
         BakeReportWindow? window;
         bool wasOpen;
         BakeReport? userReport;
@@ -40,9 +40,6 @@ namespace UVWizard.NDMF.Tests
             if (window != null && !wasOpen) window.Close();
             if (userReport != null) BakeReports.Publish(userReport, NoOriginals);
             else BakeReports.Clear();
-            foreach (var o in created)
-                if (o != null) Object.DestroyImmediate(o);
-            created.Clear();
         }
 
         [Test]
@@ -102,14 +99,14 @@ namespace UVWizard.NDMF.Tests
         Renderer Renderer(string name)
         {
             var renderer = new GameObject(name).AddComponent<MeshRenderer>();
-            created.Add(renderer.gameObject);
+            Keep(renderer.gameObject);
             return renderer;
         }
 
         Material Material(string name)
         {
             var material = new Material(Shader.Find("Standard")) { name = name };
-            created.Add(material);
+            Keep(material);
             return material;
         }
     }

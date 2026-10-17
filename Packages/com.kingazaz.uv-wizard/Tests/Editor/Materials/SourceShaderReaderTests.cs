@@ -298,7 +298,7 @@ namespace UVWizard.Core.Tests.Materials
         public void AnUnknownShaderIsReadFromTheTextureMarkedMainTexture()
         {
             var texture = Texture();
-            var material = Track(new Material(Track(ShaderUtil.CreateShaderAsset(@"
+            var material = Keep(new Material(Keep(ShaderUtil.CreateShaderAsset(@"
                 Shader ""Hidden/UVWizard Tests/Main Texture Attribute""
                 {
                     Properties
@@ -337,7 +337,7 @@ namespace UVWizard.Core.Tests.Materials
         {
             var emissionMap = Texture();
             var normalMap = Texture();
-            var material = Track(new Material(LockedPoiyomi()));
+            var material = Keep(new Material(LockedPoiyomi()));
             material.SetFloat("_EnableEmission", 1);
             material.SetTexture("_EmissionMap", emissionMap);
             material.SetFloat("_EmissionStrength", 1);
@@ -353,7 +353,7 @@ namespace UVWizard.Core.Tests.Materials
         [Test]
         public void ALockedPoiyomiMaterialMappedOffUv0IsExcludedWithoutThePoiyomiPackage()
         {
-            var material = Track(new Material(LockedPoiyomi()));
+            var material = Keep(new Material(LockedPoiyomi()));
             material.SetTexture("_MainTex", Texture());
             material.SetFloat("_MainTexUV", 1);
 
@@ -366,7 +366,7 @@ namespace UVWizard.Core.Tests.Materials
         [Test]
         public void APoiyomiUvModePastTheKnownOnesIsNamedByNumber()
         {
-            var material = Track(new Material(LockedPoiyomi()));
+            var material = Keep(new Material(LockedPoiyomi()));
             material.SetTexture("_MainTex", Texture());
             material.SetFloat("_MainTexUV", 11);
 
@@ -386,7 +386,7 @@ namespace UVWizard.Core.Tests.Materials
         public void ALockedPoiyomiMaterialReadsARenamedPropertyUnderThryEditorsCleanedSuffix(string suffix,
             string renamed)
         {
-            var material = Track(new Material(LockedPoiyomi($@"{renamed} (""Color"", Color) = (1, 1, 1, 1)")));
+            var material = Keep(new Material(LockedPoiyomi($@"{renamed} (""Color"", Color) = (1, 1, 1, 1)")));
             material.SetOverrideTag("_ColorAnimated", "2");
             material.SetOverrideTag("thry_rename_suffix", suffix);
             material.SetColor("_Color", Color.white);
@@ -400,7 +400,7 @@ namespace UVWizard.Core.Tests.Materials
 
         // A hand-written stand-in for a shader Poiyomi's lock generated, as an avatar ships it.
         Shader LockedPoiyomi(string renamedProperties = "") =>
-            Track(ShaderUtil.CreateShaderAsset(@"
+            Keep(ShaderUtil.CreateShaderAsset(@"
                 Shader ""Hidden/Locked/.poiyomi/Poiyomi Toon/0123456789abcdef""
                 {
                     Properties

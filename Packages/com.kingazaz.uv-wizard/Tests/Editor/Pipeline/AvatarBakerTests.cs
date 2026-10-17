@@ -1210,9 +1210,9 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.Throws<InvalidOperationException>(() => Bake(new BakeOptions(Shader.Find("Standard")),
                 new LaterTool { SourceUv0Channel = 3, ThrowsWhenTold = true }, renderer));
 
-            created.Add(renderer.sharedMaterial);
-            created.Add(Filter(renderer).sharedMesh);
-            created.Add(renderer.sharedMaterial.mainTexture);
+            Keep(renderer.sharedMaterial);
+            Keep(Filter(renderer).sharedMesh);
+            Keep(renderer.sharedMaterial.mainTexture);
             Assert.That(renderer.sharedMaterial.name, Is.EqualTo(AvatarBaker.MergedMaterialName));
             Assert.That(renderer.sharedMaterial.mainTexture, Is.Not.Null, "the atlas");
             Assert.That(Filter(renderer).sharedMesh != null);
@@ -1355,16 +1355,16 @@ namespace UVWizard.Core.Tests.Pipeline
             Transform? head = null, Func<bool>? outOfTime = null)
         {
             var result = AvatarBaker.Bake(renderers, options, laterEdits, animated, head, outOfTime);
-            if (result.MergedMaterial != null) created.Add(result.MergedMaterial);
-            if (result.Atlas != null) created.Add(result.Atlas);
-            if (result.EmissionAtlas != null) created.Add(result.EmissionAtlas);
-            if (result.NormalAtlas != null) created.Add(result.NormalAtlas);
-            foreach (var (_, rewritten) in result.ReplacedMeshes) created.Add(rewritten);
+            if (result.MergedMaterial != null) Keep(result.MergedMaterial);
+            if (result.Atlas != null) Keep(result.Atlas);
+            if (result.EmissionAtlas != null) Keep(result.EmissionAtlas);
+            if (result.NormalAtlas != null) Keep(result.NormalAtlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Keep(rewritten);
             foreach (var (_, converted) in result.ConvertedMaterials.Concat(result.ParticleMaterials))
             {
-                created.Add(converted);
+                Keep(converted);
                 foreach (var id in converted.GetTexturePropertyNameIDs())
-                    if (converted.GetTexture(id) is Texture2D texture && texture.name.StartsWith("UV Wizard")) created.Add(texture);
+                    if (converted.GetTexture(id) is Texture2D texture && texture.name.StartsWith("UV Wizard")) Keep(texture);
             }
             return result;
         }

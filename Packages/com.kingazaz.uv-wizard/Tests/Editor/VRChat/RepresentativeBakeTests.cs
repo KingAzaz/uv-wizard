@@ -10,19 +10,10 @@ namespace UVWizard.Core.Tests.VRChat
 {
     // Which source lends the merged Toon Standard material its shading. Toon Standard and its Outline variant ship with
     // the VRChat SDK, which CI's project doesn't have.
-    public class RepresentativeBakeTests
+    public class RepresentativeBakeTests : ObjectFixture
     {
         const string ToonStandard = "VRChat/Mobile/Toon Standard";
         const string ToonStandardOutline = "VRChat/Mobile/Toon Standard (Outline)";
-
-        readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void DestroyCreated()
-        {
-            foreach (var o in created) Object.DestroyImmediate(o);
-            created.Clear();
-        }
 
         [Test]
         public void AnOutlineOnlyAvatarKeepsItsOutlineSourcesShading()
@@ -92,12 +83,6 @@ namespace UVWizard.Core.Tests.VRChat
             material.SetTexture("_Ramp", ramp);
             material.SetFloat("_ShadowBoost", shadowBoost);
             return material;
-        }
-
-        T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
         }
 
         // A quad from UV (min, min) to (min + size, min + size).

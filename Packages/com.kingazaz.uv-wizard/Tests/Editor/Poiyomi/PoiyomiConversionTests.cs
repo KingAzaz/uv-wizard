@@ -77,13 +77,13 @@ namespace UVWizard.Core.Tests.Poiyomi
         // Bakes a quad drawn with the material, which its off-UV0 textures exclude, converting it to Toon Standard.
         (Material Converted, BakeResult Result) Convert(Material material)
         {
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
                 triangles = new[] { 0, 2, 1, 1, 2, 3 },
             });
-            var go = Track(new GameObject("renderer"));
+            var go = Keep(new GameObject("renderer"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterials = new[] { material };
@@ -91,9 +91,9 @@ namespace UVWizard.Core.Tests.Poiyomi
             var result = AvatarBaker.Bake(new Renderer[] { renderer },
                 new BakeOptions(Shader.Find("VRChat/Mobile/Toon Standard"), mobileShaders: Array.Empty<string>()));
 
-            var converted = Track(renderer.sharedMaterial);
+            var converted = Keep(renderer.sharedMaterial);
             foreach (var id in converted.GetTexturePropertyNameIDs())
-                if (converted.GetTexture(id) is Texture2D texture && texture.name.StartsWith("UV Wizard")) Track(texture);
+                if (converted.GetTexture(id) is Texture2D texture && texture.name.StartsWith("UV Wizard")) Keep(texture);
             Assert.That(result.ConvertedMaterials, Is.EqualTo(new[] { (material, converted) }));
             return (converted, result);
         }

@@ -12,18 +12,8 @@ using Object = UnityEngine.Object;
 namespace UVWizard.Core.Tests.Reporting
 {
     // The end-of-build figures against the preset's budget (#83).
-    public class BudgetCheckTests
+    public class BudgetCheckTests : ObjectFixture
     {
-        readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void TearDown()
-        {
-            foreach (var o in created)
-                if (o != null) Object.DestroyImmediate(o);
-            created.Clear();
-        }
-
         [Test]
         public void MoreSlotsThanTheBudgetAllowsAreOver()
         {
@@ -130,12 +120,6 @@ namespace UVWizard.Core.Tests.Reporting
             var renderer = Keep(new GameObject(name)).AddComponent<SkinnedMeshRenderer>();
             renderer.sharedMaterials = new Material[slots];
             return renderer;
-        }
-
-        T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
         }
     }
 }

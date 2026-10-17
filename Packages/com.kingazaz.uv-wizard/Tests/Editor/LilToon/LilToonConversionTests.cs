@@ -29,23 +29,23 @@ namespace UVWizard.Core.Tests.LilToon
         {
             // The outline layer draws the quad again from an extra slot.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
                 triangles = new[] { 0, 2, 1, 1, 2, 3 },
             });
-            var go = Track(new GameObject("renderer"));
+            var go = Keep(new GameObject("renderer"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterials = new[] { Material("lilToon"), outline };
 
             var result = AvatarBaker.Bake(new Renderer[] { renderer },
                 new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()));
-            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
-            if (result.MergedMaterial != null) Track(result.MergedMaterial);
-            if (result.Atlas != null) Track(result.Atlas);
-            foreach (var (_, rewritten) in result.ReplacedMeshes) Track(rewritten);
+            foreach (var (_, converted) in result.ConvertedMaterials) Keep(converted);
+            if (result.MergedMaterial != null) Keep(result.MergedMaterial);
+            if (result.Atlas != null) Keep(result.Atlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Keep(rewritten);
 
             Assert.That(renderer.sharedMaterials.Last(), Is.SameAs(outline));
             Assert.That(result.ConvertedMaterials.Select(c => c.Source), Has.No.Member(outline));
@@ -60,13 +60,13 @@ namespace UVWizard.Core.Tests.LilToon
             // The flag says a converted material may look different, and the add-on layer isn't converted. It's on two
             // extra slots, so the second finds it already read.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
                 triangles = new[] { 0, 2, 1, 1, 2, 3 },
             });
-            var go = Track(new GameObject("renderer"));
+            var go = Keep(new GameObject("renderer"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             var main = Material("lilToon");
@@ -75,10 +75,10 @@ namespace UVWizard.Core.Tests.LilToon
             var result = AvatarBaker.Bake(new Renderer[] { renderer },
                 new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
                 animated: new[] { new AnimatedSlot(renderer, null, new Reason("Glows in \"Glow\".")) });
-            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
-            if (result.MergedMaterial != null) Track(result.MergedMaterial);
-            if (result.Atlas != null) Track(result.Atlas);
-            foreach (var (_, rewritten) in result.ReplacedMeshes) Track(rewritten);
+            foreach (var (_, converted) in result.ConvertedMaterials) Keep(converted);
+            if (result.MergedMaterial != null) Keep(result.MergedMaterial);
+            if (result.Atlas != null) Keep(result.Atlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Keep(rewritten);
 
             Assert.That(result.Unconverted.Select(note => note.Material), Is.EqualTo(new[] { outline }));
             Assert.That(result.Flagged.Where(note => note.Reason.Keys.Contains(ReasonText.AnimatedProperties))
@@ -91,25 +91,25 @@ namespace UVWizard.Core.Tests.LilToon
             var glass = Material("Hidden/lilToonTransparent");
             glass.SetFloat("_UseEmission", 1);
             glass.SetColor("_EmissionColor", Color.white);
-            glass.SetTexture("_EmissionMap", Track(new Texture2D(4, 4)));
+            glass.SetTexture("_EmissionMap", Keep(new Texture2D(4, 4)));
             glass.SetFloat("_EmissionMap_UVMode", 1);
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
                 triangles = new[] { 0, 2, 1, 1, 2, 3 },
             });
-            var go = Track(new GameObject("renderer"));
+            var go = Keep(new GameObject("renderer"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = glass;
 
             var result = AvatarBaker.Bake(new Renderer[] { renderer },
                 new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()));
-            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
-            if (result.MergedMaterial != null) Track(result.MergedMaterial);
-            if (result.Atlas != null) Track(result.Atlas);
-            foreach (var (_, rewritten) in result.ReplacedMeshes) Track(rewritten);
+            foreach (var (_, converted) in result.ConvertedMaterials) Keep(converted);
+            if (result.MergedMaterial != null) Keep(result.MergedMaterial);
+            if (result.Atlas != null) Keep(result.Atlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Keep(rewritten);
 
             Assert.That(result.Excluded.Single().Reason,
                 Is.EqualTo(new Reason(ReasonText.ChannelOffMainUvs, ReasonText.Channel(Channel.Emission), 1)));
