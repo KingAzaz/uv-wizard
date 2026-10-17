@@ -37,8 +37,6 @@ namespace UVWizard.Core.Baking
         public BakePlan(int width, int height, IReadOnlyList<BakeSource> sources, NormalEncoding? normalEncoding = null,
             bool keepsAlpha = false)
         {
-            if (keepsAlpha && normalEncoding != null)
-                throw new ArgumentException("only a colour plan can keep alpha", nameof(keepsAlpha));
             KeepsAlpha = keepsAlpha;
             if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), width, "must be positive");
             if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height), height, "must be positive");
