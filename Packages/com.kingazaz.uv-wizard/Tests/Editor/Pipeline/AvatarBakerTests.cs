@@ -926,6 +926,21 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AMergedShaderWithoutBumpScaleStillTakesTheNormalScaleTheOptionsName()
+        {
+            // Unlit/Transparent Cutout has no _BumpScale: its cutoff, 0.5 by default, stands in for the strength.
+            var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
+            var options = new BakeOptions(Shader.Find("Unlit/Transparent Cutout"), normalScaleProperty: "_Cutoff");
+
+            var result = Bake(options, renderer);
+
+            Assume.That(result.NormalAtlas, Is.Not.Null);
+            Assume.That(result.MergedMaterial!.HasFloat("_BumpScale"), Is.False);
+            Assert.That(result.MergedMaterial.GetFloat("_Cutoff"), Is.EqualTo(1));
+        }
+
+        [Test]
         public void ChartsThatFitAtNoScaleLeaveEveryRendererUnchanged()
         {
             // 320 separate quads in a 64 px atlas of 256 cells: no scale fits them. On a 1024 px texture each
