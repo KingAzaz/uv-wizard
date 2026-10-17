@@ -112,6 +112,54 @@ namespace UVWizard.Core.Tests.Meshes
             Assert.That(DeltasOfCorners(result.Mesh, 1, 1), Is.EqualTo(expected));
         }
 
+        // Unity stores a frame's delta only when it, or another delta of the same vertex, is at least 1e-5 long: the
+        // same cut Vector3 == makes, so no shorter delta can reach Uv0Rewriter.Moves on its own (#130), and the
+        // old approximate test passes this one too: AnyNonzeroComponentMoves pins the exact one. The smallest delta
+        // Unity keeps, each component under 1e-5, must still reach every copy.
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        public void ASplitVertexWithTheSmallestDeltaUnityKeepsKeepsItOnEveryCopy(int attribute)
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+            var none = new Vector3[4];
+            var moved = new Vector3[4];
+            moved[2] = new Vector3(6e-6f, 6e-6f, 6e-6f);
+            moved[1] = new Vector3(9e-6f, 0, 0);
+            source.AddBlendShapeFrame("twitch", 100, attribute == 0 ? moved : none, attribute == 1 ? moved : none,
+                attribute == 2 ? moved : none);
+            var expected = DeltasOfCorners(source, 0, 0);
+            const string still = "(0, 0, 0) (0, 0, 0) (0, 0, 0)";
+            Assert.That(expected[2], Is.Not.EqualTo(still), "Unity dropped the kept delta.");
+            Assert.That(expected[1], Is.EqualTo(still), "Unity kept a delta under 1e-5.");
+
+            var result = Rewrite(source, TwoCharts);
+
+            Assert.That(result.Path, Is.EqualTo(RewritePath.Rebuilt));
+            Assert.That(DeltasOfCorners(result.Mesh, 0, 0), Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void ASplitMeshWithoutBlendShapesIsAppended()
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+
+            var result = Rewrite(source, TwoCharts);
+
+            Assert.That(result.Mesh.blendShapeCount, Is.Zero);
+            Assert.That(result.Path, Is.EqualTo(RewritePath.Appended));
+            Assert.That(result.Mesh.vertexCount, Is.EqualTo(6));
+        }
+
+        [TestCase(0f, 0f, 0f, ExpectedResult = false)]
+        [TestCase(1e-6f, 0f, 0f, ExpectedResult = true)]
+        [TestCase(0f, -1e-6f, 0f, ExpectedResult = true)]
+        [TestCase(0f, 0f, 1e-30f, ExpectedResult = true)]
+        public bool AnyNonzeroComponentMoves(float x, float y, float z) =>
+            Uv0Rewriter.Moves(new Vector3(x, y, z), Vector3.zero, Vector3.zero) &&
+            Uv0Rewriter.Moves(Vector3.zero, new Vector3(y, z, x), Vector3.zero) &&
+            Uv0Rewriter.Moves(Vector3.zero, Vector3.zero, new Vector3(z, x, y));
+
         [TestCase(true)]
         [TestCase(false)]
         public void BindposesSurviveWithoutBoneWeights(bool split)
