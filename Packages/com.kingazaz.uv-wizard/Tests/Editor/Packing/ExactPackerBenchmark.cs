@@ -91,7 +91,7 @@ namespace UVWizard.Core.Tests.Packing
                     var wrapU = texture != null ? texture.wrapModeU : TextureWrapMode.Repeat;
                     var wrapV = texture != null ? texture.wrapModeV : TextureWrapMode.Repeat;
                     var triangles = mesh.GetTriangles(s);
-                    var islands = IslandBuilder.Build(uv0, triangles, wrapU, wrapV);
+                    var islands = IslandBuilder.Build(uv0, triangles, TilePeriod.Of(wrapU), TilePeriod.Of(wrapV));
                     surfaces.Add(new SourceSurface(uv0, triangles, islands, material != null ? material.GetInstanceID() : 0, size));
                 }
             }

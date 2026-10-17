@@ -394,8 +394,8 @@ namespace UVWizard.Core.Pipeline
                 // texture counts its repeats against the limit and its charts are sized by the texels they sample.
                 var st = reading.Albedo?.ScaleOffset ?? new Vector4(1, 1, 0, 0);
                 var sampled = Array.ConvertAll(uv0, uv => new Vector2(uv.x * st.x + st.z, uv.y * st.y + st.w));
-                var (periodU, periodV) = TilePeriods(reading, channels);
-                var islands = IslandBuilder.Build(sampled, triangles, periodU, periodV);
+                var (periodU, periodV, driftU, driftV) = TilePeriods(reading, channels);
+                var islands = IslandBuilder.Build(sampled, triangles, periodU, periodV, driftU, driftV);
                 if (Array.Exists(islands, island => island.ExceedsRepeatLimit))
                 {
                     Exclude(new Reason(ReasonText.RepeatsTooOften));
@@ -484,16 +484,24 @@ namespace UVWizard.Core.Pipeline
 
         // The tile period on each axis of the charts' UV space: islands shift between tiles only by whole periods, so
         // that every channel the slot bakes samples the same texels at home. An emission map tiled half as often as
-        // the albedo repeats every two tiles, and one that clamps never does. Untextured, the albedo repeats.
-        static (int U, int V) TilePeriods(SourceMaterialReading reading, Channels on)
+        // the albedo repeats every two tiles, and one that clamps never does. Untextured, the albedo repeats. With
+        // each, the most texels any of the textures drifts per period, where its tiling is only near whole.
+        static (int U, int V, float DriftU, float DriftV) TilePeriods(SourceMaterialReading reading, Channels on)
         {
+            var textures = BakedTextures(reading, on).ToList();
             var (u, v) = (1, 1);
-            foreach (var (texture, tiling) in BakedTextures(reading, on))
+            foreach (var (texture, tiling) in textures)
             {
                 u = TilePeriod.Both(u, TilePeriod.Of(texture.wrapModeU, tiling.x));
                 v = TilePeriod.Both(v, TilePeriod.Of(texture.wrapModeV, tiling.y));
             }
-            return (u, v);
+            float driftU = 0, driftV = 0;
+            foreach (var (texture, tiling) in textures)
+            {
+                driftU = Mathf.Max(driftU, TilePeriod.Drift(texture.wrapModeU, tiling.x, u, texture.width));
+                driftV = Mathf.Max(driftV, TilePeriod.Drift(texture.wrapModeV, tiling.y, v, texture.height));
+            }
+            return (u, v, driftU, driftV);
         }
 
         // The textures of the channels the slot bakes, with how many times each repeats per repeat of the albedo's.

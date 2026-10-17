@@ -63,6 +63,42 @@ namespace UVWizard.Core.Tests.Islands
         }
 
         [Test]
+        public void AnIslandShiftsWhereItsTexturesDriftHalfATexelAtMost()
+        {
+            // Ten periods across at 0.04 texels each, and four up at 0.125.
+            var island = BuildQuad(new Vector2(10.25f, 4.25f), new Vector2(10.75f, 4.75f), 1, 1, 0.04f, 0.125f);
+
+            Assert.That(island.TileShift, Is.EqualTo(new Vector2Int(-10, -4)));
+        }
+
+        [Test]
+        public void AnIslandStaysWhereShiftingItWouldDriftItsTexturesOverHalfATexel()
+        {
+            // Ten periods across at 0.06 texels each is 0.6; up, the island shifts, since nothing drifts there.
+            var island = BuildQuad(new Vector2(10.25f, 4.25f), new Vector2(10.75f, 4.75f), 1, 1, 0.06f, 0);
+
+            Assert.That(island.TileShift, Is.EqualTo(new Vector2Int(0, -4)));
+        }
+
+        [Test]
+        public void AnIslandBelowTileZeroStaysWhereShiftingItWouldDriftItsTexturesOverHalfATexel()
+        {
+            // Ten periods back across at 0.06 texels each is 0.6.
+            var island = BuildQuad(new Vector2(-9.75f, 0.25f), new Vector2(-9.25f, 0.75f), 1, 1, 0.06f, 0);
+
+            Assert.That(island.TileShift, Is.EqualTo(Vector2Int.zero));
+        }
+
+        [Test]
+        public void TheDriftCountsPeriodsNotTiles()
+        {
+            // Six tiles across are three periods of two, at 0.15 texels each: 0.45. Up, four tiles at 0.15 are 0.6.
+            var island = BuildQuad(new Vector2(6.25f, 4.25f), new Vector2(6.75f, 4.75f), 2, 1, 0.15f, 0.15f);
+
+            Assert.That(island.TileShift, Is.EqualTo(new Vector2Int(-6, 0)));
+        }
+
+        [Test]
         public void AnIslandAcrossATileEdgeKeepsItsFullExtent()
         {
             // The island really tiles the texture across u = 4. It moves home by whole tiles, and
@@ -128,11 +164,11 @@ namespace UVWizard.Core.Tests.Islands
         static Island BuildQuad(Vector2 min, Vector2 max, TextureWrapMode wrapU, TextureWrapMode wrapV) =>
             BuildQuad(min, max, TilePeriod.Of(wrapU), TilePeriod.Of(wrapV));
 
-        static Island BuildQuad(Vector2 min, Vector2 max, int periodU, int periodV)
+        static Island BuildQuad(Vector2 min, Vector2 max, int periodU, int periodV, float driftU = 0, float driftV = 0)
         {
             var uv0 = new[] { min, new Vector2(max.x, min.y), new Vector2(min.x, max.y), max };
             var triangles = new[] { 0, 1, 2, 2, 1, 3 };
-            return IslandBuilder.Build(uv0, triangles, periodU, periodV).Single();
+            return IslandBuilder.Build(uv0, triangles, periodU, periodV, driftU, driftV).Single();
         }
     }
 }

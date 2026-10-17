@@ -216,6 +216,46 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AnEmissionMapTiledHalfAsOftenAcrossStacksIslandsOnlyEveryTwoTilesAcross()
+        {
+            // The emission map repeats every two tiles across and every tile up. The islands one tile up and two
+            // across sample the same texels of both maps as the one at home, so they stack; the island one tile across
+            // glows with the emission map's other half, so it keeps its own chart.
+            var glowing = PoiyomiStandIn(Gradient(16, 0), Gradient(16, 1), new Vector2(0.5f, 1));
+            var renderer = MeshRenderer(Mesh(new[]
+            {
+                Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 1.1f, 0.1f, 1.4f, 0.4f), Quad(2, 0.1f, 1.1f, 0.4f, 1.4f),
+                Quad(3, 2.1f, 0.1f, 2.4f, 0.4f),
+            }), glowing);
+
+            Bake(renderer);
+
+            var centroids = Centroids(renderer).Select(c => c.Uv).ToArray();
+            Assert.That(Vector2.Distance(centroids[0], centroids[4]), Is.LessThan(1e-5f), "the island a tile up stacks");
+            Assert.That(Vector2.Distance(centroids[0], centroids[6]), Is.LessThan(1e-5f), "the island two tiles across stacks");
+            Assert.That(Vector2.Distance(centroids[0], centroids[2]), Is.GreaterThan(1e-4f), "the island a tile across doesn't");
+        }
+
+        [Test]
+        public void AnIslandShiftedFarEnoughToDriftHalfAnEmissionTexelStaysPut()
+        {
+            // The emission map repeats 0.9995 times per tile, near enough whole to repeat every tile, but each tile
+            // moves it 0.0005 of a repeat: 0.064 texels of its 128 across. Five tiles drift 0.32 texels, so the island
+            // there stacks; ten drift 0.64, over half a texel, so that one stays where it is.
+            var glowing = PoiyomiStandIn(Gradient(16, 0), Gradient(128, 16, 1), new Vector2(0.9995f, 1));
+            var renderer = MeshRenderer(Mesh(new[]
+            {
+                Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 5.1f, 0.1f, 5.4f, 0.4f), Quad(2, 10.1f, 0.1f, 10.4f, 0.4f),
+            }), glowing);
+
+            Bake(renderer);
+
+            var centroids = Centroids(renderer).Select(c => c.Uv).ToArray();
+            Assert.That(Vector2.Distance(centroids[0], centroids[2]), Is.LessThan(1e-5f), "five tiles out stacks");
+            Assert.That(Vector2.Distance(centroids[0], centroids[4]), Is.GreaterThan(1e-4f), "ten tiles out doesn't");
+        }
+
+        [Test]
         public void AShaderWithoutAnEmissionStrengthCarriesItOnTheEmissionColour()
         {
             // Standard has no _EmissionStrength, but its emission colour is HDR, so the strength goes there.
@@ -1152,6 +1192,18 @@ namespace UVWizard.Core.Tests.Pipeline
             material.EnableKeyword("_EMISSION");
             material.SetTexture("_EmissionMap", map);
             material.SetColor("_EmissionColor", colour);
+            return material;
+        }
+
+        // A material on the Poiyomi stand-in, glowing white with the emission map tiled as given and the albedo once.
+        Material PoiyomiStandIn(Texture2D albedo, Texture2D glow, Vector2 emissionScale)
+        {
+            var material = Keep(new Material(Shader.Find("Hidden/Locked/.poiyomi/UV Wizard Tests/Stand-in")) { mainTexture = albedo });
+            material.SetFloat("_EnableEmission", 1);
+            material.SetTexture("_EmissionMap", glow);
+            material.SetTextureScale("_EmissionMap", emissionScale);
+            material.SetColor("_EmissionColor", Color.white);
+            material.SetFloat("_EmissionStrength", 1);
             return material;
         }
 

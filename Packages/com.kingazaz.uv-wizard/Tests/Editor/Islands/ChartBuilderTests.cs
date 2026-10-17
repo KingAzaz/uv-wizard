@@ -8,6 +8,9 @@ namespace UVWizard.Core.Tests.Islands
 {
     public class ChartBuilderTests
     {
+        // The tile period of a texture that repeats.
+        static readonly int Repeats = TilePeriod.Of(TextureWrapMode.Repeat);
+
         [Test]
         public void StackedIdenticalIslandsShareAChart()
         {
@@ -131,7 +134,7 @@ namespace UVWizard.Core.Tests.Islands
             {
                 Surface(1, Rect.MinMaxRect(0, 0, 0.5f, 0.25f)),
                 new SourceSurface(sliver, sliverTriangles,
-                    IslandBuilder.Build(sliver, sliverTriangles, TextureWrapMode.Repeat, TextureWrapMode.Repeat),
+                    IslandBuilder.Build(sliver, sliverTriangles, Repeats, Repeats),
                     1, TextureSize),
             };
 
@@ -270,7 +273,7 @@ namespace UVWizard.Core.Tests.Islands
                 corner + new Vector2(d / 2, -d), corner + new Vector2(d, -d / 2),
             };
             var triangles = new[] { 0, 1, 2, 0, 3, 4, 0, 5, 6 };
-            var islands = IslandBuilder.Build(uv0, triangles, TextureWrapMode.Repeat, TextureWrapMode.Repeat);
+            var islands = IslandBuilder.Build(uv0, triangles, Repeats, Repeats);
             Assume.That(islands, Has.Length.EqualTo(3));
             var surfaces = new[] { new SourceSurface(uv0, triangles, islands, 1, TextureSize) };
 
@@ -290,7 +293,7 @@ namespace UVWizard.Core.Tests.Islands
                 corner + new Vector2(d, 0), corner + new Vector2(0, d), corner,
             };
             var triangles = new[] { 0, 1, 2, sharedVertex ? 0 : 5, 3, 4 };
-            var islands = IslandBuilder.Build(uv0, triangles, TextureWrapMode.Repeat, TextureWrapMode.Repeat);
+            var islands = IslandBuilder.Build(uv0, triangles, Repeats, Repeats);
             Assume.That(islands, Has.Length.EqualTo(2));
             return new SourceSurface(uv0, triangles, islands, 1, TextureSize);
         }
@@ -319,7 +322,7 @@ namespace UVWizard.Core.Tests.Islands
                 uv0.AddRange(new[] { quad.min, new Vector2(quad.xMax, quad.yMin), new Vector2(quad.xMin, quad.yMax), quad.max });
                 triangles.AddRange(new[] { first, first + 1, first + 2, first + 2, first + 1, first + 3 });
             }
-            var islands = IslandBuilder.Build(uv0.ToArray(), triangles.ToArray(), TextureWrapMode.Repeat, TextureWrapMode.Repeat);
+            var islands = IslandBuilder.Build(uv0.ToArray(), triangles.ToArray(), Repeats, Repeats);
             return new SourceSurface(uv0.ToArray(), triangles.ToArray(), islands, sourceKey, TextureSize);
         }
     }

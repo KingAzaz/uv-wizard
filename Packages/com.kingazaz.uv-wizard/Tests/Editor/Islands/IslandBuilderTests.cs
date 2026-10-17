@@ -190,6 +190,6 @@ namespace UVWizard.Core.Tests.Islands
 
         // Connectivity doesn't depend on wrapping; IslandTileShiftTests covers that.
         static Island[] Build(Vector2[] uv0, int[] triangles) =>
-            IslandBuilder.Build(uv0, triangles, TextureWrapMode.Clamp, TextureWrapMode.Clamp);
+            IslandBuilder.Build(uv0, triangles, TilePeriod.Of(TextureWrapMode.Clamp), TilePeriod.Of(TextureWrapMode.Clamp));
     }
 }
