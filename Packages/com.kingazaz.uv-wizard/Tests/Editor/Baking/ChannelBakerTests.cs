@@ -304,6 +304,20 @@ namespace UVWizard.Core.Tests.Baking
         }
 
         [Test]
+        public void AnXyzSourceKeepsItsStoredZ()
+        {
+            // A stored (0.6, 0, 0.6), not of length 1, as a compressed texel can be. UNITY_NO_DXT5nm keeps its z, so
+            // it lights as normalize(0.6, 0, 0.6) = (0.707, 0, 0.707). Rebuilding z from x would give (0.6, 0, 0.8).
+            var source = NormalMap(n => Xyz(new Vector3(0.6f, 0, 0.6f)));
+            var plan = NormalPlan(16, NormalEncoding.XYZ,
+                NormalQuad(source, 1, NormalEncoding.XYZ, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
+
+            var atlas = Bake(plan);
+
+            AssertDecodes(new Vector3(0.707f, 0, 0.707f), Texel(atlas, 2, 2), "atlas (2, 2)");
+        }
+
+        [Test]
         public void AnXyzAtlasIsWrittenAsXyz()
         {
             // At strength 2 the bend differs from the RG-or-AG decode's, so the atlas holds the XYZ decode in RGB.
