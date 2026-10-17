@@ -29,8 +29,8 @@ namespace UVWizard.Core.Meshes
         /// </param>
         /// <param name="needs">
         /// What a tool that runs after the bake needs kept: the source UV0 in a channel the mesh doesn't use,
-        /// and the merged submeshes in their own places. Never <see cref="LaterToolNeeds.CantKeepSourceUv0"/>,
-        /// whose renderer stays out of the bake.
+        /// and the merged submeshes in their own places. Never one from <see cref="LaterToolNeeds.KeepsOut"/>, such as
+        /// <see cref="LaterToolNeeds.CantKeepSourceUv0"/>, whose renderer stays out of the bake.
         /// </param>
         /// <remarks>
         /// UV0 keeps its format: Float32, Float16 or UNorm16. Float16 holds atlas UVs to within
@@ -44,7 +44,7 @@ namespace UVWizard.Core.Meshes
             var data = meshes[0];
             if (atlasUvs.Count != data.subMeshCount)
                 throw new ArgumentException($"{atlasUvs.Count} entries for {data.subMeshCount} submeshes.", nameof(atlasUvs));
-            if (needs.KeepsRendererOut)
+            if (needs.KeptOutBecause != null)
                 throw new ArgumentException("The renderer stays out of the bake, so its mesh can't be rewritten.", nameof(needs));
             if (needs.KeepSourceUv0In is { } keptIn)
             {
