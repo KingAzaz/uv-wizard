@@ -549,9 +549,12 @@ namespace UVWizard.Core.Pipeline
         static ChannelSource? BakedEmission(SourceMaterialReading reading) =>
             reading.Emission is { } emission && Intensity(emission.Tint) > 0 ? emission : null;
 
-        // The source's normal map, or null when it has none or its strength flattens it.
+        // The source's normal map, or null when it has none or its strength flattens it. A strength that isn't finite
+        // bakes flat as well: scaled by it, every texel would be NaN.
         static ChannelSource? BakedNormal(SourceMaterialReading reading) =>
-            reading.Normal is { Texture: not null } normal && normal.Strength != 0 ? normal : null;
+            reading.Normal is { Texture: not null } normal && normal.Strength != 0 && float.IsFinite(normal.Strength)
+                ? normal
+                : null;
 
         // Calls visit(corner index, position in chart texels) for every corner of the island's triangles,
         // moved into the island's home tile.
