@@ -1,7 +1,8 @@
 // Draws a source's triangles at their atlas UVs (the vertex positions) and samples the source
 // texture at its own UVs, through its own sampler. The first pass writes colour, times the tint;
 // the second writes the tangent-space normal a normal map holds. Alpha is 1 so the baker can tell
-// covered texels from empty ones; the merged material is opaque anyway (ADR 0004).
+// covered texels from empty ones; the merged material is opaque anyway (ADR 0004). The third writes
+// colour and alpha, times the tint's, for a particle material's texture, which keeps its alpha.
 Shader "Hidden/UVWizard/BakeChannel"
 {
     Properties
@@ -93,6 +94,20 @@ Shader "Hidden/UVWizard/BakeChannel"
                 float3 n = float3(xy, z);
                 n = dot(n, n) > 0 ? normalize(n) : float3(0, 0, 1);
                 return float4(n * 0.5 + 0.5, 1);
+            }
+            ENDCG
+        }
+
+        // Colour and alpha: the source times the tint, alpha included.
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            float4 frag(v2f i) : SV_Target
+            {
+                return tex2D(_MainTex, i.uv) * _Color;
             }
             ENDCG
         }

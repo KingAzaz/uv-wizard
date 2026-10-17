@@ -18,9 +18,11 @@ namespace UVWizard.Core.Pipeline
             Texture2D? normalAtlas = null, IReadOnlyList<MovedSlots>? movedSlots = null,
             bool fromCache = false, PackingOutcome? packing = null,
             IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null,
-            IReadOnlyList<SlotNote>? unconverted = null, IReadOnlyList<SlotNote>? removed = null)
+            IReadOnlyList<SlotNote>? unconverted = null, IReadOnlyList<SlotNote>? removed = null,
+            IReadOnlyList<(Material Source, Material Converted)>? particleMaterials = null)
         {
             Removed = removed ?? Array.Empty<SlotNote>();
+            ParticleMaterials = particleMaterials ?? Array.Empty<(Material, Material)>();
             Packing = packing;
             Unconverted = unconverted ?? Array.Empty<SlotNote>();
             ConvertedMaterials = convertedMaterials ?? Array.Empty<(Material, Material)>();
@@ -42,9 +44,11 @@ namespace UVWizard.Core.Pipeline
         public static BakeResult Unchanged(bool fits, IReadOnlyList<SlotNote> excluded, IReadOnlyList<SlotNote> flagged,
             IReadOnlyList<(Material Source, Material Converted)>? convertedMaterials = null,
             IReadOnlyList<SlotNote>? unconverted = null, bool nothingToBake = false, bool ranOutOfTime = false,
-            IReadOnlyList<SlotNote>? removed = null) =>
+            IReadOnlyList<SlotNote>? removed = null,
+            IReadOnlyList<(Material Source, Material Converted)>? particleMaterials = null) =>
             new BakeResult(fits, null, null, null, Array.Empty<(Mesh, Mesh)>(), excluded, flagged,
-                convertedMaterials: convertedMaterials, unconverted: unconverted, removed: removed)
+                convertedMaterials: convertedMaterials, unconverted: unconverted, removed: removed,
+                particleMaterials: particleMaterials)
             {
                 NothingToBake = nothingToBake,
                 RanOutOfTime = ranOutOfTime,
@@ -136,8 +140,16 @@ namespace UVWizard.Core.Pipeline
         public IReadOnlyList<(Material Source, Material Converted)> ConvertedMaterials { get; }
 
         /// <summary>
+        /// Each source material on a particle, trail or line renderer, with a shader mobile doesn't allow, and the
+        /// material with a mobile particle shader that replaced it there. Kept apart from
+        /// <see cref="ConvertedMaterials"/>, since one source can have a conversion of each kind.
+        /// </summary>
+        public IReadOnlyList<(Material Source, Material Converted)> ParticleMaterials { get; }
+
+        /// <summary>
         /// Slots left with a shader mobile doesn't allow, one per material, because the bake couldn't convert it: it's
-        /// on a renderer other than a mesh renderer, or has no surface of its own. The SDK refuses such an upload.
+        /// on a renderer other than a mesh renderer, with no particle shaders to convert it to, or has no surface of its
+        /// own. The SDK refuses such an upload.
         /// </summary>
         public IReadOnlyList<SlotNote> Unconverted { get; }
 

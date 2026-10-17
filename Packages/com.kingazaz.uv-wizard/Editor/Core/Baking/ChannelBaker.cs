@@ -22,12 +22,14 @@ namespace UVWizard.Core.Baking
 
         const int ColourPass = 0;
         const int NormalPass = 1;
+        const int ColourAndAlphaPass = 2;
 
         /// <summary>
         /// Draws every source's triangles at their atlas UVs, sampling the source texture and
         /// multiplying in its tint, then fills the gutters with the nearest chart's colour and
         /// builds mips. The result is an opaque, readable, uncompressed, clamped sRGB texture. A Normal plan
-        /// writes each source's decoded normal instead, untinted, into a linear texture.
+        /// writes each source's decoded normal instead, untinted, into a linear texture. A plan that keeps alpha keeps
+        /// each texel's, times the tint's, and fills no gutters.
         /// </summary>
         public static Texture2D Bake(BakePlan plan)
         {
@@ -60,7 +62,7 @@ namespace UVWizard.Core.Baking
                     material.SetVector(SourceScaleOffset, source.ScaleOffset);
                     material.SetFloat(Strength, source.Strength);
                     material.SetFloat(SourceEncoding, (float)source.Encoding);
-                    material.SetPass(normals ? NormalPass : ColourPass);
+                    material.SetPass(normals ? NormalPass : plan.KeepsAlpha ? ColourAndAlphaPass : ColourPass);
                     Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
                 }
                 GL.PopMatrix();
@@ -68,7 +70,7 @@ namespace UVWizard.Core.Baking
                 var atlas = Atlas(width, height, TextureFormat.RGBA32, -1, normals);
                 atlas.ReadPixels(new Rect(0, 0, width, height), 0, 0, recalculateMipMaps: false);
                 var texels = atlas.GetPixels32(0);
-                FillGutters(texels, width, height);
+                if (!plan.KeepsAlpha) FillGutters(texels, width, height);
                 if (plan.NormalEncoding == NormalEncoding.AG) ToAg(texels);
                 atlas.SetPixels32(texels, 0);
                 atlas.Apply(updateMipmaps: true, makeNoLongerReadable: false);

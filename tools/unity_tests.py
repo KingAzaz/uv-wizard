@@ -25,6 +25,11 @@ import unity_bridge as bridge  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS_DIR = os.path.join(REPO, "Packages", "com.kingazaz.uv-wizard", "Tests")
 
+# MCP for Unity's TestJobManager auto-fails a job that hasn't started within
+# 15 s by default ("failed to initialize"), yet Unity still runs it, so the next
+# request collides with it. Jobs right after a recompile often take longer (#209, #218).
+INIT_TIMEOUT_MS = 120000
+
 
 class Failed(Exception):
     """The tests ran, or tried to, and the answer is red: exit 1."""
@@ -175,7 +180,8 @@ def error_code(reply):
 
 
 def run(port, assemblies, group, deadline, poll=2.0):
-    params = {"mode": "EditMode", "assembly_names": assemblies, "include_failed_tests": True}
+    params = {"mode": "EditMode", "assembly_names": assemblies, "include_failed_tests": True,
+              "init_timeout": INIT_TIMEOUT_MS}
     if group:
         params["group_names"] = [group]
     job_id = start_job(port, params, deadline)
