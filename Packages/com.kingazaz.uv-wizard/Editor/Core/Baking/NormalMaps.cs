@@ -22,8 +22,8 @@ namespace UVWizard.Core.Baking
         /// the setting: desktop always decodes red or alpha as x.
         /// </summary>
         public static NormalEncoding EncodingFor(BuildTargetGroup group, NormalMapEncoding setting) =>
-            group is BuildTargetGroup.Android or BuildTargetGroup.iOS && setting == NormalMapEncoding.DXT5nm
-                ? NormalEncoding.AG
-                : NormalEncoding.RGorAG;
+            group is not (BuildTargetGroup.Android or BuildTargetGroup.iOS) ? NormalEncoding.RGorAG
+            : setting == NormalMapEncoding.DXT5nm ? NormalEncoding.AG
+            : NormalEncoding.XYZ;
     }
 }

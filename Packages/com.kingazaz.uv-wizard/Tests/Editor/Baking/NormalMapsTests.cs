@@ -11,9 +11,14 @@ namespace UVWizard.Core.Tests.Baking
         public void MobileSetToDxt5nmStyleIsAg(BuildTargetGroup group) =>
             Assert.That(NormalMaps.EncodingFor(group, NormalMapEncoding.DXT5nm), Is.EqualTo(NormalEncoding.AG));
 
+        [TestCase(BuildTargetGroup.Android)]
+        [TestCase(BuildTargetGroup.iOS)]
+        public void MobileSetToXyzIsXyz(BuildTargetGroup group) =>
+            Assert.That(NormalMaps.EncodingFor(group, NormalMapEncoding.XYZ), Is.EqualTo(NormalEncoding.XYZ));
+
         [Test]
-        public void MobileSetToXyzIsRgOrAg() =>
-            Assert.That(NormalMaps.EncodingFor(BuildTargetGroup.Android, NormalMapEncoding.XYZ),
+        public void DesktopSetToXyzIsRgOrAg() =>
+            Assert.That(NormalMaps.EncodingFor(BuildTargetGroup.Standalone, NormalMapEncoding.XYZ),
                 Is.EqualTo(NormalEncoding.RGorAG));
 
         [Test]

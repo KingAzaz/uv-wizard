@@ -59,7 +59,7 @@ namespace UVWizard.Core.Baking
                     material.SetColor(Tint, source.Tint);
                     material.SetVector(SourceScaleOffset, source.ScaleOffset);
                     material.SetFloat(Strength, source.Strength);
-                    material.SetFloat(SourceEncoding, source.Encoding == NormalEncoding.AG ? 1 : 0);
+                    material.SetFloat(SourceEncoding, (float)source.Encoding);
                     material.SetPass(normals ? NormalPass : ColourPass);
                     Graphics.DrawMeshNow(mesh, Matrix4x4.identity);
                 }
