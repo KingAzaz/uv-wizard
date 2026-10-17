@@ -216,21 +216,23 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
-        public void AnEmissionMapTiledHalfAsOftenAcrossKeepsIslandsApartOnlyAcross()
+        public void AnEmissionMapTiledHalfAsOftenAcrossStacksIslandsOnlyEveryTwoTilesAcross()
         {
-            // The emission map repeats every two tiles across and every tile up. The island one tile up samples the
-            // same texels of both maps as the one at home, so they stack; the island one tile across glows with the
-            // emission map's other half, so it keeps its own chart.
+            // The emission map repeats every two tiles across and every tile up. The islands one tile up and two
+            // across sample the same texels of both maps as the one at home, so they stack; the island one tile across
+            // glows with the emission map's other half, so it keeps its own chart.
             var glowing = PoiyomiStandIn(Gradient(16, 0), Gradient(16, 1), new Vector2(0.5f, 1));
             var renderer = MeshRenderer(Mesh(new[]
             {
                 Quad(0, 0.1f, 0.1f, 0.4f, 0.4f), Quad(1, 1.1f, 0.1f, 1.4f, 0.4f), Quad(2, 0.1f, 1.1f, 0.4f, 1.4f),
+                Quad(3, 2.1f, 0.1f, 2.4f, 0.4f),
             }), glowing);
 
             Bake(renderer);
 
             var centroids = Centroids(renderer).Select(c => c.Uv).ToArray();
             Assert.That(Vector2.Distance(centroids[0], centroids[4]), Is.LessThan(1e-5f), "the island a tile up stacks");
+            Assert.That(Vector2.Distance(centroids[0], centroids[6]), Is.LessThan(1e-5f), "the island two tiles across stacks");
             Assert.That(Vector2.Distance(centroids[0], centroids[2]), Is.GreaterThan(1e-4f), "the island a tile across doesn't");
         }
 
