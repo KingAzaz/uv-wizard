@@ -235,21 +235,40 @@ namespace UVWizard.Core.Reporting
     /// <summary>One line of the report: a localizer key and the arguments its template fills in.</summary>
     internal readonly struct ReportLine : IEquatable<ReportLine>
     {
+        readonly string? key;
+        readonly object[]? args;
+
         public ReportLine(string key, params object[] args)
         {
-            Key = key;
-            Args = args;
+            this.key = key;
+            this.args = args;
         }
 
-        public string Key { get; }
-        public object[] Args { get; }
+        /// <summary>The localizer key, or empty for <c>default(ReportLine)</c>.</summary>
+        public string Key => key ?? "";
+
+        public object[] Args => args ?? Array.Empty<object>();
 
         /// <summary>
         /// The line's text: its key's template from the lookup, with the arguments filled in. An argument that is
-        /// itself a line is filled in with its own text.
+        /// itself a line is filled in with its own text. A template that asks for an argument the line doesn't have
+        /// gives the key instead, so the bake and the report window still run, and logs an error naming the template
+        /// to fix.
         /// </summary>
-        public string Text(Func<string, string> lookup) =>
-            string.Format(lookup(Key), Args.Select(arg => arg is ReportLine line ? line.Text(lookup) : arg).ToArray());
+        public string Text(Func<string, string> lookup)
+        {
+            if (key == null) return "";
+            var template = lookup(key);
+            try
+            {
+                return string.Format(template, Args.Select(arg => arg is ReportLine line ? line.Text(lookup) : arg).ToArray());
+            }
+            catch (FormatException)
+            {
+                Debug.LogError($"UV Wizard: the text of {Key} can't be filled in with {Args.Length} argument(s): {template}");
+                return Key;
+            }
+        }
 
         public bool Equals(ReportLine other) => Key == other.Key && Args.SequenceEqual(other.Args);
         public override bool Equals(object? obj) => obj is ReportLine other && Equals(other);
