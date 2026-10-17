@@ -12,6 +12,7 @@ Shader "Hidden/Locked/.poiyomi/UV Wizard Tests/Stand-in"
         _EmissionMap ("Emission Map", 2D) = "white" {}
         _EmissionColor ("Emission Colour", Color) = (1, 1, 1, 1)
         _EmissionStrength ("Emission Strength", Float) = 0
+        _EmissionMapUV ("Emission UV", Float) = 0
     }
     SubShader
     {

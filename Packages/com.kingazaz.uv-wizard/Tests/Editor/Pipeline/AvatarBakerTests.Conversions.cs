@@ -177,6 +177,25 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AConvertedMaterialKeepsAUv1EmissionOnTheEmissionUvTheOptionsName()
+        {
+            // Standard has no emission UV of its own: its smoothness stands in for one, so the emission stays on UV1.
+            var glowing = PoiyomiStandIn(Gradient(16, 0), Gradient(16, 1), Vector2.one);
+            glowing.SetFloat("_EmissionMapUV", 1);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), glowing);
+            var options = new BakeOptions(Shader.Find("Standard"), emissionUvProperty: "_Glossiness",
+                mobileShaders: System.Array.Empty<string>());
+
+            var result = Bake(options, renderer);
+
+            var converted = renderer.sharedMaterial;
+            Assume.That(converted.name, Does.EndWith("(UV Wizard)"));
+            Assert.That(converted.GetTexture("_EmissionMap"), Is.Not.Null);
+            Assert.That(converted.GetFloat("_Glossiness"), Is.EqualTo(1));
+            Assert.That(result.Flagged.SelectMany(note => note.Reason.Keys), Has.None.EqualTo(ReasonText.ConvertedEmissionOffUvs));
+        }
+
+        [Test]
         public void AConvertedMaterialsNormalMapIsTheOneTheOptionsName()
         {
             // Standard's detail normal map stands in for the normal map, which Standard samples with _MainTex_ST.

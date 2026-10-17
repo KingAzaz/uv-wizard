@@ -867,6 +867,23 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void BesideAStrengthTheMergedMaterialsEmissionColourIsTheOneTheOptionsName()
+        {
+            // Standard's colour stands in for the emission colour, its smoothness for the strength and its emission
+            // colour for the tint. The representative's grey colour is copied over first, so only the emission
+            // colour's white can replace it.
+            var bright = Emitting(Standard(Gradient(16, 0), Color.grey), null, new Color(1.5f, 0.75f, 0.3f).gamma);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
+            var options = new BakeOptions(Shader.Find("Standard"), representativeProperties: new[] { "_Color" },
+                tintProperty: "_EmissionColor", emissionColourProperty: "_Color", emissionStrengthProperty: "_Glossiness");
+
+            var result = Bake(options, renderer);
+
+            Assume.That(result.Representative, Is.SameAs(bright));
+            Assert.That(result.MergedMaterial!.GetColor("_Color"), Is.EqualTo(Color.white));
+        }
+
+        [Test]
         public void TheMergedMaterialsEmissionUvIsTheOneTheOptionsName()
         {
             // Standard's smoothness, 0.5 by default, stands in for the emission UV channel, which the atlas puts on UV0.
