@@ -34,7 +34,7 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(converted.mainTextureOffset, Is.EqualTo(new Vector2(0.1f, 0.5f)));
             Assert.That(result.ParticleMaterials, Is.EqualTo(new[] { (source, converted) }));
             Assert.That(result.Unconverted, Is.Empty);
-            Assert.That(result.Flagged, Is.Empty);
+            Assert.That(result.Flagged.Select(note => note.Reason), Is.EqualTo(new[] { UnknownParticleShader }));
         }
 
         [TestCase(BlendMode.Zero, BlendMode.SrcColor)]
@@ -49,7 +49,7 @@ namespace UVWizard.Core.Tests.Pipeline
 
             Assert.That(trail.sharedMaterial.shader, Is.SameAs(MultiplyStandIn));
             Assert.That(result.Unconverted, Is.Empty);
-            Assert.That(result.Flagged, Is.Empty);
+            Assert.That(result.Flagged.Select(note => note.Reason), Is.EqualTo(new[] { UnknownParticleShader }));
         }
 
         [Test]
@@ -63,7 +63,50 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(line.sharedMaterial.shader, Is.SameAs(AdditiveStandIn));
             Assert.That(result.Unconverted, Is.Empty);
             Assert.That(result.Flagged.Select(note => (note.Renderer, note.Material, note.Reason)),
-                Is.EqualTo(new[] { ((Renderer)line, source, new Reason(ReasonText.DrawsAdditively)) }));
+                Is.EquivalentTo(new[] { ((Renderer)line, source, new Reason(ReasonText.DrawsAdditively)),
+                    ((Renderer)line, source, UnknownParticleShader) }));
+        }
+
+        [Test]
+        public void ASubtractiveParticleMaterialDrawsAdditivelyNowAndSaysSo()
+        {
+            // Particles/Standard's Subtractive mode blends SrcAlpha One with a reverse-subtract operation (probed
+            // through its shader GUI's ValidateMaterial): the additive pair, but it darkens.
+            var source = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 1), Color.white);
+            source.SetFloat("_BlendOp", (float)BlendOp.ReverseSubtract);
+            var particles = ParticleSystemRenderer(source);
+
+            var result = Bake(ConvertingParticles(), particles);
+
+            Assert.That(particles.sharedMaterial.shader, Is.SameAs(AdditiveStandIn));
+            Assert.That(result.Flagged.Select(note => note.Reason), Has.Member(new Reason(ReasonText.DrawsAdditively)));
+        }
+
+        [Test]
+        public void AParticleMaterialOnAShaderUvWizardDoesntKnowSaysOnlyItsTextureAndColourAreRead()
+        {
+            // Unity's legacy particle shaders tint by _TintColor, which no reader reads.
+            var source = Keep(new Material(Shader.Find("Legacy Shaders/Particles/Alpha Blended")) { mainTexture = Gradient(16, 1) });
+            var line = LineRenderer(source);
+
+            var result = Bake(ConvertingParticles(), line);
+
+            Assert.That(result.Flagged.Select(note => note.Reason), Has.Member(
+                new Reason(ReasonText.UnknownShader, "Legacy Shaders/Particles/Alpha Blended")));
+        }
+
+        [Test]
+        public void ParticleRenderersSharingAMaterialShareItsParticleMaterialAndOneNote()
+        {
+            var source = Particle(BlendMode.SrcAlpha, BlendMode.OneMinusSrcAlpha, Gradient(16, 1), Color.white);
+            var first = LineRenderer(source);
+            var second = LineRenderer(source);
+
+            var result = Bake(ConvertingParticles(), first, second);
+
+            Assert.That(second.sharedMaterial, Is.SameAs(first.sharedMaterial));
+            Assert.That(result.ParticleMaterials, Has.Count.EqualTo(1));
+            Assert.That(result.Flagged.Count(note => note.Reason.Equals(new Reason(ReasonText.DrawsAdditively))), Is.EqualTo(1));
         }
 
         [Test]
@@ -77,7 +120,7 @@ namespace UVWizard.Core.Tests.Pipeline
 
             Assert.That(line.sharedMaterial.shader, Is.SameAs(AdditiveStandIn));
             Assert.That(line.sharedMaterial.mainTexture, Is.SameAs(source.mainTexture));
-            Assert.That(result.Flagged.Select(note => note.Reason), Is.EqualTo(new[] { new Reason(ReasonText.DrawsAdditively) }));
+            Assert.That(result.Flagged.Select(note => note.Reason), Has.Member(new Reason(ReasonText.DrawsAdditively)));
         }
 
         [Test]
@@ -166,7 +209,7 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(line.sharedMaterial.shader, Is.SameAs(AdditiveStandIn));
             Assert.That(result.ParticleMaterials.Select(p => p.Source), Is.EqualTo(new[] { own }));
             Assert.That(result.Unconverted.Select(note => (note.Material, note.Reason)),
-                Is.EqualTo(new[] { (swapped, new Reason(ReasonText.MeshRenderersOnly)) }));
+                Is.EqualTo(new[] { (swapped, new Reason(ReasonText.SwappedOntoParticles)) }));
         }
 
         [Test]
@@ -180,6 +223,8 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(particles.sharedMaterial, Is.SameAs(source));
             Assert.That(result.Unconverted.Select(note => note.Reason), Is.EqualTo(new[] { new Reason(ReasonText.MeshRenderersOnly) }));
         }
+
+        static readonly Reason UnknownParticleShader = new Reason(ReasonText.UnknownShader, "Particles/Standard Unlit");
 
         // A Particles/Standard Unlit material with the given blend, texture, tint and tiling.
         Material Particle(BlendMode src, BlendMode dst, Texture2D texture, Color tint, Vector4? scaleOffset = null)

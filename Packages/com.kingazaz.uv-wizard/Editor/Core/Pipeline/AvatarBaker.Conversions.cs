@@ -77,12 +77,14 @@ namespace UVWizard.Core.Pipeline
                 if (options.MobileShaders == null || options.MobileShaders.Contains(source.shader.name)
                     || UploadedRenderers.IsEditorOnly(renderer.transform))
                     return source;
-                if (renderer is ParticleSystemRenderer or TrailRenderer or LineRenderer && !swappedIn
-                    && options.ParticleShaders is { } shaders)
-                    return Particle(source, renderer, slot, shaders);
+                var particleShaders = renderer is ParticleSystemRenderer or TrailRenderer or LineRenderer
+                    ? options.ParticleShaders
+                    : null;
+                if (particleShaders != null && !swappedIn) return Particle(source, renderer, slot, particleShaders);
                 if (!ConvertsMaterialsOf(renderer))
                 {
-                    Leave(source, renderer, slot, new Reason(ReasonText.MeshRenderersOnly));
+                    Leave(source, renderer, slot,
+                        new Reason(particleShaders != null ? ReasonText.SwappedOntoParticles : ReasonText.MeshRenderersOnly));
                     return source;
                 }
                 if (!converted.TryGetValue(source, out var made))
@@ -110,12 +112,14 @@ namespace UVWizard.Core.Pipeline
             // The source's particle material, made the first time a particle, trail or line renderer has it: a mobile
             // particle shader chosen by the source's blend (#148), drawing its main texture, times its tint, with its
             // tiling and offset. The blend comes from the _SrcBlend and _DstBlend floats that Particles/Standard, lilToon
-            // and Poiyomi keep it in; a shader without them, such as Unity's legacy particle shaders, which hard-code
+            // and Poiyomi keep it in, with any _BlendOp adding: Particles/Standard's Subtractive mode is SrcAlpha One
+            // under a reverse subtract. A shader without them, such as Unity's legacy particle shaders, which hard-code
             // theirs, draws additively now.
             Material Particle(Material source, Renderer renderer, int slot, ParticleShaders shaders)
             {
                 if (particles.TryGetValue(source, out var made)) return made;
-                var blend = source.HasFloat("_SrcBlend") && source.HasFloat("_DstBlend")
+                var adds = !source.HasFloat("_BlendOp") || (BlendOp)source.GetFloat("_BlendOp") == BlendOp.Add;
+                var blend = adds && source.HasFloat("_SrcBlend") && source.HasFloat("_DstBlend")
                     ? ((BlendMode)source.GetFloat("_SrcBlend"), (BlendMode)source.GetFloat("_DstBlend"))
                     : ((BlendMode, BlendMode)?)null;
                 var multiplies = blend is (BlendMode.Zero, BlendMode.SrcColor) or (BlendMode.DstColor, BlendMode.Zero);
@@ -123,8 +127,13 @@ namespace UVWizard.Core.Pipeline
                     flagged.Add(new SlotNote(renderer, slot, source, new Reason(ReasonText.DrawsAdditively)));
 
                 made = new Material(multiplies ? shaders.Multiply : shaders.Additive) { name = $"{source.name} (UV Wizard)" };
-                // These shaders have no tint, so a tint that isn't white is baked into a texture of their own.
-                var albedo = SourceShaderReader.Read(source).Albedo;
+                // These shaders have no tint, so a tint that isn't white is baked into a texture of their own. A shader no
+                // reader knows has only its main texture and _Color read, which it's flagged for; what the readers flag
+                // about Toon Standard doesn't apply here.
+                var reading = SourceShaderReader.Read(source);
+                if (reading.FlaggedReason is { } reason && reason.Keys.First() == ReasonText.UnknownShader)
+                    flagged.Add(new SlotNote(renderer, slot, source, reason));
+                var albedo = reading.Albedo;
                 var texture = albedo?.Texture;
                 var tint = albedo?.Tint ?? Color.white;
                 if (tint != Color.white) texture = Texture(source, Channels.Albedo, texture, tint, keepsAlpha: true);

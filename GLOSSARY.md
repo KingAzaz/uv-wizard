@@ -80,12 +80,16 @@ _Avoid_: Skipped material, ignored material, unmerged material
 The Toon Standard material that takes an excluded material's place, and that of each material an animation swaps into an excluded slot. When no charts fit, every source material that stays on the avatar gets one. Its channels are baked into textures of its own, in the source texture's UV space, so its slot keeps its mesh and UVs. It takes the merged material's shared settings, which are the representative's, or the default ramp when the bake has no representative to take them from. The textures of those on the avatar's renderers count toward the budget.
 _Avoid_: Replacement material, mobile copy
 
+**Particle material**:
+The material with one of VRChat's mobile particle shaders that takes a particle, trail or line renderer's material's place on a mobile bake, when mobile doesn't allow its shader. It draws additively, or multiplied when the source multiplies, with the source's main texture, its tint baked in.
+_Avoid_: Converted particle, particle conversion
+
 **Unconverted material**:
-A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: an animation swaps it onto a particle, trail or line renderer, or it has no surface of its own, such as a lilToon add-on layer. The SDK refuses such an upload. A particle, trail or line renderer's own materials aren't unconverted: they get VRChat's mobile particle shaders, chosen by their blend.
+A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: an animation swaps it onto a particle, trail or line renderer, or it has no surface of its own, such as a lilToon add-on layer. The SDK refuses such an upload. A particle, trail or line renderer's own materials aren't unconverted: they get particle materials.
 _Avoid_: Failed material, unsupported material
 
 **Flagged material**:
-A source material that is merged or converted but may look different afterwards, such as a transparent or cutout material that becomes opaque.
+A source material that is merged, converted or given a particle material but may look different afterwards, such as a transparent or cutout material that becomes opaque.
 _Avoid_: Warning material, lossy material
 
 **Report**:
