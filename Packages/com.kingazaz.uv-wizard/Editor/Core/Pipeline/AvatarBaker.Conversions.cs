@@ -1,5 +1,6 @@
 #nullable enable
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -7,6 +8,7 @@ using UVWizard.Core.Baking;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Materials;
 using UVWizard.Core.Reporting;
+using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Pipeline
 {
@@ -41,11 +43,17 @@ namespace UVWizard.Core.Pipeline
             readonly HashSet<(Renderer, Material)> checkedAnimated = new HashSet<(Renderer, Material)>();
             // Every texture baked for a converted material.
             readonly List<Texture2D> textures = new List<Texture2D>();
+            // Each renderer's slots whose layers the bake removes, by their index before the bake.
+            readonly HashSet<(Renderer Renderer, int Slot)> removing = new HashSet<(Renderer, int)>();
+            // Layers kept on extra slots for the animations that swap them, which get the merged material's settings.
+            readonly HashSet<Material> keptLayers = new HashSet<Material>();
 
-            public Conversions(BakeOptions options, IReadOnlyList<AnimatedSlot>? animated)
+            /// <param name="renderers">The renderers the bake changes, whose layers on extra slots it plans to remove.</param>
+            public Conversions(BakeOptions options, IReadOnlyList<AnimatedSlot>? animated, IReadOnlyList<Renderer> renderers)
             {
                 this.options = options;
-                this.animated = animated ?? System.Array.Empty<AnimatedSlot>();
+                this.animated = animated ?? Array.Empty<AnimatedSlot>();
+                PlanRemovals(renderers);
             }
 
             /// <summary>The merged material, whose shared settings converted materials take. Null until it's made.</summary>
@@ -56,6 +64,58 @@ namespace UVWizard.Core.Pipeline
 
             /// <summary>Slots left with a shader mobile doesn't allow, because their material can't be converted.</summary>
             public List<SlotNote> Unconverted { get; } = new List<SlotNote>();
+
+            /// <summary>
+            /// The layers removed from extra slots, once per renderer and material, each with its first slot's index
+            /// before the bake.
+            /// </summary>
+            public List<SlotNote> Removed { get; } = new List<SlotNote>();
+
+            /// <summary>True when the bake removes the layer on the renderer's slot, by its index before the bake.</summary>
+            public bool Removes(Renderer renderer, int slot) => removing.Contains((renderer, slot));
+
+            /// <summary>How many of the renderer's slots the bake removes.</summary>
+            public int RemovedFrom(Renderer renderer) => removing.Count(removal => removal.Renderer == renderer);
+
+            // On a mobile bake, plans to remove each layer with no surface of its own, such as a lilToon add-on, from
+            // an extra slot: one past the mesh's last submesh, which draws that submesh again. Mobile doesn't allow its
+            // shader, and converted, it would paint over the surface. Animations bind slots by index, so a layer stays,
+            // converted, on a slot an animation swaps into, or before one, which removing it would move.
+            void PlanRemovals(IReadOnlyList<Renderer> renderers)
+            {
+                if (options.MobileShaders == null || options.Channels == Channels.None) return;
+                foreach (var renderer in renderers)
+                {
+                    if (!ConvertsMaterialsOf(renderer) || MeshOf(renderer) is not { } mesh) continue;
+                    var materials = renderer.sharedMaterials;
+                    var lastSwapped = -1;
+                    foreach (var animation in animated)
+                        if (animation.Renderer == renderer && animation.Slot is { } swappedSlot)
+                            lastSwapped = Math.Max(lastSwapped, swappedSlot);
+                    for (var s = mesh.subMeshCount; s < materials.Length; s++)
+                    {
+                        if (s <= lastSwapped)
+                        {
+                            foreach (var layer in AnimationsOf(animated, renderer, s).SelectMany(a => a.SwappedIn)
+                                         .Append(materials[s]))
+                                if (layer != null && IsLayer(layer, out _)) keptLayers.Add(layer);
+                            continue;
+                        }
+                        if (materials[s] is not { } material || !IsLayer(material, out var reason)) continue;
+                        removing.Add((renderer, s));
+                        if (!Removed.Exists(note => note.Renderer == renderer && note.Material == material))
+                            Removed.Add(new SlotNote(renderer, s, material, reason));
+                    }
+                }
+            }
+
+            // True for a material mobile doesn't allow that has no surface of its own, with why it has none.
+            bool IsLayer(Material material, out Reason reason)
+            {
+                var reading = SourceShaderReader.Read(material);
+                reason = reading.Reason ?? new Reason(ReasonText.NoSurface);
+                return reading.Albedo == null && !options.MobileShaders!.Contains(material.shader.name);
+            }
 
             /// <summary>
             /// The material that takes the source's place in the renderer's slot: its converted material, or the
@@ -75,15 +135,18 @@ namespace UVWizard.Core.Pipeline
                 if (!converted.TryGetValue(source, out var made))
                 {
                     var reading = SourceShaderReader.Read(source);
-                    // An add-on layer has no surface of its own: converted, it would paint over the one beneath.
-                    if (reading.Albedo == null)
+                    // An add-on layer has no surface of its own: converted, it would paint over the one beneath. One
+                    // kept on an extra slot for an animation is converted all the same, since no other shader passes.
+                    if (reading.Albedo == null && !keptLayers.Contains(source))
                     {
                         converted.Add(source, source);
                         var noSurface = new Reason(ReasonText.NoSurface);
                         Leave(source, renderer, slot, reading.Reason?.Then(noSurface) ?? noSurface);
                         return source;
                     }
-                    converted.Add(source, made = Convert(source, reading, renderer, slot));
+                    converted.Add(source, made = reading.Albedo == null
+                        ? KeptLayer(source, reading, renderer, slot)
+                        : Convert(source, reading, renderer, slot));
                     Made.Add((source, made));
                 }
                 // The conversion is flagged on each renderer whose properties an animation changes, once, whichever
@@ -102,25 +165,29 @@ namespace UVWizard.Core.Pipeline
             }
 
             /// <summary>
-            /// Puts the converted materials on the renderers' slots, other than the merged material's, and converts
-            /// the materials animations swap into excluded slots.
+            /// Puts the converted materials on the renderers' slots, other than the merged material's, removes the
+            /// layers planned, and converts the materials animations swap into excluded slots.
             /// </summary>
-            public void Apply(IReadOnlyList<Renderer> renderers, Material? merged)
+            /// <param name="moved">Where the slots of each renderer with merged slots went, or null when none merged.</param>
+            public void Apply(IReadOnlyList<Renderer> renderers, Material? merged, IReadOnlyList<MovedSlots>? moved = null)
             {
                 if (options.MobileShaders == null) return;
                 var changes = new List<(Renderer Renderer, Material[] Materials)>();
                 foreach (var renderer in renderers)
                 {
                     var materials = renderer.sharedMaterials;
-                    var changed = false;
+                    var slots = moved?.FirstOrDefault(m => m.Renderer == renderer);
+                    var removed = new HashSet<int>(removing.Where(removal => removal.Renderer == renderer)
+                        .Select(removal => slots?.NewIndexOf(removal.Slot) ?? removal.Slot));
+                    var changed = removed.Count > 0;
                     for (var s = 0; s < materials.Length; s++)
                     {
-                        if (materials[s] == null || materials[s] == merged) continue;
+                        if (materials[s] == null || materials[s] == merged || removed.Contains(s)) continue;
                         var to = Of(materials[s], renderer, s);
                         changed |= to != materials[s];
                         materials[s] = to;
                     }
-                    if (changed) changes.Add((renderer, materials));
+                    if (changed) changes.Add((renderer, materials.Where((_, s) => !removed.Contains(s)).ToArray()));
                 }
 
                 // An Animator whose clips swap a slot puts back the material it bound there whenever its controller
@@ -158,6 +225,17 @@ namespace UVWizard.Core.Pipeline
                 var all = new List<SlotNote>(notes);
                 all.AddRange(flagged);
                 return all;
+            }
+
+            // A layer kept on an extra slot for an animation: a material with the merged shader, set up as the merged
+            // material is, and flagged, since it has nothing of its own to draw.
+            Material KeptLayer(Material source, SourceMaterialReading reading, Renderer renderer, int slot)
+            {
+                var kept = new Reason(ReasonText.LayerKeptForAnimation);
+                flagged.Add(new SlotNote(renderer, slot, source, reading.Reason?.Then(kept) ?? kept));
+                var material = MergedMaterial(options, Merged, false);
+                material.name = $"{source.name} (UV Wizard)";
+                return material;
             }
 
             // A material with the merged shader, set up as the merged material is, that draws what the source does.

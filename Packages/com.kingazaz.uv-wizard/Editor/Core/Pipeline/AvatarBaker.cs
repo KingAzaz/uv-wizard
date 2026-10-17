@@ -53,19 +53,20 @@ namespace UVWizard.Core.Pipeline
             var slots = new List<Slot>();
             var needs = new Dictionary<Renderer, LaterToolNeeds>();
             var readings = new Dictionary<Material, SourceMaterialReading>();
+            // Planned first, since a layer's removal can let the submesh it draws again merge.
+            var conversions = new Conversions(options, animated, renderers);
             foreach (var renderer in renderers)
                 CollectSlots(renderer, animated ?? Array.Empty<AnimatedSlot>(), readings, slots, excluded, flagged,
-                    laterEdits, needs, options.Channels);
+                    laterEdits, needs, options.Channels, conversions);
             // With every channel off, the bake touches nothing: the renderers, conversions included, stay as they were (#84).
             if (options.Channels == Channels.None)
                 return BakeResult.Unchanged(true, excluded, Array.Empty<SlotNote>(), nothingToBake: true)
                     .Measured(renderers, options.Preset, null);
-            var conversions = new Conversions(options, animated);
             if (slots.Count == 0)
             {
                 conversions.Apply(renderers, null);
                 return BakeResult.Unchanged(true, excluded, conversions.Flagged(flagged), conversions.Made,
-                    conversions.Unconverted).Measured(renderers, options.Preset, null);
+                    conversions.Unconverted, removed: conversions.Removed).Measured(renderers, options.Preset, null);
             }
             // With only channels no slot to merge has on, an atlas would hold nothing, so nothing merges (#84). The
             // conversions still go ahead, as when nothing fits, with their Albedo and the other channels that are on.
@@ -73,7 +74,8 @@ namespace UVWizard.Core.Pipeline
             {
                 conversions.Apply(renderers, null);
                 return BakeResult.Unchanged(true, excluded, conversions.Flagged(Array.Empty<SlotNote>()), conversions.Made,
-                    conversions.Unconverted, nothingToBake: true).Measured(renderers, options.Preset, null);
+                    conversions.Unconverted, nothingToBake: true, removed: conversions.Removed)
+                    .Measured(renderers, options.Preset, null);
             }
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -144,8 +146,8 @@ namespace UVWizard.Core.Pipeline
                     conversions.Apply(renderers, null);
                     Object.DestroyImmediate(merged);
                     return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
-                        conversions.Made, conversions.Unconverted, ranOutOfTime: search.RanOutOfTime)
-                        .Measured(renderers, options.Preset, null);
+                        conversions.Made, conversions.Unconverted, ranOutOfTime: search.RanOutOfTime,
+                        removed: conversions.Removed).Measured(renderers, options.Preset, null);
                 }
                 placements = search.Packing.Placements;
                 packing = new PackingOutcome(search.Packer, search.Scale, search.RanOutOfTime);
@@ -197,10 +199,10 @@ namespace UVWizard.Core.Pipeline
                 throw;
             }
             var (replaced, moved) = ApplyRewrites(rewrites, laterEdits);
-            conversions.Apply(renderers, merged);
+            conversions.Apply(renderers, merged, moved);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
                 emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, packing, conversions.Made,
-                conversions.Unconverted).Measured(renderers, options.Preset, sizedFor);
+                conversions.Unconverted, conversions.Removed).Measured(renderers, options.Preset, sizedFor);
         }
 
         // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.
@@ -263,7 +265,7 @@ namespace UVWizard.Core.Pipeline
                 if (UploadedRenderers.IsEditorOnly(renderer.transform)) continue;
                 var materials = renderer.sharedMaterials;
                 for (var s = 0; s < materials.Length; s++)
-                    if (materials[s] != null && !mergedSlots.Contains((renderer, s)))
+                    if (materials[s] != null && !mergedSlots.Contains((renderer, s)) && !conversions.Removes(renderer, s))
                         outside.Add(conversions.Of(materials[s], renderer, s));
             }
             return TextureMemory.Bytes(outside);
@@ -334,7 +336,7 @@ namespace UVWizard.Core.Pipeline
         static void CollectSlots(Renderer renderer, IReadOnlyList<AnimatedSlot> animated,
             Dictionary<Material, SourceMaterialReading> readings, List<Slot> slots, List<SlotNote> excluded,
             List<SlotNote> flagged, ILaterMeshEdits? laterEdits,
-            Dictionary<Renderer, LaterToolNeeds> needs, Channels channels)
+            Dictionary<Renderer, LaterToolNeeds> needs, Channels channels, Conversions conversions)
         {
             var mesh = MeshOf(renderer);
             if (mesh == null) return;
@@ -345,7 +347,7 @@ namespace UVWizard.Core.Pipeline
                 var sources = renderer.sharedMaterials;
                 for (var s = 0; s < sources.Length; s++)
                 {
-                    if (sources[s] != null)
+                    if (sources[s] != null && !conversions.Removes(renderer, s))
                         excluded.Add(new SlotNote(renderer, s, sources[s], new Reason(ReasonText.LaterToolNeedsUvs)));
                     ExcludeSwappedIn(renderer, s, sources[s], AnimationsOf(animated, renderer, s), excluded);
                 }
@@ -370,7 +372,8 @@ namespace UVWizard.Core.Pipeline
                 if (material == null || s >= data.subMeshCount) continue;
                 void Exclude(Reason reason) => excluded.Add(new SlotNote(renderer, s, material, reason));
 
-                if (materials.Length > data.subMeshCount && s == data.subMeshCount - 1)
+                // Extra slots draw the last submesh again, unless the bake removes each of their layers.
+                if (materials.Length - conversions.RemovedFrom(renderer) > data.subMeshCount && s == data.subMeshCount - 1)
                 {
                     Exclude(new Reason(ReasonText.ExtraSlots));
                     continue;

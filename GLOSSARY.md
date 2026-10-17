@@ -81,7 +81,7 @@ The Toon Standard material that takes an excluded material's place, and that of 
 _Avoid_: Replacement material, mobile copy
 
 **Unconverted material**:
-A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: it's on a renderer other than a mesh renderer, such as a particle system, or it has no surface of its own, such as a lilToon add-on layer. The SDK refuses such an upload.
+A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: it's on a renderer other than a mesh renderer, such as a particle system, or it has no surface of its own, such as a lilToon add-on layer that is a submesh's only material. The SDK refuses such an upload. An add-on layer on an extra slot, which draws the last submesh again, is removed instead, unless an animation swaps materials into that slot or a later one: then it's kept, with a converted material.
 _Avoid_: Failed material, unsupported material
 
 **Flagged material**:
