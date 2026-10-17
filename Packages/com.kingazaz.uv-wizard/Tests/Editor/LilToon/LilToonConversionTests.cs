@@ -111,7 +111,7 @@ namespace UVWizard.Core.Tests.LilToon
         {
             // Removing it would remove the geometry it draws.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
@@ -119,7 +119,7 @@ namespace UVWizard.Core.Tests.LilToon
             });
             mesh.SetTriangles(new[] { 0, 2, 1 }, 0);
             mesh.SetTriangles(new[] { 1, 2, 3 }, 1);
-            var go = Track(new GameObject("renderer"));
+            var go = Keep(new GameObject("renderer"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterials = new[] { Material("lilToon"), outline };
@@ -152,7 +152,7 @@ namespace UVWizard.Core.Tests.LilToon
             // The outline's 64 MB texture is over every preset's budget, so counted, it would leave no rank in reach.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
             Assert.That(outline.HasTexture("_OutlineTex"), Is.True, "lilToon's outline layer has its texture where 1.x does");
-            outline.SetTexture("_OutlineTex", Track(new Texture2D(4096, 4096, TextureFormat.RGBA32, false)));
+            outline.SetTexture("_OutlineTex", Keep(new Texture2D(4096, 4096, TextureFormat.RGBA32, false)));
             var renderer = Quad(Material("lilToon"), outline);
 
             var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), preset: Preset.Excellent,
@@ -166,7 +166,7 @@ namespace UVWizard.Core.Tests.LilToon
         {
             // The two submeshes merge into one, so the layer's slot moves from the third to the second.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
@@ -174,7 +174,7 @@ namespace UVWizard.Core.Tests.LilToon
             });
             mesh.SetTriangles(new[] { 0, 2, 1 }, 0);
             mesh.SetTriangles(new[] { 1, 2, 3 }, 1);
-            var go = Track(new GameObject("renderer"));
+            var go = Keep(new GameObject("renderer"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterials = new[] { Material("lilToon"), Material("lilToon"), outline };
@@ -220,7 +220,7 @@ namespace UVWizard.Core.Tests.LilToon
             // Padding as wide as the atlas leaves no room for any chart.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
             var main = Material("lilToon");
-            main.SetTexture("_MainTex", Track(new Texture2D(1024, 1024)));
+            main.SetTexture("_MainTex", Keep(new Texture2D(1024, 1024)));
             var renderer = Quad(main, outline);
 
             var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 64,
@@ -240,7 +240,7 @@ namespace UVWizard.Core.Tests.LilToon
 
             var result = AvatarBaker.Bake(new[] { renderer },
                 new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()), new KeepsOut());
-            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
+            foreach (var (_, converted) in result.ConvertedMaterials) Keep(converted);
 
             Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(new[] { main }));
             Assert.That(result.Removed.Select(note => note.Material), Is.EqualTo(new[] { outline }));
@@ -266,7 +266,7 @@ namespace UVWizard.Core.Tests.LilToon
             // The same outline is on the first renderer's swapped extra slot, and is the second's second submesh.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
             var kept = Quad(Material("lilToon"), outline);
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
@@ -274,7 +274,7 @@ namespace UVWizard.Core.Tests.LilToon
             });
             mesh.SetTriangles(new[] { 0, 2, 1 }, 0);
             mesh.SetTriangles(new[] { 1, 2, 3 }, 1);
-            var go = Track(new GameObject("drawn"));
+            var go = Keep(new GameObject("drawn"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var drawn = go.AddComponent<MeshRenderer>();
             drawn.sharedMaterials = new[] { Material("lilToon"), outline };
@@ -282,10 +282,10 @@ namespace UVWizard.Core.Tests.LilToon
             var result = AvatarBaker.Bake(new Renderer[] { kept, drawn },
                 new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
                 animated: new[] { new AnimatedSlot(kept, 1, new Reason("Swapped in \"Swap\"."), new[] { Material("lilToon") }) });
-            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
-            if (result.MergedMaterial != null) Track(result.MergedMaterial);
-            if (result.Atlas != null) Track(result.Atlas);
-            foreach (var (_, rewritten) in result.ReplacedMeshes) Track(rewritten);
+            foreach (var (_, converted) in result.ConvertedMaterials) Keep(converted);
+            if (result.MergedMaterial != null) Keep(result.MergedMaterial);
+            if (result.Atlas != null) Keep(result.Atlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Keep(rewritten);
 
             Assert.That(kept.sharedMaterials[1].shader, Is.SameAs(Shader.Find("Standard")));
             Assert.That(drawn.sharedMaterials.Last(), Is.SameAs(outline));
@@ -334,13 +334,13 @@ namespace UVWizard.Core.Tests.LilToon
         // A one-submesh quad with the materials, the second and later on extra slots that draw it again.
         MeshRenderer Quad(params Material[] materials)
         {
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
                 triangles = new[] { 0, 2, 1, 1, 2, 3 },
             });
-            var go = Track(new GameObject("renderer"));
+            var go = Keep(new GameObject("renderer"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterials = materials;
@@ -351,10 +351,10 @@ namespace UVWizard.Core.Tests.LilToon
         BakeResult Bake(Renderer renderer, BakeOptions options, AnimatedSlot[]? animated = null)
         {
             var result = AvatarBaker.Bake(new[] { renderer }, options, animated: animated);
-            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
-            if (result.MergedMaterial != null) Track(result.MergedMaterial);
-            if (result.Atlas != null) Track(result.Atlas);
-            foreach (var (_, rewritten) in result.ReplacedMeshes) Track(rewritten);
+            foreach (var (_, converted) in result.ConvertedMaterials) Keep(converted);
+            if (result.MergedMaterial != null) Keep(result.MergedMaterial);
+            if (result.Atlas != null) Keep(result.Atlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Keep(rewritten);
             return result;
         }
 
@@ -364,25 +364,25 @@ namespace UVWizard.Core.Tests.LilToon
             var glass = Material("Hidden/lilToonTransparent");
             glass.SetFloat("_UseEmission", 1);
             glass.SetColor("_EmissionColor", Color.white);
-            glass.SetTexture("_EmissionMap", Track(new Texture2D(4, 4)));
+            glass.SetTexture("_EmissionMap", Keep(new Texture2D(4, 4)));
             glass.SetFloat("_EmissionMap_UVMode", 1);
-            var mesh = Track(new Mesh
+            var mesh = Keep(new Mesh
             {
                 vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
                 uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
                 triangles = new[] { 0, 2, 1, 1, 2, 3 },
             });
-            var go = Track(new GameObject("renderer"));
+            var go = Keep(new GameObject("renderer"));
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = glass;
 
             var result = AvatarBaker.Bake(new Renderer[] { renderer },
                 new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()));
-            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
-            if (result.MergedMaterial != null) Track(result.MergedMaterial);
-            if (result.Atlas != null) Track(result.Atlas);
-            foreach (var (_, rewritten) in result.ReplacedMeshes) Track(rewritten);
+            foreach (var (_, converted) in result.ConvertedMaterials) Keep(converted);
+            if (result.MergedMaterial != null) Keep(result.MergedMaterial);
+            if (result.Atlas != null) Keep(result.Atlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Keep(rewritten);
 
             Assert.That(result.Excluded.Single().Reason,
                 Is.EqualTo(new Reason(ReasonText.ChannelOffMainUvs, ReasonText.Channel(Channel.Emission), 1)));

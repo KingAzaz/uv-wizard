@@ -1,24 +1,13 @@
 #nullable enable
 
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UVWizard.Core.Budgets;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Budgets
 {
-    public class TextureMemoryTests
+    public class TextureMemoryTests : ObjectFixture
     {
-        readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void DestroyObjects()
-        {
-            foreach (var o in created) Object.DestroyImmediate(o);
-            created.Clear();
-        }
-
         // The VRChat SDK 3.10.5's own figures for a 2048 texture with all 12 mip levels. It multiplies in single
         // precision, which rounds 5x5's 0.64 bytes per texel one byte lower than exact arithmetic would.
         [TestCase(TextureFormat.ASTC_6x6, 2488620)]
@@ -120,12 +109,6 @@ namespace UVWizard.Core.Tests.Budgets
             editorOnly.transform.SetParent(parent.transform);
 
             Assert.That(TextureMemory.Bytes(new[] { inactive, editorOnly }), Is.EqualTo(32 * 32 * 4));
-        }
-
-        T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
         }
 
         Texture2D Texture(int size) => Keep(new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false));

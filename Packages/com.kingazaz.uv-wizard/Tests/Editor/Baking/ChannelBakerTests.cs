@@ -1,33 +1,22 @@
 using System;
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Baking;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Baking
 {
     [Category("GPU")]
-    public class ChannelBakerTests
+    public class ChannelBakerTests : ObjectFixture
     {
         // sRGB 8-bit round trips through the linear render target can move a channel by one step.
         const int Tolerance = 2;
-
-        readonly List<Object> created = new List<Object>();
 
         [SetUp]
         public void RequireGpu()
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
                 Assert.Ignore("Baking renders on the GPU, and this editor has no graphics device (-nographics).");
-        }
-
-        [TearDown]
-        public void DestroyTextures()
-        {
-            foreach (var o in created) Object.DestroyImmediate(o);
-            created.Clear();
         }
 
         [Test]
@@ -330,7 +319,7 @@ namespace UVWizard.Core.Tests.Baking
             for (var i = 0; i < pixels.Length; i++) pixels[i] = new Color(0.5f, 0.5f, 0.5f, 1);
             source.SetPixels(pixels);
             source.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-            created.Add(source);
+            Keep(source);
             var plan = NormalPlan(16, NormalEncoding.XYZ,
                 NormalQuad(source, 1, NormalEncoding.XYZ, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f)));
 
@@ -444,7 +433,7 @@ namespace UVWizard.Core.Tests.Baking
         public void ABakeDrawsWhileAnotherCameraIsCurrent()
         {
             var camera = new GameObject("A camera away from the origin").AddComponent<Camera>();
-            created.Add(camera.gameObject);
+            Keep(camera.gameObject);
             camera.transform.position = new Vector3(10, 10, 10);
             var source = Solid(new Color32(200, 100, 50, 255));
             var plan = Plan(8, Quad(source, Color.white, Identity, Corners(0, 0, 1, 1), Corners(0, 0, 0.5f, 0.5f)));
@@ -466,7 +455,7 @@ namespace UVWizard.Core.Tests.Baking
         public void ABakeLeavesTheCurrentCameraAsItFoundIt()
         {
             var camera = new GameObject("The caller's camera").AddComponent<Camera>();
-            created.Add(camera.gameObject);
+            Keep(camera.gameObject);
             var plan = Plan(8, Quad(Solid(new Color32(200, 100, 50, 255)), Color.white, Identity,
                 Corners(0, 0, 1, 1), Corners(0, 0, 0.5f, 0.5f)));
 
@@ -488,7 +477,7 @@ namespace UVWizard.Core.Tests.Baking
         Texture2D Bake(BakePlan plan)
         {
             var atlas = ChannelBaker.Bake(plan);
-            created.Add(atlas);
+            Keep(atlas);
             return atlas;
         }
 
@@ -530,7 +519,7 @@ namespace UVWizard.Core.Tests.Baking
                 pixels[y * size + x] = texel(x, y);
             texture.SetPixels32(pixels);
             texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-            created.Add(texture);
+            Keep(texture);
             return texture;
         }
 
@@ -580,7 +569,7 @@ namespace UVWizard.Core.Tests.Baking
                 pixels[y * 4 + x] = encode(SourceNormal(x, y));
             texture.SetPixels32(pixels);
             texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-            created.Add(texture);
+            Keep(texture);
             return texture;
         }
 

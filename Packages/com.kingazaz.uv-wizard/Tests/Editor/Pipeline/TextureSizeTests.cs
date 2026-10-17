@@ -10,7 +10,7 @@ namespace UVWizard.Core.Tests.Pipeline
 {
     // How many source texels per unit of chart UV a slot asks for. Built from readings directly, because Standard, the
     // one shader CI's project can read, samples every map with _MainTex_ST, so its channels never tile apart.
-    public class TextureSizeTests : BakeFixture
+    public class TextureSizeTests : ObjectFixture
     {
         [TestCase(4f, 4f, 128, 128)]
         [TestCase(-4f, 4f, 128, 128)]

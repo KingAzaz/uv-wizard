@@ -1,6 +1,5 @@
 #nullable enable
 
-using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -10,17 +9,8 @@ using UVWizard.Core.Reporting;
 namespace UVWizard.Core.Tests.VRChat
 {
     // Standard Lite multiplies in vertex colour. It ships with the VRChat SDK, which CI's project doesn't have.
-    public class VertexColourBakeTests
+    public class VertexColourBakeTests : ObjectFixture
     {
-        readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void DestroyCreated()
-        {
-            foreach (var o in created) Object.DestroyImmediate(o);
-            created.Clear();
-        }
-
         [Test]
         public void ASourceOnColouredVerticesIsFlaggedWhenTheOptionsVertexColourToggleTurnsOn()
         {
@@ -38,12 +28,6 @@ namespace UVWizard.Core.Tests.VRChat
             Assume.That(result.MergedMaterial!.GetFloat("_Glossiness"), Is.EqualTo(1));
             Assert.That(result.Flagged.Where(note => note.Reason.Keys.Contains(ReasonText.VertexColours)).Select(note => note.Material),
                 Is.EqualTo(new[] { standard }));
-        }
-
-        T Keep<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
         }
 
         // A quad from UV (min, min) to (min + 0.3, min + 0.3), every vertex the given colour.

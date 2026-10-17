@@ -3,22 +3,12 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
-using Object = UnityEngine.Object;
 
 namespace UVWizard.Core.Tests.Materials
 {
     /// <summary>Builds materials and textures in code, and destroys them after each test.</summary>
-    public abstract class MaterialTests
+    public abstract class MaterialTests : ObjectFixture
     {
-        readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void DestroyCreated()
-        {
-            foreach (var o in created) Object.DestroyImmediate(o);
-            created.Clear();
-        }
-
         // Colours round-trip through the project's colour space, which can move them by a rounding error.
         protected static void AssertColour(Color expected, Color actual, string? what = null,
             float tolerance = 1e-4f) =>
@@ -39,15 +29,9 @@ namespace UVWizard.Core.Tests.Materials
         {
             var shader = Shader.Find(shaderName);
             Assert.That(shader, Is.Not.Null, $"shader {shaderName}");
-            return Track(new Material(shader));
+            return Keep(new Material(shader));
         }
 
-        protected Texture2D Texture() => Track(new Texture2D(4, 4));
-
-        protected T Track<T>(T o) where T : Object
-        {
-            created.Add(o);
-            return o;
-        }
+        protected Texture2D Texture() => Keep(new Texture2D(4, 4));
     }
 }

@@ -480,7 +480,7 @@ namespace UVWizard.Core.Tests.LilToon
         public void AnEmissionMapWithoutAlphaOrOnLiteIsntFlagged()
         {
             var opaque = EmittingMaterial();
-            opaque.SetTexture("_EmissionMap", Track(new Texture2D(4, 4, TextureFormat.RGB24, false)));
+            opaque.SetTexture("_EmissionMap", Keep(new Texture2D(4, 4, TextureFormat.RGB24, false)));
             var lite = EmittingMaterial(Lite);
             lite.SetTexture("_EmissionMap", Texture());
 
@@ -503,7 +503,7 @@ namespace UVWizard.Core.Tests.LilToon
             Directory.CreateDirectory(folder);
             try
             {
-                var image = Track(new Texture2D(4, 4,
+                var image = Keep(new Texture2D(4, 4,
                     sourceHasAlpha ? TextureFormat.RGBA32 : TextureFormat.RGB24, false));
                 image.SetPixels(Enumerable.Repeat(new Color(1, 1, 1, 0.5f), 16).ToArray());
                 File.WriteAllBytes(path, image.EncodeToPNG());

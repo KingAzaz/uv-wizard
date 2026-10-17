@@ -492,11 +492,12 @@ namespace UVWizard.Core.Pipeline
 
         // Source texels per unit of the charts' UV space, the albedo's with its tiling applied: the most that any
         // channel the slot bakes needs, so none is baked below its own detail. A channel tiled more finely than the
-        // albedo needs more texels per unit. Channels turned off don't count. Without an albedo texture the slot
-        // keeps the untextured floor for its tint, even when a map tiled zero times needs no texels on an axis.
+        // albedo needs more texels per unit. Channels turned off don't count. Without a baked albedo texture the slot
+        // keeps the untextured floor, even when a map tiled zero times needs no texels on an axis: untextured, for its
+        // tint, and with the Albedo channel off, so that the gutter fill doesn't give it a neighbour's colour.
         internal static Vector2Int TextureSize(SourceMaterialReading reading, Channels on)
         {
-            var size = (on & Channels.Albedo) != 0 && reading.Albedo?.Texture != null ? Vector2Int.zero : UntexturedSize;
+            var size = BakedAlbedo(reading, on)?.Texture != null ? Vector2Int.zero : UntexturedSize;
             foreach (var (texture, tiling) in BakedTextures(reading, on))
             {
                 var needed = Vector2Int.CeilToInt(Vector2.Scale(new Vector2(texture.width, texture.height), tiling));
@@ -534,7 +535,7 @@ namespace UVWizard.Core.Pipeline
             var albedoScale = reading.Albedo?.ScaleOffset ?? new Vector4(1, 1, 0, 0);
             foreach (var channel in new[]
                      {
-                         (on & Channels.Albedo) != 0 ? reading.Albedo : null,
+                         BakedAlbedo(reading, on),
                          (on & Channels.Emission) != 0 ? BakedEmission(reading) : null,
                          (on & Channels.Normal) != 0 ? BakedNormal(reading) : null,
                      })
@@ -552,6 +553,10 @@ namespace UVWizard.Core.Pipeline
 
         // True when the slot draws and has a normal map that bumps it, so the merged slot has the Normal channel.
         static bool BakesNormal(Slot slot) => slot.Draws && BakedNormal(slot.Reading) != null;
+
+        // The source's albedo, or null when the Albedo channel is off.
+        static ChannelSource? BakedAlbedo(SourceMaterialReading reading, Channels on) =>
+            (on & Channels.Albedo) != 0 ? reading.Albedo : null;
 
         // The source's emission, or null when it doesn't glow.
         static ChannelSource? BakedEmission(SourceMaterialReading reading) =>

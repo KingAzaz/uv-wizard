@@ -1,7 +1,6 @@
 #nullable enable
 
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -14,18 +13,8 @@ namespace UVWizard.Core.Tests.Reporting
 {
     // The report (#24) from plain inputs: what it lists, and which line it picks for each case. The words themselves
     // come from the localizer, so these tests check the keys and arguments, not the English.
-    public class BakeReportTests
+    public class BakeReportTests : ObjectFixture
     {
-        readonly List<Object> created = new List<Object>();
-
-        [TearDown]
-        public void TearDown()
-        {
-            foreach (var o in created)
-                if (o != null) Object.DestroyImmediate(o);
-            created.Clear();
-        }
-
         [Test]
         public void AManualPreviewOnAPcProjectIsHeadedAsAnEstimate()
         {
@@ -265,14 +254,14 @@ namespace UVWizard.Core.Tests.Reporting
         Renderer Renderer(string name)
         {
             var renderer = new GameObject(name).AddComponent<MeshRenderer>();
-            created.Add(renderer.gameObject);
+            Keep(renderer.gameObject);
             return renderer;
         }
 
         Material Material(string name)
         {
             var material = new Material(Shader.Find("Standard")) { name = name };
-            created.Add(material);
+            Keep(material);
             return material;
         }
     }
