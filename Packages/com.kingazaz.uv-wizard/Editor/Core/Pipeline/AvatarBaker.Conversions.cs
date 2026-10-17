@@ -174,7 +174,7 @@ namespace UVWizard.Core.Pipeline
                     albedo = new ChannelSource(null, albedo.Tint, Identity, 0);
                 }
                 var emission = (options.Channels & Channels.Emission) != 0 ? BakedEmission(reading) : null;
-                if (emission is { UvChannel: > 0 } && (emission.UvChannel > 1 || !material.HasFloat("_EmissionUV")))
+                if (emission is { UvChannel: > 0 } && (emission.UvChannel > 1 || !material.HasFloat(options.EmissionUvProperty)))
                 {
                     Flag(new Reason(ReasonText.ConvertedEmissionOffUvs));
                     emission = null;
@@ -205,13 +205,13 @@ namespace UVWizard.Core.Pipeline
                 UseAtlases(material, options, albedoTexture, emissionTexture, strength, normalTexture);
 
                 // Each texture keeps the source's tiling and offset, applied where the merged shader samples it.
-                if (albedoTexture != null && albedo!.Texture != null) ScaleOffset(material, "_MainTex", albedo.ScaleOffset);
+                if (albedoTexture != null && albedo!.Texture != null) ScaleOffset(material, options.MainTextureProperty, albedo.ScaleOffset);
                 if (emissionTexture != null)
                 {
-                    if (emission!.Texture != null) ScaleOffset(material, "_EmissionMap", emission.ScaleOffset);
-                    if (material.HasFloat("_EmissionUV")) material.SetFloat("_EmissionUV", emission.UvChannel);
+                    if (emission!.Texture != null) ScaleOffset(material, options.EmissionMapProperty, emission.ScaleOffset);
+                    if (material.HasFloat(options.EmissionUvProperty)) material.SetFloat(options.EmissionUvProperty, emission.UvChannel);
                 }
-                if (normalTexture != null) ScaleOffset(material, "_BumpMap", normal!.ScaleOffset);
+                if (normalTexture != null) ScaleOffset(material, options.NormalMapProperty, normal!.ScaleOffset);
                 return material;
             }
 

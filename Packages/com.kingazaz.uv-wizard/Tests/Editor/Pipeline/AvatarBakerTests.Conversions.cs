@@ -123,6 +123,78 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void AConvertedMaterialsMainTextureIsTheOneTheOptionsName()
+        {
+            // Standard's detail mask stands in for the main texture. The island spans five tiles, so it's converted.
+            var repeated = Standard(Gradient(16, 1), Color.white, new Vector4(2, 1, 0.1f, 0.5f));
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), repeated);
+            var options = new BakeOptions(Shader.Find("Standard"), mainTextureProperty: "_DetailMask",
+                mobileShaders: System.Array.Empty<string>());
+
+            Bake(options, renderer);
+
+            var converted = renderer.sharedMaterial;
+            Assume.That(converted.name, Does.EndWith("(UV Wizard)"));
+            Assert.That(converted.GetTexture("_DetailMask"), Is.Not.Null.And.Not.SameAs(repeated.mainTexture));
+            Assert.That(converted.GetTextureScale("_DetailMask"), Is.EqualTo(new Vector2(2, 1)));
+            Assert.That(converted.GetTextureOffset("_DetailMask"), Is.EqualTo(new Vector2(0.1f, 0.5f)));
+        }
+
+        [Test]
+        public void AConvertedMaterialsEmissionMapIsTheOneTheOptionsName()
+        {
+            // Standard's occlusion map stands in for the emission map, which Standard samples with _MainTex_ST.
+            var glowing = Emitting(Standard(Gradient(16, 1), Color.white, new Vector4(2, 1, 0.1f, 0.5f)), Gradient(16, 3),
+                Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), glowing);
+            var options = new BakeOptions(Shader.Find("Standard"), emissionMapProperty: "_OcclusionMap",
+                mobileShaders: System.Array.Empty<string>());
+
+            Bake(options, renderer);
+
+            var converted = renderer.sharedMaterial;
+            Assume.That(converted.name, Does.EndWith("(UV Wizard)"));
+            Assert.That(converted.GetTexture("_OcclusionMap"), Is.Not.Null);
+            Assert.That(converted.GetTextureScale("_OcclusionMap"), Is.EqualTo(new Vector2(2, 1)));
+            Assert.That(converted.GetTextureOffset("_OcclusionMap"), Is.EqualTo(new Vector2(0.1f, 0.5f)));
+        }
+
+        [Test]
+        public void AConvertedMaterialsEmissionUvIsTheOneTheOptionsName()
+        {
+            // Standard's smoothness, 0.5 by default, stands in for the emission UV channel. Standard emits from UV0.
+            var glowing = Emitting(Standard(Gradient(16, 1), Color.white), Gradient(16, 3), Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), glowing);
+            var options = new BakeOptions(Shader.Find("Standard"), emissionUvProperty: "_Glossiness",
+                mobileShaders: System.Array.Empty<string>());
+
+            Bake(options, renderer);
+
+            var converted = renderer.sharedMaterial;
+            Assume.That(converted.name, Does.EndWith("(UV Wizard)"));
+            Assume.That(converted.GetTexture("_EmissionMap"), Is.Not.Null);
+            Assert.That(converted.GetFloat("_Glossiness"), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void AConvertedMaterialsNormalMapIsTheOneTheOptionsName()
+        {
+            // Standard's detail normal map stands in for the normal map, which Standard samples with _MainTex_ST.
+            var bumpy = NormalMapped(Standard(Gradient(16, 1), Color.white, new Vector4(2, 1, 0.1f, 0.5f)), NormalGradient(16, 1), 1);
+            var renderer = MeshRenderer(WithTangents(Mesh(new[] { Quad(0, 0, 0, 5, 1) })), bumpy);
+            var options = new BakeOptions(Shader.Find("Standard"), normalMapProperty: "_DetailNormalMap",
+                mobileShaders: System.Array.Empty<string>());
+
+            Bake(options, renderer);
+
+            var converted = renderer.sharedMaterial;
+            Assume.That(converted.name, Does.EndWith("(UV Wizard)"));
+            Assert.That(converted.GetTexture("_DetailNormalMap"), Is.Not.Null);
+            Assert.That(converted.GetTextureScale("_DetailNormalMap"), Is.EqualTo(new Vector2(2, 1)));
+            Assert.That(converted.GetTextureOffset("_DetailNormalMap"), Is.EqualTo(new Vector2(0.1f, 0.5f)));
+        }
+
+        [Test]
         public void ATransparentExcludedMaterialIsFlaggedAsItsMergedSlotWouldBe()
         {
             var glass = Standard(Gradient(16, 1), Color.white);
