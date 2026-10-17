@@ -223,7 +223,7 @@ namespace UVWizard.Core.Tests.Meshes
 
             var result = Rewrite(source, split ? TwoCharts : OneChart);
 
-            Assert.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            Assert.That(result.Path, Is.EqualTo(ExpectedPath(split, splitVerticesStill)));
             Assert.That(CornerUvs(result.Mesh, 0, 0), Is.EqualTo(split ? TwoCharts : OneChart));
             Assert.That(CornerUvs(result.Mesh, 0, 1), Is.EqualTo(uv1));
             Assert.That(SkinOfCorners(result.Mesh), Is.EqualTo(skin));
@@ -377,7 +377,7 @@ namespace UVWizard.Core.Tests.Meshes
 
             var recalculated = Keep(Object.Instantiate(result.Mesh));
             recalculated.RecalculateUVDistributionMetric(0);
-            Assume.That(recalculated.GetUVDistributionMetric(0), Is.Not.EqualTo(source.GetUVDistributionMetric(0)).Within(1e-3f));
+            Assert.That(recalculated.GetUVDistributionMetric(0), Is.Not.EqualTo(source.GetUVDistributionMetric(0)).Within(1e-3f));
             Assert.That(result.Mesh.GetUVDistributionMetric(0), Is.EqualTo(recalculated.GetUVDistributionMetric(0)).Within(1e-4f));
         }
 
@@ -393,29 +393,33 @@ namespace UVWizard.Core.Tests.Meshes
 
             var result = Rewrite(source, split ? TwoCharts : OneChart);
 
-            Assert.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            Assert.That(result.Path, Is.EqualTo(ExpectedPath(split, splitVerticesStill)));
             Assert.That(source.GetUVDistributionMetric(1), Is.Not.EqualTo(1).Within(1e-3f));
             Assert.That(result.Mesh.GetUVDistributionMetric(1), Is.EqualTo(source.GetUVDistributionMetric(1)).Within(1e-4f));
         }
 
-        [TestCase(false, false)]
-        [TestCase(true, true)]
-        [TestCase(true, false)]
-        public void AMeshWithALineSubmeshKeepsTheSourcesUv0DistributionMetric(bool split, bool splitVerticesStill)
+        [TestCase(MeshTopology.Lines, false, false)]
+        [TestCase(MeshTopology.Lines, true, true)]
+        [TestCase(MeshTopology.Lines, true, false)]
+        [TestCase(MeshTopology.Points, false, false)]
+        [TestCase(MeshTopology.Points, true, true)]
+        [TestCase(MeshTopology.Points, true, false)]
+        public void AMeshWithALineOrPointSubmeshKeepsTheSourcesUv0DistributionMetric(MeshTopology topology, bool split, bool splitVerticesStill)
         {
-            // Unity can't recalculate the metric of a mesh with line submeshes. A line vertex keeps
-            // its own UV0, so a line over the triangles' vertices splits them: this one lies on
-            // vertex 3, which only the second triangle uses, so a single triangle splits nothing.
+            // Unity can't recalculate the metric of a mesh with line or point submeshes. A line or
+            // point vertex keeps its own UV0, so one over the triangles' vertices splits them: this
+            // one lies on vertex 3, which only the second triangle uses, so a single triangle splits
+            // nothing.
             var source = Skinned(Square(split ? new[] { 0, 1, 2, 2, 1, 3 } : new[] { 0, 1, 2 }),
                 splitVerticesStill ? new[] { 1, 2, 3 } : new int[0]);
             HalveUvs(source, 0);
             source.RecalculateUVDistributionMetric(0);
             source.subMeshCount = 2;
-            source.SetIndices(new[] { 3, 3 }, MeshTopology.Lines, 1);
+            source.SetIndices(topology == MeshTopology.Lines ? new[] { 3, 3 } : new[] { 3 }, topology, 1);
 
             var result = Rewrite(source, split ? TwoCharts : new[] { A0, A1, A2 }, null);
 
-            Assert.That(result.Path, Is.EqualTo(!split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt));
+            Assert.That(result.Path, Is.EqualTo(ExpectedPath(split, splitVerticesStill)));
             Assert.That(source.GetUVDistributionMetric(0), Is.Not.EqualTo(1).Within(1e-3f));
             Assert.That(result.Mesh.GetUVDistributionMetric(0), Is.EqualTo(source.GetUVDistributionMetric(0)).Within(1e-4f));
         }
@@ -549,6 +553,11 @@ namespace UVWizard.Core.Tests.Meshes
             mesh.AddBlendShapeFrame("smile", 100, Deltas(4, still), Deltas(5, still), Deltas(6, still));
             return mesh;
         }
+
+        // The path a Skinned square takes: copied unless a vertex splits, then appended while the
+        // split vertices are still in every blend shape.
+        static RewritePath ExpectedPath(bool split, bool splitVerticesStill) =>
+            !split ? RewritePath.Copied : splitVerticesStill ? RewritePath.Appended : RewritePath.Rebuilt;
 
         // Shrinks a UV channel to half its size, so its distribution metric isn't the 1 a new mesh has.
         static void HalveUvs(Mesh mesh, int channel) => mesh.SetUVs(channel, Uvs(mesh, channel).Select(uv => uv * 0.5f).ToArray());

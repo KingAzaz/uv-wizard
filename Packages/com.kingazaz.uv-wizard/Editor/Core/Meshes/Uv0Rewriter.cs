@@ -112,8 +112,8 @@ namespace UVWizard.Core.Meshes
             }
             else
             {
-                // A copy rather than a new mesh, so it keeps the source's UV distribution metrics,
-                // which Unity has no setter for.
+                // A copy rather than a new mesh, so it keeps the source's UV0 and UV1 distribution
+                // metrics, which Unity has no setter for.
                 path = RewritePath.Rebuilt;
                 mesh = UnityEngine.Object.Instantiate(source);
                 mesh.name = source.name;
@@ -134,7 +134,7 @@ namespace UVWizard.Core.Meshes
             mesh.bounds = source.bounds;
             // Mip streaming picks the atlas's mip level from UV0's texel density. Unity's
             // recalculation logs an error on a mesh with line or point submeshes, so those keep the
-            // source's metric, as the other channels do.
+            // source's metric, as UV1 does.
             if (merged != null && AllTriangles(mesh)) mesh.RecalculateUVDistributionMetric(0);
             return new RewrittenMesh(mesh, submeshOf, merged, path);
         }
