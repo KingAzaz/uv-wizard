@@ -26,15 +26,24 @@ def temp_dir(test):
     return folder.name
 
 
-def succeeded(total, passed, failed=0):
+def succeeded(total, passed, failed=0, results=None):
     return {"status": "succeeded", "error": None,
             "result": {"summary": {"total": total, "passed": passed, "failed": failed, "skipped": 0,
-                                   "durationSeconds": 1.0}}}
+                                   "durationSeconds": 1.0},
+                       "results": results}}
 
 
-def failed_job(failures, capped=False):
-    return {"status": "failed", "error": None, "result": None,
+def failed_job(failures, capped=False, results=None):
+    return {"status": "failed", "error": None,
+            "result": None if results is None else {"summary": {}, "results": results},
             "progress": {"failures_so_far": failures, "failures_capped": capped}}
+
+
+def inconclusive(full_name, message="Expected: True"):
+    """A test result as MCP for Unity v10.3.0 lists it: TestRunnerService.cs's
+    TestRunTestResult, whose state is NUnit's ResultState.ToString()."""
+    return {"name": full_name.split(".")[-1], "fullName": full_name, "state": "Inconclusive",
+            "durationSeconds": 0.0, "message": message, "stackTrace": "", "output": ""}
 
 
 class ReportTest(unittest.TestCase):
@@ -93,6 +102,45 @@ class ReportTest(unittest.TestCase):
 
     def test_a_failed_count_in_a_succeeded_summary_is_red(self):
         self.assertEqual(self.report(succeeded(3, 2, failed=1))[0], "red")
+
+    # The bridge marks a run with Inconclusive tests "succeeded", and its summary
+    # leaves them out of every count, total included: only the result list names them.
+    def test_an_inconclusive_test_is_red_and_named_with_its_message(self):
+        job = succeeded(2, 2, results=[inconclusive("Ns.Class.Test", "Expected: 4\n  But was: 3")])
+        outcome, out = self.report(job)
+        self.assertEqual(outcome, "red")
+        self.assertIn("INCONCLUSIVE Ns.Class.Test\n  Expected: 4\n    But was: 3", out)
+
+    def test_the_summary_line_counts_the_inconclusive_tests(self):
+        job = succeeded(2, 2, results=[inconclusive("A"), inconclusive("B")])
+        with redirect_stdout(io.StringIO()) as out, \
+                self.assertRaisesRegex(unity_tests.Failed, re.escape("2 test(s) inconclusive")):
+            unity_tests.report(job)
+        self.assertIn("total 4, passed 2, failed 0, inconclusive 2, skipped 0", out.getvalue())
+
+    def test_a_run_of_only_inconclusive_tests_says_so_not_that_none_ran(self):
+        with redirect_stdout(io.StringIO()), \
+                self.assertRaisesRegex(unity_tests.Failed, re.escape("1 test(s) inconclusive")):
+            unity_tests.report(succeeded(0, 0, results=[inconclusive("A")]))
+
+    def test_skipped_and_ignored_results_are_not_inconclusive(self):
+        results = [dict(inconclusive("A"), state=state) for state in ("Skipped", "Skipped:Ignored", "Passed")]
+        outcome, out = self.report(succeeded(3, 1, results=results))
+        self.assertEqual(outcome, "green")
+        self.assertIn("inconclusive 0", out)
+
+    def test_a_failed_job_lists_its_inconclusive_tests_too(self):
+        job = failed_job([{"full_name": "F", "message": ""}], results=[inconclusive("Ns.Class.Maybe")])
+        outcome, out = self.report(job)
+        self.assertEqual(outcome, "red")
+        self.assertIn("FAIL F", out)
+        self.assertIn("INCONCLUSIVE Ns.Class.Maybe", out)
+
+    def test_a_failed_jobs_reason_counts_its_inconclusive_tests(self):
+        job = failed_job([{"full_name": "F", "message": ""}], results=[inconclusive("A"), inconclusive("B")])
+        with redirect_stdout(io.StringIO()), \
+                self.assertRaisesRegex(unity_tests.Failed, re.escape("1 test(s) failed, 2 inconclusive")):
+            unity_tests.report(job)
 
 
 class EditorStateTest(unittest.TestCase):
@@ -377,6 +425,9 @@ class MainTest(unittest.TestCase):
         job = {"status": "failed", "error": None,
                "progress": {"failures_so_far": [{"full_name": "T", "message": "m"}]}}
         self.assertEqual(self.main(FakeEditor(job=job)), 1)
+
+    def test_an_inconclusive_test_is_1(self):
+        self.assertEqual(self.main(FakeEditor(job=succeeded(2, 2, results=[inconclusive("T")]))), 1)
 
     def test_a_job_that_broke_is_2(self):
         self.assertEqual(self.main(FakeEditor(job={"status": "failed", "error": "orphaned"})), 2)

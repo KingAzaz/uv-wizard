@@ -4,9 +4,10 @@ Usage: python tools/unity_tests.py [--refresh-only | --no-refresh] [-a ASSEMBLY]
 
 By default it refreshes the asset database, recompiles and waits for the
 editor, then runs every test assembly under Packages/com.kingazaz.uv-wizard/Tests
-and polls until the run ends. It prints each failure and exits:
+and polls until the run ends. It prints each failing and Inconclusive test and exits:
   0  every selected test passed;
-  1  a test failed, the scripts didn't compile, or the selection ran no tests;
+  1  a test failed or was Inconclusive, the scripts didn't compile, or the
+     selection ran no tests;
   2  the bridge or the editor couldn't run the tests (unreachable, timed out,
      or already running tests).
 """
@@ -198,34 +199,57 @@ def run(port, assemblies, group, deadline, poll=2.0):
             return job
 
 
+def print_result(kind, full_name, message):
+    print("%s %s\n  %s" % (kind, full_name, (message or "").strip().replace("\n", "\n  ")))
+
+
+def inconclusive_results(job):
+    """The job's Inconclusive tests, from the result list include_failed_tests asks for.
+
+    The bridge counts a run "succeeded" while no test failed, and its summary
+    leaves Inconclusive tests out of every count, total included. CI fails a run
+    with any, so they're red here too.
+    """
+    results = (job.get("result") or {}).get("results") or []
+    return [r for r in results if (r.get("state") or "").startswith("Inconclusive")]
+
+
 def report(job):
     """Print the job's outcome and raise Failed when it isn't all green.
 
     The bridge marks a job "failed" both when a test fails (error null) and when
-    the job itself breaks (error set). Only a succeeded job carries the result
-    summary; a failed one carries its first 25 failures under progress.
+    the job itself breaks (error set). A finished job carries its result list;
+    a failed one also carries its first 25 failures under progress, which this
+    reads for their messages.
     """
     status, error = job.get("status"), job.get("error")
+    inconclusive = inconclusive_results(job)
+    also = ", %d inconclusive" % len(inconclusive) if inconclusive else ""
     if status == "failed" and not error:
         failures = (job.get("progress") or {}).get("failures_so_far") or []
         for failure in failures:
-            print("FAIL %s\n  %s" % (failure.get("full_name"),
-                                     (failure.get("message") or "").strip().replace("\n", "\n  ")))
+            print_result("FAIL", failure.get("full_name"), failure.get("message"))
+        for result in inconclusive:
+            print_result("INCONCLUSIVE", result.get("fullName"), result.get("message"))
         if (job.get("progress") or {}).get("failures_capped"):
             print("(only the first %d failures are listed)" % len(failures))
-            raise Failed("%d or more tests failed" % len(failures))
-        raise Failed("%d test(s) failed" % max(len(failures), 1))
+            raise Failed("%d or more tests failed%s" % (len(failures), also))
+        raise Failed("%d test(s) failed%s" % (max(len(failures), 1), also))
     if status != "succeeded":
         raise RuntimeError("test job %s: %s" % (status, error))
+    for result in inconclusive:
+        print_result("INCONCLUSIVE", result.get("fullName"), result.get("message"))
     summary = (job.get("result") or {}).get("summary") or {}
-    total = summary.get("total", 0)
-    print("total %s, passed %s, failed %s, skipped %s, %.1f s" % (
-        total, summary.get("passed"), summary.get("failed"), summary.get("skipped"),
+    total = summary.get("total", 0) + len(inconclusive)
+    print("total %s, passed %s, failed %s, inconclusive %d, skipped %s, %.1f s" % (
+        total, summary.get("passed"), summary.get("failed"), len(inconclusive), summary.get("skipped"),
         summary.get("durationSeconds") or 0))
-    if not total:
-        raise Failed("no tests ran: check the assembly and group selection")
     if summary.get("failed"):
         raise Failed("%d test(s) failed" % summary["failed"])
+    if inconclusive:
+        raise Failed("%d test(s) inconclusive" % len(inconclusive))
+    if not total:
+        raise Failed("no tests ran: check the assembly and group selection")
 
 
 def main(argv=None):
