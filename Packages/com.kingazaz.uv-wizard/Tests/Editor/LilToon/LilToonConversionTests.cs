@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Budgets;
 using UVWizard.Core.Materials;
+using UVWizard.Core.Meshes;
 using UVWizard.Core.Pipeline;
 using UVWizard.Core.Reporting;
 using UVWizard.Core.Tests.Materials;
@@ -156,6 +157,113 @@ namespace UVWizard.Core.Tests.LilToon
                 mobileShaders: Array.Empty<string>()));
 
             Assert.That(result.SizedFor, Is.SameAs(Preset.Excellent));
+        }
+
+        [Test]
+        public void ALayerIsRemovedFromWhereTheMergeMovedItsSlot()
+        {
+            // The two submeshes merge into one, so the layer's slot moves from the third to the second.
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var mesh = Track(new Mesh
+            {
+                vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
+                uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
+                subMeshCount = 2,
+            });
+            mesh.SetTriangles(new[] { 0, 2, 1 }, 0);
+            mesh.SetTriangles(new[] { 1, 2, 3 }, 1);
+            var go = Track(new GameObject("renderer"));
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = new[] { Material("lilToon"), Material("lilToon"), outline };
+
+            var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()));
+
+            Assert.That(renderer.sharedMaterials, Is.EqualTo(new[] { result.MergedMaterial }));
+            Assert.That(result.Removed.Select(note => note.Slot), Is.EqualTo(new[] { 2 }), "the slot's index before the bake");
+        }
+
+        [Test]
+        public void ALayerIsRemovedWhenNothingMerges()
+        {
+            // The animation swaps the quad's own slot, so no slot is left to merge.
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var renderer = Quad(Material("lilToon"), outline);
+
+            var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
+                new[] { new AnimatedSlot(renderer, 0, new Reason("Swapped in \"Swap\"."), new[] { Material("lilToon") }) });
+
+            Assert.That(result.MergedMaterial, Is.Null);
+            Assert.That(renderer.sharedMaterials, Has.Length.EqualTo(1));
+            Assert.That(result.Removed.Select(note => note.Material), Is.EqualTo(new[] { outline }));
+        }
+
+        [Test]
+        public void ALayerIsRemovedWhenTheOnlyChannelOnHasNothingToBake()
+        {
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var renderer = Quad(Material("lilToon"), outline);
+
+            var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), channels: Channels.Emission,
+                mobileShaders: Array.Empty<string>()));
+
+            Assert.That(result.NothingToBake, Is.True);
+            Assert.That(renderer.sharedMaterials, Has.No.Member(outline));
+            Assert.That(result.Removed.Select(note => note.Material), Is.EqualTo(new[] { outline }));
+        }
+
+        [Test]
+        public void ALayerIsRemovedWhenTheChartsDontFit()
+        {
+            // Padding as wide as the atlas leaves no room for any chart.
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var main = Material("lilToon");
+            main.SetTexture("_MainTex", Track(new Texture2D(1024, 1024)));
+            var renderer = Quad(main, outline);
+
+            var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), atlasSize: 64, padding: 64,
+                mobileShaders: Array.Empty<string>()));
+
+            Assert.That(result.Fits, Is.False);
+            Assert.That(renderer.sharedMaterials, Has.No.Member(outline));
+            Assert.That(result.Removed.Select(note => note.Material), Is.EqualTo(new[] { outline }));
+        }
+
+        [Test]
+        public void ALayerRemovedFromARendererALaterToolKeepsOutIsntAlsoExcluded()
+        {
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var main = Material("lilToon");
+            var renderer = Quad(main, outline);
+
+            var result = AvatarBaker.Bake(new[] { renderer },
+                new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()), new KeepsOut());
+            foreach (var (_, converted) in result.ConvertedMaterials) Track(converted);
+
+            Assert.That(result.Excluded.Select(note => note.Material), Is.EqualTo(new[] { main }));
+            Assert.That(result.Removed.Select(note => note.Material), Is.EqualTo(new[] { outline }));
+        }
+
+        [Test]
+        public void ALayerAnAnimationSwapsIntoAKeptSlotIsConvertedToo()
+        {
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var renderer = Quad(Material("lilToon"), Material("lilToon"));
+
+            var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
+                new[] { new AnimatedSlot(renderer, 1, new Reason("Swapped in \"Swap\"."), new[] { outline }) });
+
+            Assert.That(result.ConvertedMaterials.Single(c => c.Source == outline).Converted.shader,
+                Is.SameAs(Shader.Find("Standard")));
+            Assert.That(result.Unconverted, Is.Empty);
+        }
+
+        // A tool after the bake that reads the source UV0 but can't find it, so it keeps every renderer out.
+        sealed class KeepsOut : ILaterMeshEdits
+        {
+            public ITriangleRemovals? Removals(Renderer renderer) => null;
+            public LaterToolNeeds Needs(Renderer renderer) => LaterToolNeeds.CantKeepSourceUv0;
+            public void KeptSourceUv0(Renderer renderer, int channel) { }
         }
 
         // A one-submesh quad with the materials, the second and later on extra slots that draw it again.

@@ -109,12 +109,12 @@ namespace UVWizard.Core.Pipeline
                 }
             }
 
-            // True for a material mobile doesn't allow that has no surface of its own, with why it has none.
-            bool IsLayer(Material material, out Reason reason)
+            // True for a material with no surface of its own, which no mobile shader is, with why it has none.
+            static bool IsLayer(Material material, out Reason reason)
             {
                 var reading = SourceShaderReader.Read(material);
                 reason = reading.Reason ?? new Reason(ReasonText.NoSurface);
-                return reading.Albedo == null && !options.MobileShaders!.Contains(material.shader.name);
+                return reading.Albedo == null;
             }
 
             /// <summary>
