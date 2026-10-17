@@ -403,6 +403,11 @@ class EditorTest(unittest.TestCase):
         params = fake.sent("run_tests")[0]["params"]
         self.assertEqual((params["assembly_names"], params["group_names"]), (["A", "B"], ["Ns\\.Class\\."]))
 
+    def test_the_run_gives_the_job_longer_than_the_bridges_15_s_to_start(self):
+        editor, fake = self.editor()
+        unity_tests.run(fake.port, ["A"], None, time.monotonic() + 30, poll=0.05)
+        self.assertGreaterEqual(fake.sent("run_tests")[0]["params"]["init_timeout"], 60000)
+
 
 class MainTest(unittest.TestCase):
     """main()'s exit codes, against a fake editor found through its status file."""
