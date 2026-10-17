@@ -150,10 +150,37 @@ namespace UVWizard.NDMF.Tests
         [Test]
         public void EveryLineReadsWithItsCallSitesArguments()
         {
+            var wrong = CallSiteLines().Select(entry => (entry.Line.Key, Read: new Reason(entry.Line.Key, entry.Line.Args)
+                    .Text(Messages.Text), entry.Text))
+                .Where(entry => entry.Read != entry.Text).Select(entry => $"{entry.Key}: \"{entry.Read}\"");
+            Assert.That(wrong, Is.Empty);
+        }
+
+        // Every other line is built from its key alone, so its template must ask for no argument: a stray {0} or {
+        // would read as the key.
+        [Test]
+        public void EveryLineNoCallSiteFillsInReadsWithoutArguments()
+        {
+            var lines = CallSiteLines().Select(entry => entry.Line).ToList();
+            var filledIn = new HashSet<string>(lines.Concat(lines.SelectMany(line => line.Args.OfType<ReportLine>()))
+                .Where(line => line.Args.Length > 0).Select(line => line.Key));
+            var keys = ReasonKeys()
+                .Concat(typeof(ReportText).GetFields(BindingFlags.Public | BindingFlags.Static)
+                    .Where(field => field.IsLiteral).Select(field => (string)field.GetRawConstantValue()))
+                .Concat(new[] { PerformanceRank.Excellent, PerformanceRank.Good, PerformanceRank.Medium,
+                    PerformanceRank.Poor, PerformanceRank.VeryPoor }.Select(ReportText.Rank))
+                .Where(key => !filledIn.Contains(key)).ToList();
+
+            Assert.That(keys, Is.Not.Empty);
+            Assert.That(keys.Where(key => new Reason(key).Text(Messages.Text) == key), Is.Empty);
+        }
+
+        static (ReportLine Line, string Text)[] CallSiteLines()
+        {
             var albedo = ReasonText.Channel(Core.Materials.Channel.Albedo);
             var emission = ReasonText.Channel(Core.Materials.Channel.Emission);
             var normal = ReasonText.Channel(Core.Materials.Channel.Normal);
-            var lines = new (ReportLine Line, string Text)[]
+            return new (ReportLine Line, string Text)[]
             {
                 // LilToonReader
                 (new ReportLine(ReasonText.LilToonAddOn, "lilToon/Fur"),
@@ -216,12 +243,11 @@ namespace UVWizard.NDMF.Tests
                     "Optimize keeps a mesh named Body under the avatar for MMD worlds, which animate its blend shapes. If " +
                     "you don't use MMD worlds, add Trace and Optimize to the avatar yourself and turn off its MMD World " +
                     "Compatibility."),
+                // BakeReportWindow, which formats these two itself
+                (new ReportLine(ReportText.Megabytes, 1.5f), "1.5 MB"),
+                (new ReportLine(ReportText.Target, new ReportLine(ReportText.Rank(PerformanceRank.Good))),
+                    "The preset aims for Good."),
             };
-
-            var wrong = lines.Select(entry => (entry.Line.Key, Read: new Reason(entry.Line.Key, entry.Line.Args)
-                    .Text(Messages.Text), entry.Text))
-                .Where(entry => entry.Read != entry.Text).Select(entry => $"{entry.Key}: \"{entry.Read}\"");
-            Assert.That(wrong, Is.Empty);
         }
 
         // A creator reads these without knowing how the bake splits a mesh up or numbers its UV maps.

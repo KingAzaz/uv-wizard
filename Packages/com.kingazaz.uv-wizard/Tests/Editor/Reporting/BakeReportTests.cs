@@ -2,8 +2,10 @@
 
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using UVWizard.Core.Packing;
 using UVWizard.Core.Pipeline;
 using UVWizard.Core.Reporting;
@@ -247,11 +249,13 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         // A template that asks for more arguments than its call site passes would throw from the bake or the report
-        // window; the line shows its key instead, which says which template to fix (#179).
+        // window; the line shows its key instead, and logs an error naming the key, so the broken template shows in the
+        // console as well as in the report (#179).
         [Test]
-        public void ALineWhoseTemplateCantBeFilledInReadsAsItsKey()
+        public void ALineWhoseTemplateCantBeFilledInReadsAsItsKeyAndLogsIt()
         {
             var line = new ReportLine("some.key", "Hat");
+            LogAssert.Expect(LogType.Error, new Regex("some\\.key.*\\{0\\} has \\{1\\} slots"));
 
             var text = line.Text(key => key == "some.key" ? "{0} has {1} slots" : "?");
 
@@ -259,7 +263,7 @@ namespace UVWizard.Core.Tests.Reporting
         }
 
         [Test]
-        public void AnEmptyLineComparesHashesAndReadsAsNothing()
+        public void ADefaultLineEqualsItselfAndReadsAsNothing()
         {
             var empty = default(ReportLine);
 

@@ -252,16 +252,20 @@ namespace UVWizard.Core.Reporting
         /// <summary>
         /// The line's text: its key's template from the lookup, with the arguments filled in. An argument that is
         /// itself a line is filled in with its own text. A template that asks for an argument the line doesn't have
-        /// gives the key instead, so the bake and the report window still run, and the key names the template to fix.
+        /// gives the key instead, so the bake and the report window still run, and logs an error naming the template
+        /// to fix.
         /// </summary>
         public string Text(Func<string, string> lookup)
         {
+            if (key == null) return "";
+            var template = lookup(key);
             try
             {
-                return string.Format(lookup(Key), Args.Select(arg => arg is ReportLine line ? line.Text(lookup) : arg).ToArray());
+                return string.Format(template, Args.Select(arg => arg is ReportLine line ? line.Text(lookup) : arg).ToArray());
             }
             catch (FormatException)
             {
+                Debug.LogError($"UV Wizard: the text of {Key} can't be filled in with {Args.Length} argument(s): {template}");
                 return Key;
             }
         }
