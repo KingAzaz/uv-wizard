@@ -1,7 +1,8 @@
 // A stand-in for Poiyomi Toon, which CI's project lacks: its name puts it under PoiyomiReader, which reads each map
 // with its own _ST, so a test can tile the emission map differently from the albedo. It declares only the properties
-// those tests set, and draws the main texture unlit.
-Shader ".poiyomi/UV Wizard Tests/Stand-in"
+// those tests set, and draws the main texture unlit. Its name is a locked Poiyomi shader's, which keeps it hidden from
+// creators' shader menus, since releases ship the Tests folder.
+Shader "Hidden/Locked/.poiyomi/UV Wizard Tests/Stand-in"
 {
     Properties
     {

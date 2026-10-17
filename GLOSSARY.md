@@ -25,7 +25,7 @@ A connected patch of an avatar's mesh surface that stays connected in UV space, 
 _Avoid_: Shell, UV chart, piece, UV group
 
 **Tile period**:
-How many whole UV tiles an island may move by and still sample the same texels in every channel its source material bakes. Islands outside the 0–1 tile move home by whole periods, so they can stack with islands they match. A texture that clamps, or whose tiling never lines up, has no period, and its islands stay where they are.
+How many whole UV tiles an island may move by and still sample the same texels in every channel its source material bakes. Islands outside the 0–1 tile move home by whole periods, so they can stack with islands they match. A tiling only near whole drifts a little with each period, so an island moves home only while its textures drift half a texel at most. A texture that clamps, or whose tiling never lines up, has no period, and its islands stay where they are.
 _Avoid_: Wrap period, repeat
 
 **Chart**:

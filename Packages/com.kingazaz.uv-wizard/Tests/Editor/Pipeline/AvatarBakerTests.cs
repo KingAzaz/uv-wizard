@@ -1198,7 +1198,7 @@ namespace UVWizard.Core.Tests.Pipeline
         // A material on the Poiyomi stand-in, glowing white with the emission map tiled as given and the albedo once.
         Material PoiyomiStandIn(Texture2D albedo, Texture2D glow, Vector2 emissionScale)
         {
-            var material = Keep(new Material(Shader.Find(".poiyomi/UV Wizard Tests/Stand-in")) { mainTexture = albedo });
+            var material = Keep(new Material(Shader.Find("Hidden/Locked/.poiyomi/UV Wizard Tests/Stand-in")) { mainTexture = albedo });
             material.SetFloat("_EnableEmission", 1);
             material.SetTexture("_EmissionMap", glow);
             material.SetTextureScale("_EmissionMap", emissionScale);

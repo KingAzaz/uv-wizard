@@ -81,6 +81,15 @@ namespace UVWizard.Core.Tests.Islands
         }
 
         [Test]
+        public void AnIslandBelowTileZeroStaysWhereShiftingItWouldDriftItsTexturesOverHalfATexel()
+        {
+            // Ten periods back across at 0.06 texels each is 0.6.
+            var island = BuildQuad(new Vector2(-9.75f, 0.25f), new Vector2(-9.25f, 0.75f), 1, 1, 0.06f, 0);
+
+            Assert.That(island.TileShift, Is.EqualTo(Vector2Int.zero));
+        }
+
+        [Test]
         public void TheDriftCountsPeriodsNotTiles()
         {
             // Six tiles across are three periods of two, at 0.15 texels each: 0.45. Up, four tiles at 0.15 are 0.6.

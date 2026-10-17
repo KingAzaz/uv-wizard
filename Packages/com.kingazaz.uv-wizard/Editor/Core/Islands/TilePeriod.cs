@@ -50,8 +50,8 @@ namespace UVWizard.Core.Islands
         public static float Drift(TextureWrapMode wrap, float ratio, int period, int texels)
         {
             var repeats = wrap == TextureWrapMode.Mirror ? 2 : 1;
-            var periods = period * ratio / repeats;
-            return Mathf.Abs(periods - Mathf.Round(periods)) * repeats * texels;
+            var cycles = period * ratio / repeats;
+            return Mathf.Abs(cycles - Mathf.Round(cycles)) * repeats * texels;
         }
 
         /// <summary>The period of two textures sampled together: the shortest shift both allow.</summary>
