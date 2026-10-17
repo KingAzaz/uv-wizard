@@ -218,11 +218,13 @@ def report(job):
     """Print the job's outcome and raise Failed when it isn't all green.
 
     The bridge marks a job "failed" both when a test fails (error null) and when
-    the job itself breaks (error set). Only a succeeded job carries the result
-    summary; a failed one carries its first 25 failures under progress.
+    the job itself breaks (error set). A finished job carries its result list;
+    a failed one also carries its first 25 failures under progress, which this
+    reads for their messages.
     """
     status, error = job.get("status"), job.get("error")
     inconclusive = inconclusive_results(job)
+    also = ", %d inconclusive" % len(inconclusive) if inconclusive else ""
     if status == "failed" and not error:
         failures = (job.get("progress") or {}).get("failures_so_far") or []
         for failure in failures:
@@ -231,8 +233,8 @@ def report(job):
             print_result("INCONCLUSIVE", result.get("fullName"), result.get("message"))
         if (job.get("progress") or {}).get("failures_capped"):
             print("(only the first %d failures are listed)" % len(failures))
-            raise Failed("%d or more tests failed" % len(failures))
-        raise Failed("%d test(s) failed" % max(len(failures), 1))
+            raise Failed("%d or more tests failed%s" % (len(failures), also))
+        raise Failed("%d test(s) failed%s" % (max(len(failures), 1), also))
     if status != "succeeded":
         raise RuntimeError("test job %s: %s" % (status, error))
     for result in inconclusive:

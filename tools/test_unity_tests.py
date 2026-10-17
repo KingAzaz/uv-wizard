@@ -136,6 +136,12 @@ class ReportTest(unittest.TestCase):
         self.assertIn("FAIL F", out)
         self.assertIn("INCONCLUSIVE Ns.Class.Maybe", out)
 
+    def test_a_failed_jobs_reason_counts_its_inconclusive_tests(self):
+        job = failed_job([{"full_name": "F", "message": ""}], results=[inconclusive("A"), inconclusive("B")])
+        with redirect_stdout(io.StringIO()), \
+                self.assertRaisesRegex(unity_tests.Failed, re.escape("1 test(s) failed, 2 inconclusive")):
+            unity_tests.report(job)
+
 
 class EditorStateTest(unittest.TestCase):
     IDLE = {"activity": {"phase": "idle"},
