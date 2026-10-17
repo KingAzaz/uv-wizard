@@ -39,6 +39,8 @@ namespace UVWizard.Core.Pipeline
             readonly List<SlotNote> flagged = new List<SlotNote>();
             // Each renderer and source whose animated properties have been checked.
             readonly HashSet<(Renderer, Material)> checkedAnimated = new HashSet<(Renderer, Material)>();
+            // Every texture baked for a converted material.
+            readonly List<Texture2D> textures = new List<Texture2D>();
 
             public Conversions(BakeOptions options, IReadOnlyList<AnimatedSlot>? animated)
             {
@@ -140,6 +142,16 @@ namespace UVWizard.Core.Pipeline
                             if (swapped != null) Of(swapped, slot.Renderer, index);
             }
 
+            /// <summary>Destroys every material converted so far, and the textures baked for it, for a bake that failed.</summary>
+            public void DestroyMade()
+            {
+                foreach (var texture in textures) Object.DestroyImmediate(texture);
+                foreach (var (_, made) in Made) Object.DestroyImmediate(made);
+                textures.Clear();
+                Made.Clear();
+                converted.Clear();
+            }
+
             /// <summary>The flagged notes, followed by the conversions' own.</summary>
             public List<SlotNote> Flagged(IEnumerable<SlotNote> notes)
             {
@@ -235,6 +247,7 @@ namespace UVWizard.Core.Pipeline
                 }
                 if (options.Compress) AtlasCompressor.Compress(baked, AtlasSizing.Finest(channel, Mathf.Max(size.x, size.y))[channel]!.Value.Format);
                 baked.name = $"UV Wizard {channel} {source.name}";
+                textures.Add(baked);
                 return baked;
             }
 
