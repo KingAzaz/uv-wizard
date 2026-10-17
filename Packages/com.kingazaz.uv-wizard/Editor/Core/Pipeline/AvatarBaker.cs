@@ -65,7 +65,7 @@ namespace UVWizard.Core.Pipeline
             {
                 conversions.Apply(renderers, null);
                 return BakeResult.Unchanged(true, excluded, conversions.Flagged(flagged), conversions.Made,
-                    conversions.Unconverted).Measured(renderers, options.Preset, null);
+                    conversions.Unconverted, particleMaterials: conversions.Particles).Measured(renderers, options.Preset, null);
             }
             // With only channels no slot to merge has on, an atlas would hold nothing, so nothing merges (#84). The
             // conversions still go ahead, as when nothing fits, with their Albedo and the other channels that are on.
@@ -73,7 +73,7 @@ namespace UVWizard.Core.Pipeline
             {
                 conversions.Apply(renderers, null);
                 return BakeResult.Unchanged(true, excluded, conversions.Flagged(Array.Empty<SlotNote>()), conversions.Made,
-                    conversions.Unconverted, nothingToBake: true).Measured(renderers, options.Preset, null);
+                    conversions.Unconverted, nothingToBake: true, particleMaterials: conversions.Particles).Measured(renderers, options.Preset, null);
             }
 
             // Slots whose materials bake to the same texels share a source key, so their islands can share charts.
@@ -144,7 +144,8 @@ namespace UVWizard.Core.Pipeline
                     conversions.Apply(renderers, null);
                     Object.DestroyImmediate(merged);
                     return BakeResult.Unchanged(false, excluded, conversions.Flagged(Array.Empty<SlotNote>()),
-                        conversions.Made, conversions.Unconverted, ranOutOfTime: search.RanOutOfTime)
+                        conversions.Made, conversions.Unconverted, ranOutOfTime: search.RanOutOfTime,
+                        particleMaterials: conversions.Particles)
                         .Measured(renderers, options.Preset, null);
                 }
                 placements = search.Packing.Placements;
@@ -200,7 +201,7 @@ namespace UVWizard.Core.Pipeline
             conversions.Apply(renderers, merged);
             return new BakeResult(true, merged, atlas, representative, replaced, excluded, conversions.Flagged(flagged),
                 emissionAtlas, emissionStrength, normalAtlas, moved, cached != null, packing, conversions.Made,
-                conversions.Unconverted).Measured(renderers, options.Preset, sizedFor);
+                conversions.Unconverted, conversions.Particles).Measured(renderers, options.Preset, sizedFor);
         }
 
         // The hash of everything the packing and atlas depend on, or null when an input can't be hashed.

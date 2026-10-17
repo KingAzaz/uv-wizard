@@ -755,10 +755,10 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
-        public void ASwapOntoALineKeepsItsSourceAndTheLineIsReported()
+        public void ASwapOntoALineKeepsItsSourceAndIsReported()
         {
-            // One clip swaps the same Standard material onto the tail, a mesh, and onto a leash line, which keeps its
-            // material as the bake leaves particles and lines alone.
+            // One clip swaps the same Standard material onto the tail, a mesh, and onto a leash line. The leash's own
+            // material gets a particle shader, but the swap keeps its source: only a mesh's swaps are converted.
             var avatar = Avatar(withComponent: true);
             var leash = new GameObject("Leash").AddComponent<LineRenderer>();
             leash.transform.SetParent(avatar.transform);
@@ -781,8 +781,47 @@ namespace UVWizard.NDMF.Tests
                 AnimationUtility.GetObjectReferenceCurveBindings(clip).Single(binding => binding.path == path))[0].value;
             Assert.That(SwapOn("Tail").shader.name, Is.EqualTo(ToonStandardName));
             Assert.That(SwapOn("Leash").shader.name, Is.EqualTo("Standard"));
-            Assert.That(leash.sharedMaterial.shader.name, Is.EqualTo("Standard"));
+            Assert.That(leash.sharedMaterial.shader.name, Is.EqualTo("VRChat/Mobile/Particles/Additive"));
             Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.Unconverted)));
+        }
+
+        [Test]
+        public void AMobileBuildGivesParticleTrailAndLineMaterialsTheSdksParticleShaders()
+        {
+            // Additive sparks, a multiplied trail, and an alpha-blended line, which draws additively now and says so.
+            var avatar = Avatar(withComponent: true);
+            Material Particle(UnityEngine.Rendering.BlendMode src, UnityEngine.Rendering.BlendMode dst)
+            {
+                var material = Keep(new Material(Shader.Find("Hidden/UVWizard/Tests/Blended")) { mainTexture = Gradient(16, 3) });
+                material.SetFloat("_SrcBlend", (float)src);
+                material.SetFloat("_DstBlend", (float)dst);
+                return material;
+            }
+            GameObject Child(string name)
+            {
+                var go = new GameObject(name);
+                go.transform.SetParent(avatar.transform);
+                return go;
+            }
+            var sparksObject = Child("Sparks");
+            sparksObject.AddComponent<ParticleSystem>();
+            var sparks = sparksObject.GetComponent<ParticleSystemRenderer>();
+            sparks.sharedMaterials = new[] { Particle(UnityEngine.Rendering.BlendMode.SrcAlpha, UnityEngine.Rendering.BlendMode.One) };
+            var trail = Child("Trail").AddComponent<TrailRenderer>();
+            trail.sharedMaterials = new[] { Particle(UnityEngine.Rendering.BlendMode.Zero, UnityEngine.Rendering.BlendMode.SrcColor) };
+            var line = Child("Line").AddComponent<LineRenderer>();
+            line.sharedMaterials = new[]
+                { Particle(UnityEngine.Rendering.BlendMode.SrcAlpha, UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha) };
+
+            MobileBuild.Override = true;
+            var errors = BesidesSlots(Build(avatar));
+
+            Assert.That(sparks.sharedMaterial.shader.name, Is.EqualTo("VRChat/Mobile/Particles/Additive"));
+            Assert.That(trail.sharedMaterial.shader.name, Is.EqualTo("VRChat/Mobile/Particles/Multiply"));
+            Assert.That(line.sharedMaterial.shader.name, Is.EqualTo("VRChat/Mobile/Particles/Additive"));
+            Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.Unconverted)));
+            Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.Flagged)));
+            Assert.That(Materials(avatar).Select(m => m.shader.name), Has.All.Matches<string>(name => ToonStandard.MobileShaders.Contains(name)));
         }
 
         // Asserts every renderer but the body is on Toon Standard.

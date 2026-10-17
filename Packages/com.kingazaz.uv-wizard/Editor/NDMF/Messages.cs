@@ -217,7 +217,11 @@ namespace UVWizard.NDMF
             (ReasonText.GlowsLessConverted, "Its emission is {0:0.##} times full brightness, but its Toon Standard " +
                 "material's emission goes up to {1}, so it glows less."),
             (ReasonText.MeshRenderersOnly, "UV Wizard converts the materials of mesh renderers only."),
+            (ReasonText.SwappedOntoParticles, "An animation swaps it onto this particle, trail or line renderer, and " +
+                "UV Wizard converts only the materials those renderers have themselves."),
             (ReasonText.NoSurface, "It has no surface of its own to convert."),
+            (ReasonText.DrawsAdditively, "Mobile's particle shaders blend only additively or by multiplying, and its " +
+                "blend is neither, so it draws additively now."),
             (ReasonText.AnimatedProperties, "An animation changes this renderer's material properties, which its Toon " +
                 "Standard material may not have, or may show differently."),
             (ReasonText.ConvertedAlbedoOffMainUvs, "Its main texture uses a UV map other than the mesh's main one, " +
