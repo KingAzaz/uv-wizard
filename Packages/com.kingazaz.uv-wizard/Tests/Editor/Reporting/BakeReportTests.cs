@@ -246,6 +246,30 @@ namespace UVWizard.Core.Tests.Reporting
             Assert.That(text, Is.EqualTo("Hat has 3 slots"));
         }
 
+        // A template that asks for more arguments than its call site passes would throw from the bake or the report
+        // window; the line shows its key instead, which says which template to fix (#179).
+        [Test]
+        public void ALineWhoseTemplateCantBeFilledInReadsAsItsKey()
+        {
+            var line = new ReportLine("some.key", "Hat");
+
+            var text = line.Text(key => key == "some.key" ? "{0} has {1} slots" : "?");
+
+            Assert.That(text, Is.EqualTo("some.key"));
+        }
+
+        [Test]
+        public void AnEmptyLineComparesHashesAndReadsAsNothing()
+        {
+            var empty = default(ReportLine);
+
+            Assert.That(empty.Equals(default(ReportLine)), Is.True);
+            Assert.That(empty.Equals(new ReportLine("some.key")), Is.False);
+            Assert.That(new ReportLine("some.key").Equals(empty), Is.False);
+            Assert.That(empty.GetHashCode(), Is.EqualTo(default(ReportLine).GetHashCode()));
+            Assert.That(empty.Text(key => "{0}"), Is.Empty);
+        }
+
         BakeResult Merged(PackingOutcome? packing = null, SlotNote[]? excluded = null, SlotNote[]? flagged = null) =>
             new BakeResult(true, Material("Merged"), null, null, Array.Empty<(Mesh, Mesh)>(),
                 excluded ?? Array.Empty<SlotNote>(), flagged ?? Array.Empty<SlotNote>(),
