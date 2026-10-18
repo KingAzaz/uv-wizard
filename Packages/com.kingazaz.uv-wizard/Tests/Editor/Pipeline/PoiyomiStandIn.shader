@@ -8,6 +8,7 @@ Shader "Hidden/Locked/.poiyomi/UV Wizard Tests/Stand-in"
     {
         _MainTex ("Albedo", 2D) = "white" {}
         _Color ("Colour", Color) = (1, 1, 1, 1)
+        _MainTexUV ("Albedo UV", Float) = 0
         _EnableEmission ("Emission", Float) = 0
         _EmissionMap ("Emission Map", 2D) = "white" {}
         _EmissionColor ("Emission Colour", Color) = (1, 1, 1, 1)

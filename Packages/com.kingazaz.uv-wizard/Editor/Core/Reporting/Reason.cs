@@ -133,6 +133,8 @@ namespace UVWizard.Core.Reporting
         public const string NoSurface = "uvwizard.reason.no-surface";
         public const string LayerKeptForAnimation = "uvwizard.reason.layer-kept-for-animation";
         public const string DrawsAdditively = "uvwizard.reason.draws-additively";
+        public const string AddsByAlpha = "uvwizard.reason.adds-by-alpha";
+        public const string ParticleAlbedoOffMainUvs = "uvwizard.reason.particle-albedo-off-main-uvs";
         public const string AnimatedProperties = "uvwizard.reason.animated-properties";
         public const string ConvertedAlbedoOffMainUvs = "uvwizard.reason.converted-albedo-off-main-uvs";
         public const string ConvertedEmissionOffUvs = "uvwizard.reason.converted-emission-off-uvs";

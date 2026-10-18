@@ -198,7 +198,10 @@ namespace UVWizard.Core.Pipeline
                     ? ((BlendMode)source.GetFloat("_SrcBlend"), (BlendMode)source.GetFloat("_DstBlend"))
                     : ((BlendMode, BlendMode)?)null;
                 var multiplies = blend is (BlendMode.Zero, BlendMode.SrcColor) or (BlendMode.DstColor, BlendMode.Zero);
-                if (!multiplies && blend is not ((BlendMode.SrcAlpha, BlendMode.One) or (BlendMode.One, BlendMode.One)))
+                // The additive shader blends SrcAlpha One, so a One One source now dims where its alpha isn't opaque.
+                if (blend is (BlendMode.One, BlendMode.One))
+                    flagged.Add(new SlotNote(renderer, slot, source, new Reason(ReasonText.AddsByAlpha)));
+                else if (!multiplies && blend is not (BlendMode.SrcAlpha, BlendMode.One))
                     flagged.Add(new SlotNote(renderer, slot, source, new Reason(ReasonText.DrawsAdditively)));
 
                 made = new Material(multiplies ? shaders.Multiply : shaders.Additive) { name = $"{source.name} (UV Wizard)" };
@@ -209,6 +212,12 @@ namespace UVWizard.Core.Pipeline
                 if (reading.FlaggedReason is { } reason && reason.Keys.First() == ReasonText.UnknownShader)
                     flagged.Add(new SlotNote(renderer, slot, source, reason));
                 var albedo = reading.Albedo;
+                // These shaders sample their texture from UV0 only: a source sampling another keeps its colour.
+                if (albedo is { UvChannel: not 0 })
+                {
+                    flagged.Add(new SlotNote(renderer, slot, source, new Reason(ReasonText.ParticleAlbedoOffMainUvs)));
+                    albedo = new ChannelSource(null, albedo.Tint, Identity, 0);
+                }
                 var texture = albedo?.Texture;
                 var tint = albedo?.Tint ?? Color.white;
                 if (tint != Color.white) texture = Texture(source, Channels.Albedo, texture, tint, keepsAlpha: true);
