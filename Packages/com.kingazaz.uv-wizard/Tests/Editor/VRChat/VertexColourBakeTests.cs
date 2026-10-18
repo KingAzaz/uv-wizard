@@ -18,7 +18,7 @@ namespace UVWizard.Core.Tests.VRChat
             var lite = Keep(new Material(Shader.Find("VRChat/Mobile/Standard Lite")));
             var standard = Keep(new Material(Shader.Find("Standard")));
             var renderers = new[] { MeshRenderer(Quad(0.1f, Color.white), lite), MeshRenderer(Quad(0.6f, Color.red), standard) };
-            var options = new BakeOptions(Shader.Find("Standard"), vertexColourProperty: "_Glossiness");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(vertexColour: "_Glossiness"));
 
             var result = AvatarBaker.Bake(renderers, options);
             Keep(result.MergedMaterial!);

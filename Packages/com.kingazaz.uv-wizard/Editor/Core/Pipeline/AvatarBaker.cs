@@ -694,8 +694,8 @@ namespace UVWizard.Core.Pipeline
         // Merged slots that will look different because the merged material's shared settings aren't theirs.
         static void FlagWhatTheMergedMaterialChanges(List<Slot> slots, Material merged, BakeOptions options, List<SlotNote> flagged)
         {
-            var culling = options.CullingProperty;
-            var vertexColourOn = merged.HasProperty(options.VertexColourProperty) && merged.GetFloat(options.VertexColourProperty) > 0.5f;
+            var culling = options.Names.Culling;
+            var vertexColourOn = merged.HasProperty(options.Names.VertexColour) && merged.GetFloat(options.Names.VertexColour) > 0.5f;
             var colouredVertices = new Dictionary<Mesh, bool[]?>();
             foreach (var slot in slots)
             {
@@ -747,47 +747,47 @@ namespace UVWizard.Core.Pipeline
             if (representative != null)
                 foreach (var property in options.RepresentativeProperties)
                     CopyProperty(representative, material, property);
-            else if (options.DefaultRamp != null && material.HasTexture(options.RampProperty))
-                material.SetTexture(options.RampProperty, options.DefaultRamp);
+            else if (options.DefaultRamp != null && material.HasTexture(options.Names.Ramp))
+                material.SetTexture(options.Names.Ramp, options.DefaultRamp);
             return material;
         }
 
         // A white tint, since the textures carry each source's tint, and vertex colour on only for sources that use it.
         static void SetTintAndVertexColour(Material material, BakeOptions options, bool vertexColour)
         {
-            if (material.HasColor(options.TintProperty)) material.SetColor(options.TintProperty, Color.white);
-            if (material.HasFloat(options.VertexColourProperty)) material.SetFloat(options.VertexColourProperty, vertexColour ? 1 : 0);
+            if (material.HasColor(options.Names.Tint)) material.SetColor(options.Names.Tint, Color.white);
+            if (material.HasFloat(options.Names.VertexColour)) material.SetFloat(options.Names.VertexColour, vertexColour ? 1 : 0);
         }
 
         // Points the merged material at the atlas's channels.
         static void UseAtlases(Material material, BakeOptions options, Texture2D? atlas, Texture2D? emissionAtlas,
             float emissionStrength, Texture2D? normalAtlas)
         {
-            material.SetTexture(options.MainTextureProperty, atlas);
+            material.SetTexture(options.Names.MainTexture, atlas);
             // The emission colour defaults to black, so without these the atlas wouldn't glow. A shader with no
             // emission strength gets it on its emission colour instead, which is linearized before use, and has its
-            // _EMISSION keyword turned on: Standard compiles its emission out without it.
+            // emission keyword turned on: Standard compiles its emission out without _EMISSION.
             if (emissionAtlas != null)
             {
-                material.SetTexture(options.EmissionMapProperty, emissionAtlas);
-                if (material.HasFloat(options.EmissionStrengthProperty))
+                material.SetTexture(options.Names.EmissionMap, emissionAtlas);
+                if (material.HasFloat(options.Names.EmissionStrength))
                 {
-                    material.SetColor(options.EmissionColourProperty, Color.white);
-                    material.SetFloat(options.EmissionStrengthProperty, emissionStrength);
+                    material.SetColor(options.Names.EmissionColour, Color.white);
+                    material.SetFloat(options.Names.EmissionStrength, emissionStrength);
                 }
                 else
                 {
-                    material.SetColor(options.EmissionColourProperty, new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
-                    material.EnableKeyword("_EMISSION");
+                    material.SetColor(options.Names.EmissionColour, new Color(emissionStrength, emissionStrength, emissionStrength).gamma);
+                    material.EnableKeyword(options.Names.EmissionKeyword);
                 }
-                if (material.HasProperty(options.EmissionUvProperty)) material.SetFloat(options.EmissionUvProperty, 0);
+                if (material.HasProperty(options.Names.EmissionUv)) material.SetFloat(options.Names.EmissionUv, 0);
             }
             // The atlas already holds each source's strength.
             if (normalAtlas != null)
             {
-                material.SetTexture(options.NormalMapProperty, normalAtlas);
-                if (material.HasFloat(options.NormalScaleProperty)) material.SetFloat(options.NormalScaleProperty, 1);
-                material.EnableKeyword(options.NormalMapKeyword);
+                material.SetTexture(options.Names.NormalMap, normalAtlas);
+                if (material.HasFloat(options.Names.NormalScale)) material.SetFloat(options.Names.NormalScale, 1);
+                material.EnableKeyword(options.Names.NormalMapKeyword);
             }
         }
 

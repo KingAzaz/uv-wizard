@@ -318,10 +318,10 @@ namespace UVWizard.Core.Pipeline
                 material.name = $"{source.name} (UV Wizard)";
                 // The source's own culling, under the merged shader's name or under lilToon's and Poiyomi's, which
                 // take the same values.
-                foreach (var cull in new[] { options.CullingProperty, "_Cull" })
-                    if (source.HasFloat(cull) && material.HasFloat(options.CullingProperty))
+                foreach (var cull in new[] { options.Names.Culling, "_Cull" })
+                    if (source.HasFloat(cull) && material.HasFloat(options.Names.Culling))
                     {
-                        material.SetFloat(options.CullingProperty, source.GetFloat(cull));
+                        material.SetFloat(options.Names.Culling, source.GetFloat(cull));
                         break;
                     }
 
@@ -333,7 +333,7 @@ namespace UVWizard.Core.Pipeline
                     albedo = new ChannelSource(null, albedo.Tint, Identity, 0);
                 }
                 var emission = (options.Channels & Channels.Emission) != 0 ? BakedEmission(reading) : null;
-                if (emission is { UvChannel: > 0 } && (emission.UvChannel > 1 || !material.HasFloat(options.EmissionUvProperty)))
+                if (emission is { UvChannel: > 0 } && (emission.UvChannel > 1 || !material.HasFloat(options.Names.EmissionUv)))
                 {
                     Flag(new Reason(ReasonText.ConvertedEmissionOffUvs));
                     emission = null;
@@ -364,13 +364,13 @@ namespace UVWizard.Core.Pipeline
                 UseAtlases(material, options, albedoTexture, emissionTexture, strength, normalTexture);
 
                 // Each texture keeps the source's tiling and offset, applied where the merged shader samples it.
-                if (albedoTexture != null && albedo!.Texture != null) ScaleOffset(material, options.MainTextureProperty, albedo.ScaleOffset);
+                if (albedoTexture != null && albedo!.Texture != null) ScaleOffset(material, options.Names.MainTexture, albedo.ScaleOffset);
                 if (emissionTexture != null)
                 {
-                    if (emission!.Texture != null) ScaleOffset(material, options.EmissionMapProperty, emission.ScaleOffset);
-                    if (material.HasFloat(options.EmissionUvProperty)) material.SetFloat(options.EmissionUvProperty, emission.UvChannel);
+                    if (emission!.Texture != null) ScaleOffset(material, options.Names.EmissionMap, emission.ScaleOffset);
+                    if (material.HasFloat(options.Names.EmissionUv)) material.SetFloat(options.Names.EmissionUv, emission.UvChannel);
                 }
-                if (normalTexture != null) ScaleOffset(material, options.NormalMapProperty, normal!.ScaleOffset);
+                if (normalTexture != null) ScaleOffset(material, options.Names.NormalMap, normal!.ScaleOffset);
                 return material;
             }
 
