@@ -30,7 +30,8 @@ namespace UVWizard.NDMF.Tests
         [TestCase(true, TestName = "EmptyAndMissingSourceSlotsAreSkippedWithSkipEnablementMismatchedRenderersOn")]
         public void EmptyAndMissingSourceSlotsAreSkipped(bool skipMismatched)
         {
-            // AAO's own accessors leave out an empty slot and one whose renderer was destroyed.
+            // AAO's own accessors leave out an empty slot and one whose renderer was destroyed, so nothing reads
+            // a null source. This pins that, in case an AAO update stops doing it.
             var torso = Renderer("Torso");
             var gone = Renderer("Gone");
             var prop = new GameObject("Prop").AddComponent<MeshRenderer>();
