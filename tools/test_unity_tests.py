@@ -6,6 +6,7 @@ import os
 import re
 import socket
 import struct
+import subprocess
 import sys
 import tempfile
 import threading
@@ -524,6 +525,49 @@ class MainTest(unittest.TestCase):
 
     def test_a_job_the_editor_lost_is_2(self):
         self.assertEqual(self.main(FakeEditor(forget_jobs=True)), 2)
+
+
+class ToolingBehindTest(unittest.TestCase):
+    """tooling_behind() against a throwaway repo whose origin/main is a plain ref."""
+
+    def setUp(self):
+        self.repo = temp_dir(self)
+        self.git("init", "-q")
+        self.commit("tools/unity_tests.py", "old")
+        self.base = self.git("rev-parse", "HEAD")
+
+    def git(self, *args):
+        return subprocess.run(["git", "-C", self.repo, "-c", "user.name=t", "-c", "user.email=t@t"] + list(args),
+                              capture_output=True, text=True, check=True).stdout.strip()
+
+    def commit(self, path, text):
+        full = os.path.join(self.repo, path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(text)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "change " + path)
+
+    def main_moves_on(self, path):
+        self.commit(path, "new")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.git("checkout", "-q", self.base)
+
+    def test_a_tools_fix_the_branch_lacks_is_listed(self):
+        self.main_moves_on("tools/unity_tests.py")
+        self.assertEqual(len(unity_tests.tooling_behind(self.repo)), 1)
+
+    def test_a_main_commit_outside_tools_is_not(self):
+        self.main_moves_on("Packages/a.cs")
+        self.assertEqual(unity_tests.tooling_behind(self.repo), [])
+
+    def test_a_branch_that_has_main_is_not_behind(self):
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.commit("tools/unity_tests.py", "branch edit")
+        self.assertEqual(unity_tests.tooling_behind(self.repo), [])
+
+    def test_no_origin_main_is_not_behind(self):
+        self.assertEqual(unity_tests.tooling_behind(self.repo), [])
 
 
 class TestAssembliesTest(unittest.TestCase):
