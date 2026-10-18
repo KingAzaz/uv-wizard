@@ -215,7 +215,7 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
-        public void AMaterialAnAnimationSwapsOntoAMeshAndALineGetsAConversionForEach()
+        public void AMaterialAnAnimationSwapsOntoAMeshAndALineGetsAConvertedAndAParticleMaterial()
         {
             var swapped = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 2), Color.white);
             var mesh = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), Standard(Gradient(16, 1), Color.white));

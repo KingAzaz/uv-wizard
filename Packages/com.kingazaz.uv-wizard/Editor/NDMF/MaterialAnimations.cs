@@ -116,8 +116,8 @@ namespace UVWizard.NDMF
         }
 
         /// <summary>
-        /// Makes each material swap that puts a converted source in a slot put its converted material there: on a mesh
-        /// renderer, its conversion, and on a particle, trail or line renderer, its particle material.
+        /// Makes each material swap that puts a replaced source in a slot put what replaced it there: on a mesh renderer,
+        /// its converted material, and on a particle, trail or line renderer, its particle material.
         /// </summary>
         public static void SwapInConverted(AnimatorServicesContext animators, GameObject root,
             IEnumerable<(Material Source, Material Converted)> converted,

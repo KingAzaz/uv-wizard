@@ -140,8 +140,9 @@ namespace UVWizard.Core.Pipeline
         public IReadOnlyList<(Material Source, Material Converted)> ConvertedMaterials { get; }
 
         /// <summary>
-        /// Each source material on a particle, trail or line renderer, with a shader mobile doesn't allow, and the
-        /// material with a mobile particle shader that replaced it there. Kept apart from
+        /// Each source material on a particle, trail or line renderer or that an animation swaps onto one, with a shader
+        /// mobile doesn't allow, and the material with a mobile particle shader that replaced it there. Swaps still name
+        /// the source. Kept apart from
         /// <see cref="ConvertedMaterials"/>, since one source can have a conversion of each kind.
         /// </summary>
         public IReadOnlyList<(Material Source, Material Converted)> ParticleMaterials { get; }
