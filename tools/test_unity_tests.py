@@ -247,7 +247,7 @@ class FakeEditor:
 
     def __init__(self, reload_after_refresh=True, compile_failed=False, job=None,
                  drop_run_tests=0, busy_since=None, fast=False, forget_jobs=False, run_tests_error=None,
-                 compiled_at=None, blind_for=0):
+                 compiled_at=None, blind_for=0, drop_every_other_state=False, reloading_for=0):
         self.reload_after_refresh = reload_after_refresh
         self.compile_failed = compile_failed
         self.job = job if job is not None else {"status": "succeeded", "error": None, "result": {
@@ -259,6 +259,10 @@ class FakeEditor:
         self.run_tests_error = run_tests_error
         self.compiled_at = compiled_at   # a compile that finished before the refresh, in unix ms
         self.blind_for = blind_for   # seconds after run_tests that snapshot requests are dropped
+        self.drop_every_other_state = drop_every_other_state   # a main thread too busy to answer every poll
+        self.states = 0
+        self.reloading_for = reloading_for   # seconds after the refresh that the bridge is down for a reload
+        self.refreshed_at = None
         self.reloaded_at = None
         self.started_at = None
         self.jobs = 0
@@ -267,11 +271,17 @@ class FakeEditor:
     def __call__(self, request, n):
         kind = request["type"]
         if kind == "refresh_unity":
+            self.refreshed_at = time.time()
             if self.reload_after_refresh:
-                self.reloaded_at = int(time.time() * 1000) + 50
+                self.reloaded_at = int(time.time() * 1000) + 50 + int(self.reloading_for * 1000)
             return ok({"refresh_triggered": True})
         if kind == "get_editor_state":
             if self.started_at and time.time() * 1000 < self.started_at + self.blind_for * 1000:
+                return None
+            if self.refreshed_at and time.time() < self.refreshed_at + self.reloading_for:
+                return None
+            self.states += 1
+            if self.drop_every_other_state and self.states % 2 == 0:
                 return None
             state = json.loads(json.dumps(self.IDLE))
             if self.compiled_at:
@@ -370,6 +380,44 @@ class EditorTest(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=1, poll=0.05, settle=0.3,
                                 source_ms=compiled + 1000)
+
+    def test_a_poll_that_times_out_does_not_restart_the_settle_window(self):
+        # The #201 run's polls timed out about once every 15 s, and each reset the wait (#233).
+        compiled = int(time.time() * 1000) - 5000
+        editor, fake = self.editor(reload_after_refresh=False, compiled_at=compiled, drop_every_other_state=True)
+        unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=5, poll=0.05, settle=0.3,
+                            source_ms=compiled - 1000, poll_wait=0.05)
+
+    def test_a_reload_longer_than_the_compile_wait_is_waited_out(self):
+        # The #212 run's reloads took about 200 s against a 180 s wait, with the bridge down throughout (#237).
+        editor, fake = self.editor(reloading_for=1.0)
+        unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=0.5, poll=0.05, poll_wait=0.05)
+
+    def test_a_reload_that_never_ends_stops_at_the_deadline(self):
+        editor, fake = self.editor(reloading_for=60)
+        with self.assertRaisesRegex(TimeoutError, "busy or unreachable until the deadline"):
+            unity_tests.refresh(fake.port, time.monotonic() + 1.5, compile_wait=0.5, poll=0.05, poll_wait=0.05)
+
+    def test_assemblies_on_disk_newer_than_their_sources_end_the_wait(self):
+        # The editor answers idle but reports no compile at all, as after a domain reload it did itself (#233).
+        package, dlls = assembly_tree(self, source_ages={"A": 60, "B": 60}, dll_ages={"A": 30, "B": 30})
+        editor, fake = self.editor(reload_after_refresh=False)
+        unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=5, poll=0.05, source_ms=now_ms(),
+                            assemblies_dir=dlls, package_dir=package, disk_settle=0.3)
+
+    def test_an_assembly_older_than_its_sources_holds_the_wait(self):
+        package, dlls = assembly_tree(self, source_ages={"A": 60, "B": 10}, dll_ages={"A": 30, "B": 30})
+        editor, fake = self.editor(reload_after_refresh=False)
+        with self.assertRaises(TimeoutError):
+            unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=1, poll=0.05, source_ms=now_ms(),
+                                assemblies_dir=dlls, package_dir=package, disk_settle=0.3)
+
+    def test_a_dll_written_just_now_waits_for_the_domain_reload(self):
+        package, dlls = assembly_tree(self, source_ages={"A": 60, "B": 60}, dll_ages={"A": 30, "B": 0})
+        editor, fake = self.editor(reload_after_refresh=False)
+        with self.assertRaises(TimeoutError):
+            unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=1, poll=0.05, source_ms=now_ms(),
+                                assemblies_dir=dlls, package_dir=package, disk_settle=20)
 
     def test_a_compile_error_is_red(self):
         editor, fake = self.editor(compile_failed=True)
@@ -488,6 +536,47 @@ class TestAssembliesTest(unittest.TestCase):
             self.assertIn(name, names)
 
 
+def now_ms():
+    return int(time.time() * 1000)
+
+
+def assembly_tree(test, source_ages, dll_ages):
+    """A package with assembly A in A/ and B nested in A/B/, and their DLLs; ages in seconds."""
+    package, dlls = temp_dir(test), temp_dir(test)
+    for name, folder in (("A", "A"), ("B", os.path.join("A", "B"))):
+        os.makedirs(os.path.join(package, folder), exist_ok=True)
+        for path, text in ((os.path.join(package, folder, name + ".asmdef"), json.dumps({"name": name})),
+                           (os.path.join(package, folder, name + ".cs"), "class %s {}" % name)):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            stamp = time.time() - source_ages[name]
+            os.utime(path, (stamp, stamp))
+        if name in dll_ages:
+            path = os.path.join(dlls, name + ".dll")
+            open(path, "wb").close()
+            stamp = time.time() - dll_ages[name]
+            os.utime(path, (stamp, stamp))
+    return package, dlls
+
+
+class CompiledOnDiskTest(unittest.TestCase):
+    def test_each_assembly_is_compared_with_its_own_sources(self):
+        # Unity rewrites only the assemblies whose sources changed: A's DLL is older than B's newer source.
+        package, dlls = assembly_tree(self, source_ages={"A": 60, "B": 20}, dll_ages={"A": 40, "B": 10})
+        self.assertIsNotNone(unity_tests.compiled_on_disk_ms(dlls, package))
+
+    def test_a_nested_assemblys_script_is_not_counted_in_its_parent(self):
+        package, dlls = assembly_tree(self, source_ages={"A": 60, "B": 5}, dll_ages={"A": 40, "B": 10})
+        self.assertIsNone(unity_tests.compiled_on_disk_ms(dlls, package))
+
+    def test_an_assembly_the_project_does_not_build_is_skipped(self):
+        package, dlls = assembly_tree(self, source_ages={"A": 60, "B": 5}, dll_ages={"A": 40})
+        self.assertIsNotNone(unity_tests.compiled_on_disk_ms(dlls, package))
+
+    def test_the_package_maps_each_test_assembly(self):
+        self.assertIn("UVWizard.Core.Editor.Tests.VRChat", unity_tests.assembly_sources())
+
+
 class FindPortTest(unittest.TestCase):
     def status_dir(self, files):
         tmp = temp_dir(self)
@@ -503,6 +592,16 @@ class FindPortTest(unittest.TestCase):
         self.status_dir([("other", 6401), ("uv-wizard", 6402)])
         self.assertEqual(bridge.find_port("uv-wizard"), 6402)
         self.assertEqual(bridge.find_port("missing"), 6400)
+
+    def test_the_script_assemblies_sit_beside_the_projects_assets(self):
+        tmp = temp_dir(self)
+        with open(os.path.join(tmp, "unity-mcp-status-0.json"), "w") as f:
+            json.dump({"project_name": "uv-wizard", "unity_port": 6401, "project_path": "C:/P/uv-wizard/Assets"}, f)
+        os.environ["UNITY_MCP_STATUS_DIR"] = tmp
+        self.addCleanup(os.environ.pop, "UNITY_MCP_STATUS_DIR")
+        self.assertEqual(os.path.normpath(unity_tests.script_assemblies_dir("uv-wizard")),
+                         os.path.normpath("C:/P/uv-wizard/Library/ScriptAssemblies"))
+        self.assertIsNone(unity_tests.script_assemblies_dir("missing"))
 
     def test_the_newest_status_file_wins(self):
         self.status_dir([("uv-wizard", 6401), ("uv-wizard", 6403), ("uv-wizard", 6402)])
