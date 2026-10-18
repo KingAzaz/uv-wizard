@@ -81,7 +81,7 @@ The Toon Standard material that takes an excluded material's place, and that of 
 _Avoid_: Replacement material, mobile copy
 
 **Particle material**:
-The material with one of VRChat's mobile particle shaders that takes a particle, trail or line renderer's material's place on a mobile bake, when mobile doesn't allow its shader. It draws additively, or multiplied when the source multiplies, with the source's main texture, its tint baked in.
+The material with one of VRChat's mobile particle shaders that takes a particle, trail or line renderer's material's place on a mobile bake, when mobile doesn't allow its shader. It draws additively, or multiplied when the source multiplies, with the source's main texture, its tint baked in, or its tint alone when the source samples that texture off UV0.
 _Avoid_: Converted particle, particle conversion
 
 **Unconverted material**:

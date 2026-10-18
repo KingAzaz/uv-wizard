@@ -14,14 +14,22 @@ namespace UVWizard.Core.Tests.Pipeline
     // Particles/Standard Unlit, whose blend is in its _SrcBlend and _DstBlend floats.
     public partial class AvatarBakerTests
     {
-        static readonly Shader AdditiveStandIn = Shader.Find("Legacy Shaders/Particles/Additive");
-        static readonly Shader MultiplyStandIn = Shader.Find("Legacy Shaders/Particles/Multiply");
+        static Shader AdditiveStandIn => StandIn("Legacy Shaders/Particles/Additive");
+        static Shader MultiplyStandIn => StandIn("Legacy Shaders/Particles/Multiply");
 
-        [TestCase(BlendMode.SrcAlpha, BlendMode.One)]
-        [TestCase(BlendMode.One, BlendMode.One)]
-        public void AnAdditiveParticleMaterialGetsTheAdditiveShaderAndKeepsItsTextureAndTiling(BlendMode src, BlendMode dst)
+        // A missing stand-in fails the particle tests, which all bake with it, rather than letting Is.SameAs match a
+        // null shader.
+        static Shader StandIn(string name)
         {
-            var source = Particle(src, dst, Gradient(16, 1), Color.white, new Vector4(2, 1, 0.1f, 0.5f));
+            var shader = Shader.Find(name);
+            Assert.That(shader, Is.Not.Null, name);
+            return shader;
+        }
+
+        [Test]
+        public void AnAdditiveParticleMaterialGetsTheAdditiveShaderAndKeepsItsTextureAndTiling()
+        {
+            var source = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 1), Color.white, new Vector4(2, 1, 0.1f, 0.5f));
             var particles = ParticleSystemRenderer(source);
 
             var result = Bake(ConvertingParticles(), particles);
@@ -35,6 +43,68 @@ namespace UVWizard.Core.Tests.Pipeline
             Assert.That(result.ParticleMaterials, Is.EqualTo(new[] { (source, converted) }));
             Assert.That(result.Unconverted, Is.Empty);
             Assert.That(result.Flagged.Select(note => note.Reason), Is.EqualTo(new[] { UnknownParticleShader }));
+        }
+
+        [Test]
+        public void AOneOneParticleMaterialGetsTheAdditiveShaderAndSaysItsAlphaNowWeightsIt()
+        {
+            // VRChat/Mobile/Particles/Additive blends SrcAlpha One (its Category's Blend), so a One One source's
+            // see-through texels, and any fade by alpha, now dim.
+            var source = Particle(BlendMode.One, BlendMode.One, Gradient(16, 1), Color.white);
+            var particles = ParticleSystemRenderer(source);
+
+            var result = Bake(ConvertingParticles(), particles);
+
+            Assert.That(particles.sharedMaterial.shader, Is.SameAs(AdditiveStandIn));
+            Assert.That(particles.sharedMaterial.mainTexture, Is.SameAs(source.mainTexture));
+            Assert.That(result.Flagged.Select(note => (note.Renderer, note.Material, note.Reason)),
+                Is.EquivalentTo(new[] { ((Renderer)particles, source, new Reason(ReasonText.AddsByAlpha)),
+                    ((Renderer)particles, source, UnknownParticleShader) }));
+        }
+
+        [Test]
+        public void AParticleMaterialsTextureOffUv0KeepsOnlyItsColourAndSaysSo()
+        {
+            // Mobile's particle shaders sample their texture from the first UV channel only (BindChannels' texcoord).
+            var tint = new Color(1, 0.5f, 0.25f, 0.5f);
+            var source = Keep(new Material(Shader.Find("Hidden/Locked/.poiyomi/UV Wizard Tests/Stand-in"))
+                { mainTexture = Gradient(16, 1), color = tint, mainTextureScale = new Vector2(2, 1) });
+            source.SetFloat("_MainTexUV", 1);
+            var particles = ParticleSystemRenderer(source);
+
+            var result = Bake(ConvertingParticles(), particles);
+
+            var converted = particles.sharedMaterial;
+            Assert.That(converted.shader, Is.SameAs(AdditiveStandIn));
+            var baked = (Texture2D)converted.mainTexture;
+            Assert.That(baked, Is.Not.SameAs(source.mainTexture));
+            var colour = baked.GetPixel(baked.width / 2, baked.height / 2);
+            for (var channel = 0; channel < 4; channel++)
+                Assert.That(colour[channel], Is.EqualTo(tint[channel]).Within(0.02f), $"channel {channel}");
+            Assert.That(converted.mainTextureScale, Is.EqualTo(Vector2.one));
+            Assert.That(result.Flagged.Select(note => note.Reason),
+                Has.Member(new Reason(ReasonText.ParticleAlbedoOffMainUvs)));
+        }
+
+        [Test]
+        public void AParticleSystemsTrailMaterialGetsAParticleMaterialToo()
+        {
+            // Probed in the editor (#219): with a trail material set, sharedMaterials is { material, trailMaterial },
+            // and setting it back sets the trail material.
+            var own = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 1), Color.white);
+            var trail = Particle(BlendMode.Zero, BlendMode.SrcColor, Gradient(16, 2), Color.white);
+            var particles = ParticleSystemRenderer(own);
+            var trails = particles.GetComponent<ParticleSystem>().trails;
+            trails.enabled = true;
+            particles.trailMaterial = trail;
+
+            var result = Bake(ConvertingParticles(), particles);
+
+            Assert.That(result.ParticleMaterials.Select(p => p.Source), Is.EqualTo(new[] { own, trail }));
+            Assert.That(particles.sharedMaterial.shader, Is.SameAs(AdditiveStandIn));
+            Assert.That(particles.trailMaterial, Is.Not.SameAs(trail));
+            Assert.That(particles.trailMaterial.shader, Is.SameAs(MultiplyStandIn));
+            Assert.That(result.Unconverted, Is.Empty);
         }
 
         [TestCase(BlendMode.Zero, BlendMode.SrcColor)]
