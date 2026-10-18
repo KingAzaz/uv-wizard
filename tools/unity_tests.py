@@ -16,6 +16,7 @@ import argparse
 import glob
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -49,6 +50,23 @@ def utf8_streams():
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+def tooling_behind(repo=REPO):
+    """The commits on origin/main that change tools/ and that HEAD lacks, one line each.
+
+    A branch cut before a fix to this script runs the old one: the #214 run hit
+    four "couldn't run the tests" errors and a mutation batch that proved nothing,
+    all fixed by #238, which merged minutes after its branch was cut.
+    Reads the last fetch only, and returns [] when git can't answer.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", repo, "log", "--oneline", "HEAD..origin/main", "--", "tools"],
+            capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    return out.stdout.splitlines() if out.returncode == 0 else []
 
 
 def now_ms():
@@ -377,6 +395,10 @@ def main(argv=None):
     parser.add_argument("--project", default="uv-wizard", help="Unity project name in the bridge status file")
     args = parser.parse_args(argv)
     utf8_streams()
+    behind = tooling_behind()
+    if behind:
+        log("unity-tests: origin/main has %d newer commit(s) to tools/; merge origin/main before "
+            "trusting a \"couldn't run the tests\" result:\n  %s" % (len(behind), "\n  ".join(behind)))
 
     deadline = time.monotonic() + args.timeout
     port = bridge.find_port(args.project)
