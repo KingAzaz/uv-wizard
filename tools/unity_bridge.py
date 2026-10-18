@@ -33,6 +33,12 @@ def status_dir():
 
 def find_port(project_name=None):
     """The port from the newest status file (for project_name, if given), or 6400."""
+    status = find_status(project_name)
+    return status.get("unity_port", 6400) if status else 6400
+
+
+def find_status(project_name=None):
+    """The newest status file's contents (for project_name, if given), or None."""
     best = None
     for path in glob.glob(os.path.join(status_dir(), "unity-mcp-status-*.json")):
         try:
@@ -44,8 +50,8 @@ def find_port(project_name=None):
             continue
         mtime = os.path.getmtime(path)
         if best is None or mtime > best[0]:
-            best = (mtime, status.get("unity_port", 6400))
-    return best[1] if best else 6400
+            best = (mtime, status)
+    return best[1] if best else None
 
 
 def read_exact(sock, count):

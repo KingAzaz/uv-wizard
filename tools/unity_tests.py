@@ -63,8 +63,8 @@ def test_assemblies():
     return names
 
 
-def editor_state(port, deadline):
-    return bridge.result_of(bridge.call(port, "get_editor_state", deadline=deadline))
+def editor_state(port, deadline, timeout=30.0):
+    return bridge.result_of(bridge.call(port, "get_editor_state", timeout=timeout, deadline=deadline))
 
 
 def is_idle(state):
@@ -110,7 +110,56 @@ def newest_source_ms():
     return newest
 
 
-def refresh(port, deadline, compile_wait=180, poll=1.0, settle=15, source_ms=None):
+def assembly_sources(package_dir=PACKAGE_DIR):
+    """Map each assembly in the package to when its own asmdef or scripts last changed, in unix ms.
+
+    A script belongs to the assembly whose asmdef sits in its nearest folder that has one.
+    """
+    roots = {}
+    for path in glob.glob(os.path.join(package_dir, "**", "*.asmdef"), recursive=True):
+        with open(path, encoding="utf-8-sig") as f:
+            roots[os.path.dirname(path)] = json.load(f)["name"]
+    newest = {}
+    for pattern in ("*.cs", "*.asmdef"):
+        for path in glob.glob(os.path.join(package_dir, "**", pattern), recursive=True):
+            folder = os.path.dirname(path)
+            while folder not in roots and len(folder) > len(package_dir):
+                folder = os.path.dirname(folder)
+            name = roots.get(folder)
+            if name:
+                newest[name] = max(newest.get(name, 0), int(os.path.getmtime(path) * 1000))
+    return newest
+
+
+def compiled_on_disk_ms(assemblies_dir, package_dir=PACKAGE_DIR):
+    """When the editor last wrote a package assembly, in unix ms, if each one is newer than its own sources.
+
+    None while any assembly is older than its sources. Unity rewrites only the
+    assemblies whose sources changed, so each is compared with its own. An
+    assembly with no DLL is one the project doesn't build (its defineConstraints
+    fail), and is skipped.
+    """
+    written = None
+    for name, source_ms in assembly_sources(package_dir).items():
+        dll = os.path.join(assemblies_dir, name + ".dll")
+        if not os.path.exists(dll):
+            continue
+        dll_ms = int(os.path.getmtime(dll) * 1000)
+        if dll_ms < source_ms:
+            return None
+        written = max(written or 0, dll_ms)
+    return written
+
+
+def script_assemblies_dir(project_name):
+    """The project's Library/ScriptAssemblies, from the bridge's status file, or None."""
+    status = bridge.find_status(project_name)
+    assets = status and status.get("project_path")
+    return os.path.join(os.path.dirname(assets.rstrip("/\\")), "Library", "ScriptAssemblies") if assets else None
+
+
+def refresh(port, deadline, compile_wait=180, poll=1.0, settle=15, source_ms=None,
+            assemblies_dir=None, package_dir=PACKAGE_DIR, disk_settle=25, poll_wait=10.0):
     """Refresh, request a compile, and wait until the editor is idle again on the new code.
 
     A requested compile usually ends in a compile or a domain reload, even with
@@ -122,6 +171,18 @@ def refresh(port, deadline, compile_wait=180, poll=1.0, settle=15, source_ms=Non
     then may never come (#229). So the wait also ends once the editor has
     stayed idle for settle seconds after a compile that finished later than
     the newest source file.
+
+    Polls can time out for minutes while the editor's main thread is busy,
+    and that held the wait open on code the editor had already compiled
+    (#233: 18 exits 2 across five runs). So a poll that times out doesn't
+    restart the settle window, and the wait also ends on an idle answer once
+    each assembly's DLL in assemblies_dir is newer than its own sources and
+    disk_settle seconds have passed since both the refresh and the last DLL
+    write.
+
+    A domain reload can take over 200 s, with the bridge unreachable
+    throughout (#237). So compile_wait counts only time the editor answers
+    idle; a busy or unreachable editor is waited on until the deadline.
     """
     started = now_ms()
     if source_ms is None:
@@ -133,25 +194,36 @@ def refresh(port, deadline, compile_wait=180, poll=1.0, settle=15, source_ms=Non
             deadline=deadline))
     except bridge.BridgeError as error:
         raise RuntimeError("refresh failed: %s" % error)
-    give_up = min(deadline, time.monotonic() + compile_wait)
+    refreshed = time.monotonic()
+    give_up = min(deadline, refreshed + compile_wait)
     while True:
         try:
-            state = editor_state(port, give_up)
+            state = editor_state(port, min(give_up, time.monotonic() + poll_wait), timeout=poll_wait)
         except bridge.BridgeError:
             state = None
         idle = state is not None and is_idle(state)
         if idle and compile_finished_since(state, started):
             break
+        written = compiled_on_disk_ms(assemblies_dir, package_dir) if idle and assemblies_dir else None
+        if (written and time.monotonic() - refreshed >= disk_settle
+                and now_ms() - written >= disk_settle * 1000):
+            log("unity-tests: every assembly on disk is newer than its sources")
+            break
         if idle and compile_finished_since(state, source_ms):
             current_since = current_since or time.monotonic()
             if time.monotonic() - current_since >= settle:
                 break
-        else:
+        elif state is not None:
+            # Only a busy answer restarts the settle window: a poll that timed out says nothing.
             current_since = None
+        if not idle:
+            give_up = min(deadline, time.monotonic() + compile_wait)
         if time.monotonic() > give_up:
             if compilation_failed(port, deadline):
                 raise Failed("scripts failed to compile; the editor still runs the old code (see its console)")
-            raise TimeoutError("no compile or domain reload seen within %d s of the refresh" % compile_wait)
+            if not idle:
+                raise TimeoutError("the editor stayed busy or unreachable until the deadline (-t)")
+            raise TimeoutError("no compile or domain reload seen in %d s of an idle editor after the refresh" % compile_wait)
         time.sleep(poll)
     if compilation_failed(port, deadline):
         raise Failed("scripts failed to compile; the editor still runs the old code (see its console)")
@@ -310,7 +382,7 @@ def main(argv=None):
     port = bridge.find_port(args.project)
     try:
         if not args.no_refresh:
-            refresh(port, deadline)
+            refresh(port, deadline, assemblies_dir=script_assemblies_dir(args.project))
         if args.refresh_only:
             return 0
         report(run(port, args.assembly or test_assemblies(), args.group, deadline))
