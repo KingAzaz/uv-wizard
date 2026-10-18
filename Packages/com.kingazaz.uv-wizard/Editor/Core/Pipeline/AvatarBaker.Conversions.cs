@@ -61,6 +61,8 @@ namespace UVWizard.Core.Pipeline
             readonly HashSet<(Renderer, Material)> keptLayers = new HashSet<(Renderer, Material)>();
             // Each kept layer, and the material that takes its place.
             readonly Dictionary<Material, Material> keptMade = new Dictionary<Material, Material>();
+            // Each renderer and kept layer flagged for its animation.
+            readonly HashSet<(Renderer, Material)> keptFlagged = new HashSet<(Renderer, Material)>();
 
             /// <param name="renderers">The renderers the bake changes, whose layers on extra slots it plans to remove.</param>
             public Conversions(BakeOptions options, IReadOnlyList<AnimatedSlot>? animated, IReadOnlyList<Renderer> renderers)
@@ -153,13 +155,21 @@ namespace UVWizard.Core.Pipeline
                     return source;
                 }
                 Material made;
-                // A layer kept on an extra slot for an animation is converted, since no other shader passes there.
-                if (keptLayers.Contains((renderer, source)))
+                // A layer kept on an extra slot for an animation is converted, since no other shader passes there. On
+                // a submesh of its own, the same layer has no surface to convert, and is left.
+                if (keptLayers.Contains((renderer, source)) && slot >= (MeshOf(renderer)?.subMeshCount ?? 0))
                 {
                     if (!keptMade.TryGetValue(source, out made))
                     {
-                        keptMade.Add(source, made = KeptLayer(source, SourceShaderReader.Read(source), renderer, slot));
+                        keptMade.Add(source, made = KeptLayer(source));
                         Made.Add((source, made));
+                    }
+                    // Flagged on each renderer that keeps it, since each has its own animation to say why.
+                    if (keptFlagged.Add((renderer, source)))
+                    {
+                        var kept = new Reason(ReasonText.LayerKeptForAnimation);
+                        var reason = SourceShaderReader.Read(source).Reason;
+                        flagged.Add(new SlotNote(renderer, slot, source, reason?.Then(kept) ?? kept));
                     }
                 }
                 else if (!converted.TryGetValue(source, out made))
@@ -277,10 +287,14 @@ namespace UVWizard.Core.Pipeline
                     }
                 foreach (var (renderer, materials) in changes) renderer.sharedMaterials = materials;
                 foreach (var (animator, controller) in detached) animator.runtimeAnimatorController = controller;
+                // The renderers now have their rewritten meshes, so each swapped slot is where the merge moved it.
                 foreach (var slot in animated)
                     if (slot.Slot is { } index)
+                    {
+                        var at = moved?.FirstOrDefault(m => m.Renderer == slot.Renderer)?.NewIndexOf(index) ?? index;
                         foreach (var swapped in slot.SwappedIn)
-                            if (swapped != null) Of(swapped, slot.Renderer, index);
+                            if (swapped != null) Of(swapped, slot.Renderer, at);
+                    }
             }
 
             /// <summary>
@@ -308,11 +322,9 @@ namespace UVWizard.Core.Pipeline
             }
 
             // A layer kept on an extra slot for an animation: a material with the merged shader, set up as the merged
-            // material is, and flagged, since it has nothing of its own to draw.
-            Material KeptLayer(Material source, SourceMaterialReading reading, Renderer renderer, int slot)
+            // material is, since it has nothing of its own to draw.
+            Material KeptLayer(Material source)
             {
-                var kept = new Reason(ReasonText.LayerKeptForAnimation);
-                flagged.Add(new SlotNote(renderer, slot, source, reading.Reason?.Then(kept) ?? kept));
                 var material = MergedMaterial(options, Merged, false);
                 material.name = $"{source.name} (UV Wizard)";
                 return material;
