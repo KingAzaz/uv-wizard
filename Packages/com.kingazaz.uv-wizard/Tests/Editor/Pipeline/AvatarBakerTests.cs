@@ -733,7 +733,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var unlit = Keep(new Material(Shader.Find("Unlit/Texture")) { mainTexture = Gradient(16, 1) });
             var mesh = Mesh(Array.Empty<(Vector3[], Vector2[])>(), new[] { Quad(1, 0.1f, 0.1f, 0.6f, 0.7f) });
             var renderer = MeshRenderer(mesh, empty, unlit);
-            var options = new BakeOptions(Shader.Find("Standard"), rampProperty: "_DetailAlbedoMap", defaultRamp: ramp);
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(ramp: "_DetailAlbedoMap"), defaultRamp: ramp);
 
             var result = Bake(options, renderer);
 
@@ -779,7 +779,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var ramp = Gradient(8, 3);
             var unlit = Keep(new Material(Shader.Find("Unlit/Texture")) { mainTexture = Gradient(16, 0) });
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), unlit);
-            var options = new BakeOptions(Shader.Find("Standard"), rampProperty: "_DetailAlbedoMap", defaultRamp: ramp);
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(ramp: "_DetailAlbedoMap"), defaultRamp: ramp);
 
             var result = Bake(options, renderer);
 
@@ -793,7 +793,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's emission colour, black by default, stands in for the tint. Nothing emits, so no emission
             // atlas sets it.
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
-            var options = new BakeOptions(Shader.Find("Standard"), tintProperty: "_EmissionColor");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(tint: "_EmissionColor"));
 
             var result = Bake(options, renderer);
 
@@ -806,7 +806,7 @@ namespace UVWizard.Core.Tests.Pipeline
         {
             // Standard's smoothness, 0.5 by default, stands in for the toggle. No Standard source uses vertex colour.
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
-            var options = new BakeOptions(Shader.Find("Standard"), vertexColourProperty: "_Glossiness");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(vertexColour: "_Glossiness"));
 
             var result = Bake(options, renderer);
 
@@ -818,7 +818,7 @@ namespace UVWizard.Core.Tests.Pipeline
         {
             // Standard's detail mask stands in for the main texture.
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), Standard(Gradient(16, 0), Color.white));
-            var options = new BakeOptions(Shader.Find("Standard"), mainTextureProperty: "_DetailMask");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(mainTexture: "_DetailMask"));
 
             var result = Bake(options, renderer);
 
@@ -832,7 +832,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's occlusion map stands in for the emission map.
             var glowing = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.white);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
-            var options = new BakeOptions(Shader.Find("Standard"), emissionMapProperty: "_OcclusionMap");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(emissionMap: "_OcclusionMap"));
 
             var result = Bake(options, renderer);
 
@@ -847,7 +847,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // doesn't overwrite the stand-in. Standard has no emission strength, so the strength goes on the colour.
             var bright = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(1.5f, 0.75f, 0.3f).gamma);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
-            var options = new BakeOptions(Shader.Find("Standard"), tintProperty: "_EmissionColor", emissionColourProperty: "_Color");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(tint: "_EmissionColor", emissionColour: "_Color"));
 
             var result = Bake(options, renderer);
 
@@ -862,7 +862,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's smoothness stands in for the strength, so the emission colour is white and the strength goes there.
             var bright = Emitting(Standard(Gradient(16, 0), Color.white), null, new Color(1.5f, 0.75f, 0.3f).gamma);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
-            var options = new BakeOptions(Shader.Find("Standard"), emissionStrengthProperty: "_Glossiness");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(emissionStrength: "_Glossiness"));
 
             var result = Bake(options, renderer);
 
@@ -879,7 +879,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var bright = Emitting(Standard(Gradient(16, 0), Color.grey), null, new Color(1.5f, 0.75f, 0.3f).gamma);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bright);
             var options = new BakeOptions(Shader.Find("Standard"), representativeProperties: new[] { "_Color" },
-                tintProperty: "_EmissionColor", emissionColourProperty: "_Color", emissionStrengthProperty: "_Glossiness");
+                names: new MergedShaderNames(tint: "_EmissionColor", emissionColour: "_Color", emissionStrength: "_Glossiness"));
 
             var result = Bake(options, renderer);
 
@@ -893,7 +893,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's smoothness, 0.5 by default, stands in for the emission UV channel, which the atlas puts on UV0.
             var glowing = Emitting(Standard(Gradient(16, 0), Color.white), Gradient(16, 1), Color.white);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
-            var options = new BakeOptions(Shader.Find("Standard"), emissionUvProperty: "_Glossiness");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(emissionUv: "_Glossiness"));
 
             var result = Bake(options, renderer);
 
@@ -902,12 +902,28 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
+        public void TheMergedMaterialsEmissionKeywordIsTheOneTheOptionsName()
+        {
+            // Standard's detail keyword stands in for its emission keyword. Standard has no emission strength, so
+            // the bake turns the keyword on.
+            var glowing = Emitting(Standard(Gradient(16, 0), Color.white), null, Color.white);
+            var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), glowing);
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(emissionKeyword: "_DETAIL_MULX2"));
+
+            var result = Bake(options, renderer);
+
+            Assume.That(result.EmissionAtlas, Is.Not.Null);
+            Assert.That(result.MergedMaterial!.IsKeywordEnabled("_DETAIL_MULX2"), Is.True);
+            Assert.That(result.MergedMaterial.IsKeywordEnabled("_EMISSION"), Is.False);
+        }
+
+        [Test]
         public void TheMergedMaterialsNormalMapIsTheOneTheOptionsName()
         {
             // Standard's detail normal map stands in for the normal map.
             var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
-            var options = new BakeOptions(Shader.Find("Standard"), normalMapProperty: "_DetailNormalMap");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(normalMap: "_DetailNormalMap"));
 
             var result = Bake(options, renderer);
 
@@ -921,7 +937,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's parallax height, 0.02 by default, stands in for the normal-map strength.
             var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
-            var options = new BakeOptions(Shader.Find("Standard"), normalScaleProperty: "_Parallax");
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(normalScale: "_Parallax"));
 
             var result = Bake(options, renderer);
 
@@ -935,7 +951,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Unlit/Transparent Cutout has no _BumpScale: its cutoff, 0.5 by default, stands in for the strength.
             var bumpy = NormalMapped(Standard(Gradient(16, 0), Color.white), NormalGradient(16, 0), 1);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }), bumpy);
-            var options = new BakeOptions(Shader.Find("Unlit/Transparent Cutout"), normalScaleProperty: "_Cutoff");
+            var options = new BakeOptions(Shader.Find("Unlit/Transparent Cutout"), names: new MergedShaderNames(normalScale: "_Cutoff"));
 
             var result = Bake(options, renderer);
 
@@ -1355,7 +1371,8 @@ namespace UVWizard.Core.Tests.Pipeline
         static BakeOptions StandardOptions(int atlasSize = 2048, int padding = 8, bool compress = false,
             NormalEncoding normalEncoding = NormalEncoding.RGorAG, Preset? preset = null, Channels channels = Channels.All,
             string? cacheDirectory = null, int cacheEntries = 16) =>
-            new BakeOptions(Shader.Find("Standard"), atlasSize, padding, compress, normalMapKeyword: "_NORMALMAP",
+            new BakeOptions(Shader.Find("Standard"), atlasSize, padding, compress,
+                names: new MergedShaderNames(normalMapKeyword: "_NORMALMAP"),
                 normalEncoding: normalEncoding, preset: preset, channels: channels, cacheDirectory: cacheDirectory,
                 cacheEntries: cacheEntries);
 

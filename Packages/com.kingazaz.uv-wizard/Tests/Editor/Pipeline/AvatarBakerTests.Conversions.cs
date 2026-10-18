@@ -113,7 +113,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's smoothness, 0.5 by default, stands in for the toggle. No Standard source uses vertex colour.
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0.1f, 0.1f, 0.6f, 0.7f) }, new[] { Quad(1, 0, 0, 5, 1) }),
                 Standard(Gradient(16, 0), Color.white), Standard(Gradient(16, 1), Color.white));
-            var options = new BakeOptions(Shader.Find("Standard"), vertexColourProperty: "_Glossiness",
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(vertexColour: "_Glossiness"),
                 mobileShaders: System.Array.Empty<string>());
 
             Bake(options, renderer);
@@ -128,7 +128,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's detail mask stands in for the main texture. The island spans five tiles, so it's converted.
             var repeated = Standard(Gradient(16, 1), Color.white, new Vector4(2, 1, 0.1f, 0.5f));
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), repeated);
-            var options = new BakeOptions(Shader.Find("Standard"), mainTextureProperty: "_DetailMask",
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(mainTexture: "_DetailMask"),
                 mobileShaders: System.Array.Empty<string>());
 
             Bake(options, renderer);
@@ -147,7 +147,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var glowing = Emitting(Standard(Gradient(16, 1), Color.white, new Vector4(2, 1, 0.1f, 0.5f)), Gradient(16, 3),
                 Color.white);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), glowing);
-            var options = new BakeOptions(Shader.Find("Standard"), emissionMapProperty: "_OcclusionMap",
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(emissionMap: "_OcclusionMap"),
                 mobileShaders: System.Array.Empty<string>());
 
             Bake(options, renderer);
@@ -165,7 +165,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's smoothness, 0.5 by default, stands in for the emission UV channel. Standard emits from UV0.
             var glowing = Emitting(Standard(Gradient(16, 1), Color.white), Gradient(16, 3), Color.white);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), glowing);
-            var options = new BakeOptions(Shader.Find("Standard"), emissionUvProperty: "_Glossiness",
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(emissionUv: "_Glossiness"),
                 mobileShaders: System.Array.Empty<string>());
 
             Bake(options, renderer);
@@ -183,7 +183,7 @@ namespace UVWizard.Core.Tests.Pipeline
             var glowing = PoiyomiStandIn(Gradient(16, 0), Gradient(16, 1), Vector2.one);
             glowing.SetFloat("_EmissionMapUV", 1);
             var renderer = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), glowing);
-            var options = new BakeOptions(Shader.Find("Standard"), emissionUvProperty: "_Glossiness",
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(emissionUv: "_Glossiness"),
                 mobileShaders: System.Array.Empty<string>());
 
             var result = Bake(options, renderer);
@@ -201,7 +201,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Standard's detail normal map stands in for the normal map, which Standard samples with _MainTex_ST.
             var bumpy = NormalMapped(Standard(Gradient(16, 1), Color.white, new Vector4(2, 1, 0.1f, 0.5f)), NormalGradient(16, 1), 1);
             var renderer = MeshRenderer(WithTangents(Mesh(new[] { Quad(0, 0, 0, 5, 1) })), bumpy);
-            var options = new BakeOptions(Shader.Find("Standard"), normalMapProperty: "_DetailNormalMap",
+            var options = new BakeOptions(Shader.Find("Standard"), names: new MergedShaderNames(normalMap: "_DetailNormalMap"),
                 mobileShaders: System.Array.Empty<string>());
 
             Bake(options, renderer);
@@ -519,8 +519,8 @@ namespace UVWizard.Core.Tests.Pipeline
         static BakeOptions Converting(int atlasSize = 2048, bool compress = false, Preset? preset = null,
             string[]? mobileShaders = null, Channels channels = Channels.All, string[]? representativeProperties = null,
             NormalEncoding normalEncoding = NormalEncoding.RGorAG, Texture? defaultRamp = null) =>
-            new BakeOptions(Shader.Find("Standard"), atlasSize, padding: 0, compress, rampProperty: "_DetailAlbedoMap",
-                defaultRamp: defaultRamp, normalMapKeyword: "_NORMALMAP",
+            new BakeOptions(Shader.Find("Standard"), atlasSize, padding: 0, compress,
+                names: new MergedShaderNames(ramp: "_DetailAlbedoMap", normalMapKeyword: "_NORMALMAP"), defaultRamp: defaultRamp,
                 normalEncoding: normalEncoding, preset: preset, channels: channels, representativeProperties: representativeProperties,
                 mobileShaders: mobileShaders ?? System.Array.Empty<string>());
     }
