@@ -87,61 +87,70 @@ namespace UVWizard.Core.Meshes
             for (var k = 0; k < corners[s].Length; k++)
                 corners[s][k] = copies.IndexOf(indices[s][k], corners[s][k]);
 
-            Mesh mesh;
-            RewritePath path;
-            if (sourceOf.Length == data.vertexCount)
+            Mesh? mesh = null;
+            try
             {
-                // Nothing splits, so a native copy keeps every attribute and blend shape, and only
-                // UV0 changes. Rebuilding blend shapes frame by frame slows down with each frame
-                // added: a 65k-vertex body with 695 frames takes about 5 s, more as copies are
-                // added, against 0.1 s for this.
-                path = RewritePath.Copied;
-                mesh = UnityEngine.Object.Instantiate(source);
-                mesh.name = source.name;
-                if (data.HasVertexAttribute(VertexAttribute.TexCoord0))
+                RewritePath path;
+                if (sourceOf.Length == data.vertexCount)
                 {
-                    var stream = data.GetVertexAttributeStream(VertexAttribute.TexCoord0);
-                    var bytes = CopiedStream(data, stream, sourceOf, uv0Of);
-                    mesh.SetVertexBufferData(bytes, 0, 0, bytes.Length, stream);
+                    // Nothing splits, so a native copy keeps every attribute and blend shape, and only
+                    // UV0 changes. Rebuilding blend shapes frame by frame slows down with each frame
+                    // added: a 65k-vertex body with 695 frames takes about 5 s, more as copies are
+                    // added, against 0.1 s for this.
+                    path = RewritePath.Copied;
+                    mesh = UnityEngine.Object.Instantiate(source);
+                    mesh.name = source.name;
+                    if (data.HasVertexAttribute(VertexAttribute.TexCoord0))
+                    {
+                        var stream = data.GetVertexAttributeStream(VertexAttribute.TexCoord0);
+                        var bytes = CopiedStream(data, stream, sourceOf, uv0Of);
+                        mesh.SetVertexBufferData(bytes, 0, 0, bytes.Length, stream);
+                    }
                 }
+                else if (!AnyMoves(source, sourceOf, data.vertexCount))
+                {
+                    // The extra copies go after the source's vertices, so every blend-shape delta stays
+                    // on its vertex, and the copies get none, as their sources have none.
+                    path = RewritePath.Appended;
+                    mesh = UnityEngine.Object.Instantiate(source);
+                    mesh.name = source.name;
+                    CopyVertexStreams(data, mesh, sourceOf, uv0Of);
+                    CopyBoneWeights(data, source, mesh, sourceOf);
+                }
+                else
+                {
+                    // A copy rather than a new mesh, so it keeps the source's UV0 and UV1 distribution
+                    // metrics, which Unity has no setter for.
+                    path = RewritePath.Rebuilt;
+                    mesh = UnityEngine.Object.Instantiate(source);
+                    mesh.name = source.name;
+                    mesh.ClearBlendShapes();
+                    CopyVertexStreams(data, mesh, sourceOf, uv0Of);
+                    CopyBoneWeights(data, source, mesh, sourceOf);
+                    CopyBlendShapes(source, mesh, sourceOf);
+                }
+                if (needs.KeepSourceUv0In is { } channel)
+                {
+                    using var sourceUv0 = new NativeArray<Vector2>(data.vertexCount, Allocator.Temp);
+                    data.GetUVs(0, sourceUv0);
+                    var kept = new Vector2[sourceOf.Length];
+                    for (var v = 0; v < kept.Length; v++) kept[v] = sourceUv0[sourceOf[v]];
+                    mesh.SetUVs(channel, kept);
+                }
+                var (submeshOf, merged) = WriteSubmeshes(data, mesh, atlasUvs, corners, needs.KeepSubmeshes);
+                mesh.bounds = source.bounds;
+                // Mip streaming picks the atlas's mip level from UV0's texel density. Unity's
+                // recalculation logs an error on a mesh with line or point submeshes, so those keep the
+                // source's metric, as UV1 does.
+                if (merged != null && AllTriangles(mesh)) mesh.RecalculateUVDistributionMetric(0);
+                return new RewrittenMesh(mesh, submeshOf, merged, path);
             }
-            else if (!AnyMoves(source, sourceOf, data.vertexCount))
+            catch
             {
-                // The extra copies go after the source's vertices, so every blend-shape delta stays
-                // on its vertex, and the copies get none, as their sources have none.
-                path = RewritePath.Appended;
-                mesh = UnityEngine.Object.Instantiate(source);
-                mesh.name = source.name;
-                CopyVertexStreams(data, mesh, sourceOf, uv0Of);
-                CopyBoneWeights(data, source, mesh, sourceOf);
+                // Nothing else holds the copy yet, so a rewrite that fails after making it would leak it.
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                throw;
             }
-            else
-            {
-                // A copy rather than a new mesh, so it keeps the source's UV0 and UV1 distribution
-                // metrics, which Unity has no setter for.
-                path = RewritePath.Rebuilt;
-                mesh = UnityEngine.Object.Instantiate(source);
-                mesh.name = source.name;
-                mesh.ClearBlendShapes();
-                CopyVertexStreams(data, mesh, sourceOf, uv0Of);
-                CopyBoneWeights(data, source, mesh, sourceOf);
-                CopyBlendShapes(source, mesh, sourceOf);
-            }
-            if (needs.KeepSourceUv0In is { } channel)
-            {
-                using var sourceUv0 = new NativeArray<Vector2>(data.vertexCount, Allocator.Temp);
-                data.GetUVs(0, sourceUv0);
-                var kept = new Vector2[sourceOf.Length];
-                for (var v = 0; v < kept.Length; v++) kept[v] = sourceUv0[sourceOf[v]];
-                mesh.SetUVs(channel, kept);
-            }
-            var (submeshOf, merged) = WriteSubmeshes(data, mesh, atlasUvs, corners, needs.KeepSubmeshes);
-            mesh.bounds = source.bounds;
-            // Mip streaming picks the atlas's mip level from UV0's texel density. Unity's
-            // recalculation logs an error on a mesh with line or point submeshes, so those keep the
-            // source's metric, as UV1 does.
-            if (merged != null && AllTriangles(mesh)) mesh.RecalculateUVDistributionMetric(0);
-            return new RewrittenMesh(mesh, submeshOf, merged, path);
         }
 
         static VertexAttribute TexCoord(int channel) => VertexAttribute.TexCoord0 + channel;
