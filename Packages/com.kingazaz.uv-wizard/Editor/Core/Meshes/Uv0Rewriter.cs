@@ -87,7 +87,10 @@ namespace UVWizard.Core.Meshes
             for (var k = 0; k < corners[s].Length; k++)
                 corners[s][k] = copies.IndexOf(indices[s][k], corners[s][k]);
 
-            Mesh? mesh = null;
+            // A copy rather than a new mesh, so it keeps the source's UV0 and UV1 distribution metrics, which Unity
+            // has no setter for.
+            var mesh = UnityEngine.Object.Instantiate(source);
+            mesh.name = source.name;
             try
             {
                 RewritePath path;
@@ -98,8 +101,6 @@ namespace UVWizard.Core.Meshes
                     // added: a 65k-vertex body with 695 frames takes about 5 s, more as copies are
                     // added, against 0.1 s for this.
                     path = RewritePath.Copied;
-                    mesh = UnityEngine.Object.Instantiate(source);
-                    mesh.name = source.name;
                     if (data.HasVertexAttribute(VertexAttribute.TexCoord0))
                     {
                         var stream = data.GetVertexAttributeStream(VertexAttribute.TexCoord0);
@@ -112,18 +113,12 @@ namespace UVWizard.Core.Meshes
                     // The extra copies go after the source's vertices, so every blend-shape delta stays
                     // on its vertex, and the copies get none, as their sources have none.
                     path = RewritePath.Appended;
-                    mesh = UnityEngine.Object.Instantiate(source);
-                    mesh.name = source.name;
                     CopyVertexStreams(data, mesh, sourceOf, uv0Of);
                     CopyBoneWeights(data, source, mesh, sourceOf);
                 }
                 else
                 {
-                    // A copy rather than a new mesh, so it keeps the source's UV0 and UV1 distribution
-                    // metrics, which Unity has no setter for.
                     path = RewritePath.Rebuilt;
-                    mesh = UnityEngine.Object.Instantiate(source);
-                    mesh.name = source.name;
                     mesh.ClearBlendShapes();
                     CopyVertexStreams(data, mesh, sourceOf, uv0Of);
                     CopyBoneWeights(data, source, mesh, sourceOf);
@@ -147,8 +142,8 @@ namespace UVWizard.Core.Meshes
             }
             catch
             {
-                // Nothing else holds the copy yet, so a rewrite that fails after making it would leak it.
-                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                // Nothing else holds the copy yet, so a rewrite that fails would leak it.
+                UnityEngine.Object.DestroyImmediate(mesh);
                 throw;
             }
         }
