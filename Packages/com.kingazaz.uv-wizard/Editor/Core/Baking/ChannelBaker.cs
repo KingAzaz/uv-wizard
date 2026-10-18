@@ -24,6 +24,10 @@ namespace UVWizard.Core.Baking
         const int NormalPass = 1;
         const int ColourAndAlphaPass = 2;
 
+        // A normal map's strength the shader takes at most, either sign. Past about 100 every texel that isn't flat
+        // already lies horizontal, and past about 1e19 x² + y² overflows to +inf, which normalizes to (0, 0, 0) (#212).
+        const float MaxNormalStrength = 1e4f;
+
         /// <summary>
         /// Draws every source's triangles at their atlas UVs, sampling the source texture and
         /// multiplying in its tint, then fills the gutters with the nearest chart's colour and
@@ -61,7 +65,7 @@ namespace UVWizard.Core.Baking
                     material.SetTexture(MainTex, source.Texture);
                     material.SetColor(Tint, source.Tint);
                     material.SetVector(SourceScaleOffset, source.ScaleOffset);
-                    material.SetFloat(Strength, source.Strength);
+                    material.SetFloat(Strength, Mathf.Clamp(source.Strength, -MaxNormalStrength, MaxNormalStrength));
                     material.SetFloat(SourceEncoding, (float)source.Encoding);
                     material.SetPass(normals ? NormalPass : plan.KeepsAlpha ? ColourAndAlphaPass : ColourPass);
                     Graphics.DrawMeshNow(mesh, Matrix4x4.identity);

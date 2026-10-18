@@ -379,6 +379,33 @@ namespace UVWizard.Core.Tests.Baking
             AssertDecodes(new Vector3(x, y, z), Texel(atlas, 3, 3), "atlas (3, 3)");
         }
 
+        // At 1e20, x² + y² overflows to +inf, which normalize turns into (0, 0, 0) (#212). By 1e4 every texel that
+        // isn't flat already lies horizontal, so the bake bounds the strength there and keeps its sign.
+        [TestCase("RGorAG", 1e20f)]
+        [TestCase("AG", 1e20f)]
+        [TestCase("XYZ", 1e20f)]
+        [TestCase("RGorAG", -1e20f)]
+        [TestCase("AG", -1e20f)]
+        [TestCase("XYZ", -1e20f)]
+        [TestCase("XYZ", float.MaxValue)]
+        public void AHugeStrengthBakesAsStrength1e4(string encodingName, float strength)
+        {
+            var encoding = (NormalEncoding)Enum.Parse(typeof(NormalEncoding), encodingName);
+            var source = NormalMap(encoding == NormalEncoding.AG ? Ag : Xyz);
+            var bounded = Math.Sign(strength) * 1e4f;
+            var huge = Bake(NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(source, strength, encoding, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f))));
+            var expected = Bake(NormalPlan(16, NormalEncoding.RGorAG,
+                NormalQuad(source, bounded, encoding, Corners(0, 0, 1, 1), Corners(0, 0, 0.25f, 0.25f))));
+
+            var horizontal = UnpackScaleNormal(SourceNormal(3, 3), bounded, encoding);
+            Assert.That(Math.Abs(horizontal.z), Is.LessThan(0.001f), "the bounded strength lays (3, 3) horizontal");
+            AssertDecodes(horizontal, Texel(huge, 3, 3), "atlas (3, 3)");
+            for (var j = 0; j < 4; j++)
+            for (var i = 0; i < 4; i++)
+                Assert.That(Texel(huge, i, j), Is.EqualTo(Texel(expected, i, j)), $"atlas ({i}, {j})");
+        }
+
         [Test]
         public void ASourceWithoutANormalMapBakesFlat()
         {
