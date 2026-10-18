@@ -186,7 +186,7 @@ namespace UVWizard.Core.Pipeline
 
             // The source's particle material, made the first time a particle, trail or line renderer has it: a mobile
             // particle shader chosen by the source's blend (#148), drawing its main texture, times its tint, with its
-            // tiling and offset. The blend comes from the _SrcBlend and _DstBlend floats that Particles/Standard, lilToon
+            // tiling and offset, or its tint alone when it samples the texture off UV0. The blend comes from the _SrcBlend and _DstBlend floats that Particles/Standard, lilToon
             // and Poiyomi keep it in, with any _BlendOp adding: Particles/Standard's Subtractive mode is SrcAlpha One
             // under a reverse subtract. A shader without them, such as Unity's legacy particle shaders, which hard-code
             // theirs, draws additively now.

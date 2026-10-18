@@ -229,8 +229,8 @@ namespace UVWizard.NDMF
                 "blend is neither, so it draws additively now."),
             (ReasonText.AddsByAlpha, "It adds its whole colour, but mobile's additive particle shader adds its colour " +
                 "times its alpha, so its see-through parts, and any fade by alpha, now dim."),
-            (ReasonText.ParticleAlbedoOffMainUvs, "Its main texture uses a UV map other than the main one, which is " +
-                "the only one mobile's particle shaders read it from, so only its colour is kept."),
+            (ReasonText.ParticleAlbedoOffMainUvs, "Its main texture is mapped by something other than the main UV " +
+                "map, the only one mobile's particle shaders read it from, so only its colour is kept."),
             (ReasonText.AnimatedProperties, "An animation changes this renderer's material properties, which its Toon " +
                 "Standard material may not have, or may show differently."),
             (ReasonText.ConvertedAlbedoOffMainUvs, "Its main texture uses a UV map other than the mesh's main one, " +

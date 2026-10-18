@@ -14,17 +14,16 @@ namespace UVWizard.Core.Tests.Pipeline
     // Particles/Standard Unlit, whose blend is in its _SrcBlend and _DstBlend floats.
     public partial class AvatarBakerTests
     {
-        static Shader AdditiveStandIn = null!;
-        static Shader MultiplyStandIn = null!;
+        static Shader AdditiveStandIn => StandIn("Legacy Shaders/Particles/Additive");
+        static Shader MultiplyStandIn => StandIn("Legacy Shaders/Particles/Multiply");
 
-        // Resolved here, so a missing stand-in fails the tests rather than letting Is.SameAs match a null shader.
-        [OneTimeSetUp]
-        public void FindParticleStandIns()
+        // A missing stand-in fails the particle tests, which all bake with it, rather than letting Is.SameAs match a
+        // null shader.
+        static Shader StandIn(string name)
         {
-            AdditiveStandIn = Shader.Find("Legacy Shaders/Particles/Additive");
-            MultiplyStandIn = Shader.Find("Legacy Shaders/Particles/Multiply");
-            Assert.That(AdditiveStandIn, Is.Not.Null, "Legacy Shaders/Particles/Additive");
-            Assert.That(MultiplyStandIn, Is.Not.Null, "Legacy Shaders/Particles/Multiply");
+            var shader = Shader.Find(name);
+            Assert.That(shader, Is.Not.Null, name);
+            return shader;
         }
 
         [Test]
@@ -69,7 +68,7 @@ namespace UVWizard.Core.Tests.Pipeline
             // Mobile's particle shaders sample their texture from the first UV channel only (BindChannels' texcoord).
             var tint = new Color(1, 0.5f, 0.25f, 0.5f);
             var source = Keep(new Material(Shader.Find("Hidden/Locked/.poiyomi/UV Wizard Tests/Stand-in"))
-                { mainTexture = Gradient(16, 1), color = tint });
+                { mainTexture = Gradient(16, 1), color = tint, mainTextureScale = new Vector2(2, 1) });
             source.SetFloat("_MainTexUV", 1);
             var particles = ParticleSystemRenderer(source);
 
