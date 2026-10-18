@@ -287,10 +287,14 @@ namespace UVWizard.Core.Pipeline
                     }
                 foreach (var (renderer, materials) in changes) renderer.sharedMaterials = materials;
                 foreach (var (animator, controller) in detached) animator.runtimeAnimatorController = controller;
+                // The renderers now have their rewritten meshes, so each swapped slot is where the merge moved it.
                 foreach (var slot in animated)
                     if (slot.Slot is { } index)
+                    {
+                        var at = moved?.FirstOrDefault(m => m.Renderer == slot.Renderer)?.NewIndexOf(index) ?? index;
                         foreach (var swapped in slot.SwappedIn)
-                            if (swapped != null) Of(swapped, slot.Renderer, index);
+                            if (swapped != null) Of(swapped, slot.Renderer, at);
+                    }
             }
 
             /// <summary>

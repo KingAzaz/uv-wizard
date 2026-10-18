@@ -322,6 +322,40 @@ namespace UVWizard.Core.Tests.LilToon
         }
 
         [Test]
+        public void ALayerSwappedIntoASubmeshAfterMergedOnesIsLeftThoughItsKeptOnAnExtraSlot()
+        {
+            // The first two submeshes merge into one, so the swapped submesh moves from the third slot to the second.
+            // The outline swapped into it has no surface there; on the extra slot, a later swap keeps it.
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var mesh = Keep(new Mesh
+            {
+                vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
+                uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
+                subMeshCount = 3,
+            });
+            mesh.SetTriangles(new[] { 0, 2, 1 }, 0);
+            mesh.SetTriangles(new[] { 1, 2, 3 }, 1);
+            mesh.SetTriangles(new[] { 0, 1, 3 }, 2);
+            var go = Keep(new GameObject("renderer"));
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = new[] { Material("lilToon"), Material("lilToon"), Material("lilToon"), outline };
+
+            var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
+                new[]
+                {
+                    new AnimatedSlot(renderer, 2, new Reason("Swapped in \"Outline\"."), new[] { outline }),
+                    new AnimatedSlot(renderer, 3, new Reason("Swapped in \"Swap\"."), new[] { Material("lilToon") }),
+                });
+
+            Assert.That(result.MergedMaterial, Is.Not.Null, "the first two submeshes merge");
+            Assert.That(renderer.sharedMaterials, Has.Length.EqualTo(3));
+            Assert.That(renderer.sharedMaterials[2].shader, Is.SameAs(Shader.Find("Standard")), "the kept extra slot");
+            Assert.That(result.Unconverted.Select(note => (note.Renderer, note.Material)),
+                Is.EqualTo(new[] { ((Renderer)renderer, outline) }));
+        }
+
+        [Test]
         public void ALayerKeptOnTwoRenderersIsFlaggedOnEach()
         {
             // Each renderer's animation swaps its own extra slot, so each slot says why its layer stays.
@@ -354,9 +388,9 @@ namespace UVWizard.Core.Tests.LilToon
             // The first layer stays where the swap binds it; the second, after the swap, is removed, and the plain
             // material after it moves down into its place.
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
-            var outline2 = Material("_lil/[Optional] lilToonOutlineOnly");
+            var afterSwap = Material("_lil/[Optional] lilToonOutlineOnly");
             var plain = Material("lilToon");
-            var renderer = Quad(Material("lilToon"), outline, outline2, plain);
+            var renderer = Quad(Material("lilToon"), outline, afterSwap, plain);
 
             var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
                 new[] { new AnimatedSlot(renderer, 1, new Reason("Swapped in \"Swap\"."), new[] { Material("lilToon") }) });
@@ -365,7 +399,7 @@ namespace UVWizard.Core.Tests.LilToon
             Assert.That(materials, Has.Length.EqualTo(3));
             Assert.That(materials[1], Is.SameAs(result.ConvertedMaterials.Single(c => c.Source == outline).Converted));
             Assert.That(materials[2], Is.SameAs(result.ConvertedMaterials.Single(c => c.Source == plain).Converted));
-            Assert.That(result.Removed.Select(note => (note.Slot, note.Material)), Is.EqualTo(new[] { (2, outline2) }));
+            Assert.That(result.Removed.Select(note => (note.Slot, note.Material)), Is.EqualTo(new[] { (2, afterSwap) }));
             Assert.That(result.Unconverted, Is.Empty);
         }
 
