@@ -246,7 +246,8 @@ class FakeEditor:
     IDLE = {"activity": {"phase": "idle"}, "compilation": {}, "assets": {}, "tests": {}}
 
     def __init__(self, reload_after_refresh=True, compile_failed=False, job=None,
-                 drop_run_tests=0, busy_since=None, fast=False, forget_jobs=False, run_tests_error=None):
+                 drop_run_tests=0, busy_since=None, fast=False, forget_jobs=False, run_tests_error=None,
+                 compiled_at=None, blind_for=0):
         self.reload_after_refresh = reload_after_refresh
         self.compile_failed = compile_failed
         self.job = job if job is not None else {"status": "succeeded", "error": None, "result": {
@@ -256,6 +257,8 @@ class FakeEditor:
         self.fast = fast
         self.forget_jobs = forget_jobs   # get_test_job answers "Unknown job_id."
         self.run_tests_error = run_tests_error
+        self.compiled_at = compiled_at   # a compile that finished before the refresh, in unix ms
+        self.blind_for = blind_for   # seconds after run_tests that snapshot requests are dropped
         self.reloaded_at = None
         self.started_at = None
         self.jobs = 0
@@ -268,7 +271,11 @@ class FakeEditor:
                 self.reloaded_at = int(time.time() * 1000) + 50
             return ok({"refresh_triggered": True})
         if kind == "get_editor_state":
+            if self.started_at and time.time() * 1000 < self.started_at + self.blind_for * 1000:
+                return None
             state = json.loads(json.dumps(self.IDLE))
+            if self.compiled_at:
+                state["compilation"]["last_compile_finished_unix_ms"] = self.compiled_at
             if self.reloaded_at and time.time() * 1000 >= self.reloaded_at:
                 state["compilation"]["last_domain_reload_after_unix_ms"] = self.reloaded_at
             if self.busy_since:
@@ -350,6 +357,20 @@ class EditorTest(unittest.TestCase):
         with self.assertRaises(TimeoutError):
             unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=1, poll=0.05)
 
+    def test_a_compile_after_the_newest_source_counts_once_the_editor_settles(self):
+        # A focused editor compiled the edit itself, and the requested compile never comes (#229).
+        compiled = int(time.time() * 1000) - 5000
+        editor, fake = self.editor(reload_after_refresh=False, compiled_at=compiled)
+        unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=5, poll=0.05, settle=0.3,
+                            source_ms=compiled - 1000)
+
+    def test_a_compile_before_the_newest_source_does_not(self):
+        compiled = int(time.time() * 1000) - 5000
+        editor, fake = self.editor(reload_after_refresh=False, compiled_at=compiled)
+        with self.assertRaises(TimeoutError):
+            unity_tests.refresh(fake.port, time.monotonic() + 30, compile_wait=1, poll=0.05, settle=0.3,
+                                source_ms=compiled + 1000)
+
     def test_a_compile_error_is_red(self):
         editor, fake = self.editor(compile_failed=True)
         with self.assertRaisesRegex(unity_tests.Failed, "failed to compile"):
@@ -366,6 +387,19 @@ class EditorTest(unittest.TestCase):
         job = unity_tests.run(fake.port, ["A"], None, time.monotonic() + 30, poll=0.05)
         self.assertEqual(job["job_id"], "job-1")
         self.assertEqual(len(fake.sent("run_tests")), 1)
+
+    def test_a_dropped_request_waits_out_an_editor_too_busy_to_answer(self):
+        # After a restart the editor drops snapshot requests while the job starts (#229).
+        editor, fake = self.editor(drop_run_tests=1, blind_for=1)
+        job_id = unity_tests.start_job(fake.port, {}, time.monotonic() + 30, adopt_wait=0.3, poll=0.05,
+                                       drop_wait=3)
+        self.assertEqual(job_id, "job-1")
+
+    def test_a_dropped_request_with_no_job_seen_says_so_not_that_tests_are_running(self):
+        editor, fake = self.editor(drop_run_tests=1, blind_for=30)
+        with self.assertRaisesRegex(RuntimeError, "no test job seen"):
+            unity_tests.start_job(fake.port, {}, time.monotonic() + 30, adopt_wait=0.3, poll=0.05,
+                                  drop_wait=1)
 
     def test_a_fast_job_whose_reply_was_lost_is_run_once_more(self):
         # It finished before a snapshot showed its id, so there is no job to follow.
