@@ -43,8 +43,9 @@ namespace UVWizard.Core.Baking
             });
             var meshes = new List<Mesh>();
             var previous = RenderTexture.active;
-            // DrawMeshNow takes its view from the current camera over GL.LoadOrtho's, and a build can leave the
-            // SceneView's camera current (#112), so none is current while the charts draw.
+            // DrawMeshNow takes its view from the current camera over GL.LoadOrtho's, and an undo revert, such as
+            // the test runner's after a run, leaves the SceneView's camera current (#112, #191), so none is current
+            // while the charts draw.
             var camera = Camera.current;
             try
             {
