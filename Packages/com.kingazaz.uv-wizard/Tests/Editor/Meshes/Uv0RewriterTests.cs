@@ -282,6 +282,21 @@ namespace UVWizard.Core.Tests.Meshes
             Assert.That(outOfRange.Message, Does.Contain(nameof(LaterToolNeeds.KeepSourceUv0In)));
         }
 
+        // Keeping the source UV0 of a mesh that has none fails only once the mesh is copied, when Unity reads its UV0.
+        [Test]
+        public void ARewriteThatFailsAfterCopyingTheMeshFreesTheCopy()
+        {
+            var source = Square(new[] { 0, 1, 2, 2, 1, 3 });
+            source.uv = null;
+            source.uv6 = null;
+            var before = new HashSet<Mesh>(Resources.FindObjectsOfTypeAll<Mesh>());
+
+            Assert.Throws<System.InvalidOperationException>(() =>
+                Uv0Rewriter.Rewrite(source, new Vector2[][] { null }, new LaterToolNeeds(5, keepSubmeshes: false)));
+
+            Assert.That(Resources.FindObjectsOfTypeAll<Mesh>().Except(before).Select(mesh => mesh.name), Is.Empty);
+        }
+
         [TestCase(ReasonText.LaterToolNeedsUvs)]
         [TestCase(ReasonText.MergedIntoUvReader)]
         public void ARendererTheBakeKeepsOutCantBeRewritten(string reason)
