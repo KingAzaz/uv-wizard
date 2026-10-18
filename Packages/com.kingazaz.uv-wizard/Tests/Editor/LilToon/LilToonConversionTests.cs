@@ -294,6 +294,82 @@ namespace UVWizard.Core.Tests.LilToon
         }
 
         [Test]
+        public void ALayerKeptOnAnExtraSlotIsStillLeftAndReportedOnTheSameRenderersSubmesh()
+        {
+            // The outline is the second submesh's only material, and also on the extra slot the animation swaps.
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var mesh = Keep(new Mesh
+            {
+                vertices = new[] { Vector3.zero, Vector3.right, Vector3.up, new Vector3(1, 1, 0) },
+                uv = new[] { Vector2.zero, Vector2.right, Vector2.up, Vector2.one },
+                subMeshCount = 2,
+            });
+            mesh.SetTriangles(new[] { 0, 2, 1 }, 0);
+            mesh.SetTriangles(new[] { 1, 2, 3 }, 1);
+            var go = Keep(new GameObject("renderer"));
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = new[] { Material("lilToon"), outline, outline };
+
+            var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
+                new[] { new AnimatedSlot(renderer, 2, new Reason("Swapped in \"Swap\"."), new[] { Material("lilToon") }) });
+
+            var materials = renderer.sharedMaterials;
+            Assert.That(materials[materials.Length - 2], Is.SameAs(outline), "the submesh's own slot");
+            Assert.That(materials[materials.Length - 1].shader, Is.SameAs(Shader.Find("Standard")), "the kept extra slot");
+            Assert.That(result.Unconverted.Select(note => (note.Renderer, note.Material)),
+                Is.EqualTo(new[] { ((Renderer)renderer, outline) }));
+        }
+
+        [Test]
+        public void ALayerKeptOnTwoRenderersIsFlaggedOnEach()
+        {
+            // Each renderer's animation swaps its own extra slot, so each slot says why its layer stays.
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var first = Quad(Material("lilToon"), outline);
+            var second = Quad(Material("lilToon"), outline);
+
+            var result = AvatarBaker.Bake(new Renderer[] { first, second },
+                new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
+                animated: new[]
+                {
+                    new AnimatedSlot(first, 1, new Reason("Swapped in \"Swap\"."), new[] { Material("lilToon") }),
+                    new AnimatedSlot(second, 1, new Reason("Swapped in \"Swap\"."), new[] { Material("lilToon") }),
+                });
+            foreach (var (_, converted) in result.ConvertedMaterials) Keep(converted);
+            if (result.MergedMaterial != null) Keep(result.MergedMaterial);
+            if (result.Atlas != null) Keep(result.Atlas);
+            foreach (var (_, rewritten) in result.ReplacedMeshes) Keep(rewritten);
+
+            Assert.That(first.sharedMaterials[1], Is.SameAs(second.sharedMaterials[1]), "one kept material for the layer");
+            Assert.That(result.Flagged.Where(note => note.Material == outline
+                    && note.Reason.Keys.Contains(ReasonText.LayerKeptForAnimation))
+                .Select(note => (note.Renderer, note.Slot)),
+                Is.EquivalentTo(new[] { ((Renderer)first, 1), ((Renderer)second, 1) }));
+        }
+
+        [Test]
+        public void ASwapIntoAnExtraSlotRemovesALaterLayerAndKeepsTheSlotsAfterIt()
+        {
+            // The first layer stays where the swap binds it; the second, after the swap, is removed, and the plain
+            // material after it moves down into its place.
+            var outline = Material("_lil/[Optional] lilToonOutlineOnly");
+            var outline2 = Material("_lil/[Optional] lilToonOutlineOnly");
+            var plain = Material("lilToon");
+            var renderer = Quad(Material("lilToon"), outline, outline2, plain);
+
+            var result = Bake(renderer, new BakeOptions(Shader.Find("Standard"), mobileShaders: Array.Empty<string>()),
+                new[] { new AnimatedSlot(renderer, 1, new Reason("Swapped in \"Swap\"."), new[] { Material("lilToon") }) });
+
+            var materials = renderer.sharedMaterials;
+            Assert.That(materials, Has.Length.EqualTo(3));
+            Assert.That(materials[1], Is.SameAs(result.ConvertedMaterials.Single(c => c.Source == outline).Converted));
+            Assert.That(materials[2], Is.SameAs(result.ConvertedMaterials.Single(c => c.Source == plain).Converted));
+            Assert.That(result.Removed.Select(note => (note.Slot, note.Material)), Is.EqualTo(new[] { (2, outline2) }));
+            Assert.That(result.Unconverted, Is.Empty);
+        }
+
+        [Test]
         public void ALayerOnARendererThatDoesntUploadStays()
         {
             var outline = Material("_lil/[Optional] lilToonOutlineOnly");
