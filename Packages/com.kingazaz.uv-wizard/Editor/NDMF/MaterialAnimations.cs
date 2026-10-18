@@ -115,21 +115,30 @@ namespace UVWizard.NDMF
             }
         }
 
-        /// <summary>Makes each material swap that puts a converted source in a slot put its converted material there.</summary>
+        /// <summary>
+        /// Makes each material swap that puts a replaced source in a slot put what replaced it there: on a mesh renderer,
+        /// its converted material, and on a particle, trail or line renderer, its particle material.
+        /// </summary>
         public static void SwapInConverted(AnimatorServicesContext animators, GameObject root,
-            IEnumerable<(Material Source, Material Converted)> converted)
+            IEnumerable<(Material Source, Material Converted)> converted,
+            IEnumerable<(Material Source, Material Converted)> particles)
         {
             var conversionOf = converted.ToDictionary(c => c.Source, c => c.Converted);
-            if (conversionOf.Count == 0) return;
+            var particleOf = particles.ToDictionary(p => p.Source, p => p.Converted);
+            if (conversionOf.Count == 0 && particleOf.Count == 0) return;
             foreach (var (clip, resolve) in Clips(animators, root))
             foreach (var binding in clip.GetObjectCurveBindings())
             {
-                // Only where the bake converts materials: a particle keeps its source, as on its own slots.
                 if (SlotIndex(binding) == null || Target(binding, resolve) is not { } renderer
-                    || !AvatarBaker.ConvertsMaterialsOf(renderer) || clip.GetObjectCurve(binding) is not { } keys) continue;
+                    || clip.GetObjectCurve(binding) is not { } keys) continue;
+                // Only where the bake makes materials of that kind, as on the renderer's own slots.
+                var madeOf = AvatarBaker.ConvertsMaterialsOf(renderer) ? conversionOf
+                    : AvatarBaker.GivesParticleMaterialsTo(renderer) ? particleOf
+                    : null;
+                if (madeOf == null) continue;
                 var changed = false;
                 for (var k = 0; k < keys.Length; k++)
-                    if (keys[k].value is Material source && conversionOf.TryGetValue(source, out var to))
+                    if (keys[k].value is Material source && madeOf.TryGetValue(source, out var to))
                     {
                         keys[k].value = to;
                         changed = true;

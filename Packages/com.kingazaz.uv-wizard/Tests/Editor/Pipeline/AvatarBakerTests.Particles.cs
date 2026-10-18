@@ -195,21 +195,55 @@ namespace UVWizard.Core.Tests.Pipeline
         }
 
         [Test]
-        public void AMaterialAnAnimationSwapsOntoALineIsLeftAndReported()
+        public void AMaterialAnAnimationSwapsOntoALineOrParticlesGetsAParticleMaterial()
         {
-            // Only a mesh renderer's swaps are pointed at their conversions, so a particle material made for the swap
-            // would go unused.
             var own = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 1), Color.white);
-            var swapped = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 2), Color.white);
+            var onLine = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 2), Color.white);
+            var onParticles = Particle(BlendMode.Zero, BlendMode.SrcColor, Gradient(16, 3), Color.white);
             var line = LineRenderer(own);
+            var particles = ParticleSystemRenderer(own);
+
+            var result = Bake(ConvertingParticles(), new Renderer[] { line, particles },
+                new AnimatedSlot(line, 0, new Reason("A"), new[] { onLine }),
+                new AnimatedSlot(particles, 0, new Reason("B"), new[] { onParticles }));
+
+            Assert.That(result.ParticleMaterials.Select(p => p.Source), Is.EqualTo(new[] { own, onLine, onParticles }));
+            Assert.That(result.ParticleMaterials.Select(p => p.Converted.shader),
+                Is.EqualTo(new[] { AdditiveStandIn, AdditiveStandIn, MultiplyStandIn }));
+            Assert.That(result.ConvertedMaterials, Is.Empty);
+            Assert.That(result.Unconverted, Is.Empty);
+        }
+
+        [Test]
+        public void AMaterialAnAnimationSwapsOntoAMeshAndALineGetsAConvertedAndAParticleMaterial()
+        {
+            var swapped = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 2), Color.white);
+            var mesh = MeshRenderer(Mesh(new[] { Quad(0, 0, 0, 5, 1) }), Standard(Gradient(16, 1), Color.white));
+            var line = LineRenderer(Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 1), Color.white));
+
+            var result = Bake(ConvertingParticles(), new Renderer[] { mesh, line },
+                new AnimatedSlot(mesh, 0, new Reason("A"), new[] { swapped }),
+                new AnimatedSlot(line, 0, new Reason("A"), new[] { swapped }));
+
+            var converted = result.ConvertedMaterials.Where(c => c.Source == swapped).Select(c => c.Converted).Single();
+            var particle = result.ParticleMaterials.Where(p => p.Source == swapped).Select(p => p.Converted).Single();
+            Assert.That(converted.shader, Is.SameAs(Shader.Find("Standard")));
+            Assert.That(particle.shader, Is.SameAs(AdditiveStandIn));
+            Assert.That(result.Unconverted, Is.Empty);
+        }
+
+        [Test]
+        public void AMaterialAnAnimationSwapsOntoAnEditorOnlyLineIsLeftAlone()
+        {
+            var swapped = Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 2), Color.white);
+            var line = LineRenderer(Particle(BlendMode.SrcAlpha, BlendMode.One, Gradient(16, 1), Color.white));
+            line.gameObject.tag = "EditorOnly";
 
             var result = Bake(ConvertingParticles(), new Renderer[] { line },
                 new AnimatedSlot(line, 0, new Reason("A"), new[] { swapped }));
 
-            Assert.That(line.sharedMaterial.shader, Is.SameAs(AdditiveStandIn));
-            Assert.That(result.ParticleMaterials.Select(p => p.Source), Is.EqualTo(new[] { own }));
-            Assert.That(result.Unconverted.Select(note => (note.Material, note.Reason)),
-                Is.EqualTo(new[] { (swapped, new Reason(ReasonText.SwappedOntoParticles)) }));
+            Assert.That(result.ParticleMaterials, Is.Empty);
+            Assert.That(result.Unconverted, Is.Empty);
         }
 
         [Test]

@@ -755,10 +755,10 @@ namespace UVWizard.NDMF.Tests
         }
 
         [Test]
-        public void ASwapOntoALineKeepsItsSourceAndIsReported()
+        public void ASwapOntoALinePointsAtAParticleMaterial()
         {
-            // One clip swaps the same Standard material onto the tail, a mesh, and onto a leash line. The leash's own
-            // material gets a particle shader, but the swap keeps its source: only a mesh's swaps are converted.
+            // One clip swaps the same Standard material onto the tail, a mesh, and onto a leash line. The tail's swap
+            // gets its Toon Standard material, and the leash's a particle material, as the leash's own material does.
             var avatar = Avatar(withComponent: true);
             var leash = new GameObject("Leash").AddComponent<LineRenderer>();
             leash.transform.SetParent(avatar.transform);
@@ -780,9 +780,10 @@ namespace UVWizard.NDMF.Tests
             Material SwapOn(string path) => (Material)AnimationUtility.GetObjectReferenceCurve(clip,
                 AnimationUtility.GetObjectReferenceCurveBindings(clip).Single(binding => binding.path == path))[0].value;
             Assert.That(SwapOn("Tail").shader.name, Is.EqualTo(ToonStandardName));
-            Assert.That(SwapOn("Leash").shader.name, Is.EqualTo("Standard"));
+            Assert.That(SwapOn("Leash").shader.name, Is.EqualTo("VRChat/Mobile/Particles/Additive"));
+            Assert.That(SwapOn("Leash").mainTexture, Is.SameAs(spots.mainTexture));
             Assert.That(leash.sharedMaterial.shader.name, Is.EqualTo("VRChat/Mobile/Particles/Additive"));
-            Assert.That(Reports(errors), Has.Member((ErrorSeverity.NonFatal, (string?)Messages.Unconverted)));
+            Assert.That(Reports(errors), Has.No.Member((ErrorSeverity.NonFatal, (string?)Messages.Unconverted)));
         }
 
         [Test]

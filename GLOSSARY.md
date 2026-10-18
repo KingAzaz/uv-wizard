@@ -85,7 +85,7 @@ The material with one of VRChat's mobile particle shaders that takes a particle,
 _Avoid_: Converted particle, particle conversion
 
 **Unconverted material**:
-A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: an animation swaps it onto a particle, trail or line renderer, or it has no surface of its own, such as a lilToon add-on layer that is a submesh's only material. The SDK refuses such an upload. An add-on layer on an extra slot, which draws the last submesh again, is removed instead, unless an animation swaps materials into that slot or a later one: then it's kept, with a converted material. A particle, trail or line renderer's own materials aren't unconverted: they get particle materials.
+A source material that stays on the avatar with a shader mobile doesn't allow, because the bake can't convert it: it has no surface of its own, such as a lilToon add-on layer that is a submesh's only material. The SDK refuses such an upload. An add-on layer on an extra slot, which draws the last submesh again, is removed instead, unless an animation swaps materials into that slot or a later one: then it's kept, with a converted material. A particle, trail or line renderer's materials, its own and those an animation swaps onto it, aren't unconverted: they get particle materials (#214).
 _Avoid_: Failed material, unsupported material
 
 **Flagged material**:
