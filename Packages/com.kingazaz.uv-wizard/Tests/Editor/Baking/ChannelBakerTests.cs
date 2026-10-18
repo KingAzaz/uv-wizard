@@ -469,10 +469,10 @@ namespace UVWizard.Core.Tests.Baking
             {
                 Undo.IncrementCurrentGroup();
                 var group = Undo.GetCurrentGroup();
-                Undo.RegisterCreatedObjectUndo(new GameObject("Undone"), "Create an object to undo");
+                Undo.RegisterCreatedObjectUndo(Keep(new GameObject("Undone")), "Create an object to undo");
                 Undo.RevertAllDownToGroup(group);
                 Assert.That(Camera.current?.name, Is.EqualTo("SceneCamera"),
-                    "Unity no longer leaves the SceneView's camera current after an undo revert");
+                    "the undo revert left no SceneView camera current: Unity changed, or this SceneView isn't drawing");
 
                 var atlas = Bake(plan);
                 AssertColour(new Color32(200, 100, 50, 255), Texel(atlas, 1, 1), "a texel the quad covers");
