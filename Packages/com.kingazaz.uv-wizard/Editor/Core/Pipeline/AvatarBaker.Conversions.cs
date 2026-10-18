@@ -23,6 +23,14 @@ namespace UVWizard.Core.Pipeline
             renderer is MeshRenderer or SkinnedMeshRenderer && !UploadedRenderers.IsEditorOnly(renderer.transform);
 
         /// <summary>
+        /// True for a renderer whose materials a bake gives mobile particle shaders, when the options name them: a
+        /// particle, trail or line renderer that uploads.
+        /// </summary>
+        internal static bool GivesParticleMaterialsTo(Renderer renderer) =>
+            renderer is ParticleSystemRenderer or TrailRenderer or LineRenderer
+            && !UploadedRenderers.IsEditorOnly(renderer.transform);
+
+        /// <summary>
         /// Gives each source material that stays on the avatar with a shader mobile doesn't allow its own material with
         /// the merged shader (ADR 0004), so the upload passes the SDK's shader check. Its channels are baked as the
         /// atlas's are, but each into a texture of its own in the source texture's UV space, so its slot keeps its mesh
@@ -129,25 +137,19 @@ namespace UVWizard.Core.Pipeline
             /// <summary>
             /// The material that takes the source's place in the renderer's slot: its converted material, its particle
             /// material on a particle, trail or line renderer, or the source itself when mobile allows its shader,
-            /// conversion is off, the renderer doesn't upload, or the source can't be converted.
+            /// conversion is off, the renderer doesn't upload, or the source can't be converted. A material an animation
+            /// swaps into the slot gets the same, which the swap is then pointed at.
             /// </summary>
-            /// <param name="swappedIn">
-            /// True for a material an animation swaps into the slot. Swaps keep their source on a particle, trail or line
-            /// renderer, since only a mesh renderer's swaps are pointed at their conversions.
-            /// </param>
-            public Material Of(Material source, Renderer renderer, int slot, bool swappedIn = false)
+            public Material Of(Material source, Renderer renderer, int slot)
             {
                 if (options.MobileShaders == null || options.MobileShaders.Contains(source.shader.name)
                     || UploadedRenderers.IsEditorOnly(renderer.transform))
                     return source;
-                var particleShaders = renderer is ParticleSystemRenderer or TrailRenderer or LineRenderer
-                    ? options.ParticleShaders
-                    : null;
-                if (particleShaders != null && !swappedIn) return Particle(source, renderer, slot, particleShaders);
+                if (options.ParticleShaders != null && GivesParticleMaterialsTo(renderer))
+                    return Particle(source, renderer, slot, options.ParticleShaders);
                 if (!ConvertsMaterialsOf(renderer))
                 {
-                    Leave(source, renderer, slot,
-                        new Reason(particleShaders != null ? ReasonText.SwappedOntoParticles : ReasonText.MeshRenderersOnly));
+                    Leave(source, renderer, slot, new Reason(ReasonText.MeshRenderersOnly));
                     return source;
                 }
                 Material made;
@@ -269,7 +271,7 @@ namespace UVWizard.Core.Pipeline
                 foreach (var slot in animated)
                     if (slot.Slot is { } index)
                         foreach (var swapped in slot.SwappedIn)
-                            if (swapped != null) Of(swapped, slot.Renderer, index, swappedIn: true);
+                            if (swapped != null) Of(swapped, slot.Renderer, index);
             }
 
             /// <summary>

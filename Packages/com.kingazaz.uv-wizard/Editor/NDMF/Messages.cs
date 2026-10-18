@@ -222,8 +222,6 @@ namespace UVWizard.NDMF
             (ReasonText.GlowsLessConverted, "Its emission is {0:0.##} times full brightness, but its Toon Standard " +
                 "material's emission goes up to {1}, so it glows less."),
             (ReasonText.MeshRenderersOnly, "UV Wizard converts the materials of mesh renderers only."),
-            (ReasonText.SwappedOntoParticles, "An animation swaps it onto this particle, trail or line renderer, and " +
-                "UV Wizard converts only the materials those renderers have themselves."),
             (ReasonText.NoSurface, "It has no surface of its own to convert."),
             (ReasonText.LayerKeptForAnimation, "An animation swaps materials into its slot, or into one after it, so " +
                 "the slot stays, and its Toon Standard material draws the part of the mesh beneath it plain white."),

@@ -68,7 +68,7 @@ namespace UVWizard.NDMF
             if (animators != null)
             {
                 MaterialAnimations.FollowMovedSlots(animators, root, result.MovedSlots);
-                MaterialAnimations.SwapInConverted(animators, root, result.ConvertedMaterials);
+                MaterialAnimations.SwapInConverted(animators, root, result.ConvertedMaterials, result.ParticleMaterials);
             }
 
             // A mesh two renderers share is rewritten for each; NDMF tracks the first copy.
