@@ -61,7 +61,7 @@ namespace UVWizard.NDMF
         /// Toon Standard materials of their own, and particle, trail and line materials get mobile particle shaders.
         /// </summary>
         public static BakeOptions Options(Shader shader, UVWizardAvatar avatar) => new BakeOptions(shader, atlasSize: 2048,
-            padding: 8, compress: true, rampProperty: "_Ramp", defaultRamp: Resources.Load<Texture2D>(DefaultRamp),
+            padding: 8, compress: true, defaultRamp: Resources.Load<Texture2D>(DefaultRamp),
             representativeProperties: SharedProperties, preset: PresetOf(avatar.preset), channels: ChannelsOf(avatar),
             cacheDirectory: CacheDirectory, mobileShaders: MobileShaders, particleShaders: ParticleShaders);
 
