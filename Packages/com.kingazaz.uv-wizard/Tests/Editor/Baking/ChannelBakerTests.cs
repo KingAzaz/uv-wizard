@@ -1,5 +1,6 @@
 using System;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UVWizard.Core.Baking;
@@ -442,6 +443,37 @@ namespace UVWizard.Core.Tests.Baking
             try
             {
                 Camera.SetupCurrent(camera);
+                var atlas = Bake(plan);
+                AssertColour(new Color32(200, 100, 50, 255), Texel(atlas, 1, 1), "a texel the quad covers");
+            }
+            finally
+            {
+                Camera.SetupCurrent(previous);
+            }
+        }
+
+        // How #112's camera came to be current (#191): reverting an undo group that holds a record leaves the
+        // SceneView's camera current, and the test runner reverts each run's undo group when the run ends.
+        // AnimatorController.AddLayer records undo, so a run of the tests that build an animator toggle left
+        // SceneCamera current for every later run in that domain.
+        [Test]
+        public void ABakeDrawsAfterAnUndoRevertLeavesTheSceneViewsCameraCurrent()
+        {
+            if (SceneView.sceneViews.Count == 0)
+                Assert.Ignore("This editor has no SceneView (batch mode has none), so an undo revert leaves no camera current.");
+            var plan = Plan(8, Quad(Solid(new Color32(200, 100, 50, 255)), Color.white, Identity,
+                Corners(0, 0, 1, 1), Corners(0, 0, 0.5f, 0.5f)));
+
+            var previous = Camera.current;
+            try
+            {
+                Undo.IncrementCurrentGroup();
+                var group = Undo.GetCurrentGroup();
+                Undo.RegisterCreatedObjectUndo(new GameObject("Undone"), "Create an object to undo");
+                Undo.RevertAllDownToGroup(group);
+                Assert.That(Camera.current?.name, Is.EqualTo("SceneCamera"),
+                    "Unity no longer leaves the SceneView's camera current after an undo revert");
+
                 var atlas = Bake(plan);
                 AssertColour(new Color32(200, 100, 50, 255), Texel(atlas, 1, 1), "a texel the quad covers");
             }
