@@ -39,10 +39,10 @@ namespace UVWizard.Core.Pipeline
         /// The shaders a particle, trail or line material with a shader mobile doesn't allow is converted to. Null
         /// leaves such materials as they are, and the bake reports them.
         /// </param>
-        /// <param name="defaultRamp">The ramp to use when no source has the merged shader to copy one from.</param>
         /// <param name="names">
         /// The merged shader's properties and keywords the bake sets. Toon Standard's when null.
         /// </param>
+        /// <param name="defaultRamp">The ramp to use when no source has the merged shader to copy one from.</param>
         /// <param name="representativeProperties">
         /// Properties copied from the representative source: the merged-shader source with the most chart area, or,
         /// when no such source draws, the source with the most chart area that has every one of these properties.
