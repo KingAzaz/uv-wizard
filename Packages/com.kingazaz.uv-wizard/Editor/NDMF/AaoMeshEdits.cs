@@ -48,8 +48,12 @@ namespace UVWizard.NDMF
                 if (merge.TryGetComponent<SkinnedMeshRenderer>(out var target)) merges[target] = merge;
             var sourcesOf = new Dictionary<SkinnedMeshRenderer, Renderer[]>();
             foreach (var (target, merge) in merges) sourcesOf[target] = SourcesOf(merge, target, root.transform, merges);
-            foreach (var target in sourcesOf.Keys)
-                if (ReadsUvs(target)) KeepOut(target, target, sourcesOf);
+            // An outermost reader first, so a renderer merged into nested readers names the one AAO leaves standing.
+            var readers = sourcesOf.Keys.Where(ReadsUvs).ToList();
+            foreach (var reader in readers) KeepOut(reader, reader, sourcesOf);
+            var inner = new HashSet<Renderer>(mergedIntoUvReader.Keys);
+            mergedIntoUvReader.Clear();
+            foreach (var reader in readers.OrderBy(reader => inner.Contains(reader))) KeepOut(reader, reader, sourcesOf);
         }
 
         // Every renderer merged into the target. A merge's slots follow its sources', so a target that reads UVs
@@ -85,6 +89,9 @@ namespace UVWizard.NDMF
                 skipMismatched = merge.SkipEnablementMismatchedRenderers;
             }
             finally { Debug.unityLogger.logEnabled = logging; }
+            // AAO's accessors already leave out empty and missing slots. AAO also leaves the target out of its own
+            // sources.
+            sources = sources.Where(source => source != null && source != target).ToArray();
             if (!skipMismatched) return sources;
             var enabled = Enabled(target, root);
             return sources.Where(source => source is SkinnedMeshRenderer inner && merges.ContainsKey(inner)
